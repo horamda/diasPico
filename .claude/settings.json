@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(venv/Scripts/python -m pytest tests/ -v --tb=short)",
+      "WebFetch(domain:doc-10-2s-sheets.googleusercontent.com)",
+      "Bash(venv/Scripts/python -c \"from app import create_app; app = create_app\\(\\)\")",
+      "Bash(venv/Scripts/python -c ' *)",
+      "Bash(venv/Scripts/python run.py)"
+    ]
+  }
+}

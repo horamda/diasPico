@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-Process -Name python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "PowerShell(New-Item -ItemType Directory -Force -Path \"c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\\\\app\\\\static\")",
+      "PowerShell(Get-NetTCPConnection -LocalPort 5001 -State Listen -ErrorAction SilentlyContinue)",
+      "Bash(python run.py)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5001/)",
+      "Bash(curl -s -w \"\\\\nTime: %{time_total}s\\\\n\" \"http://localhost:5001/api/planificacion_picos/resumen?empresa_id=1&sucursal_id=TODAS&anio=2026&mes=5\")",
+      "Bash(curl -s -w \"\\\\nTime: %{time_total}s\\\\n\" \"http://localhost:5001/api/picos/calendario?sucursal=TODAS&mes=2026-05\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5001/api/health)",
+      "Bash(pkill -f \"python run.py\")",
+      "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); print\\(d[-200:]\\)\")",
+      "Bash(python -c \"import sys; d=sys.stdin.read\\(\\); lines=d.strip\\(\\).split\\('\\\\n'\\); print\\(lines[-1]\\)\")",
+      "Bash(curl -s -w \"\\\\nTime1: %{time_total}s\\\\n\" \"http://localhost:5001/api/planificacion_picos/resumen?empresa_id=1&sucursal_id=TODAS&anio=2026&mes=5\")",
+      "Bash(curl -s -w \"\\\\nTime2: %{time_total}s\\\\n\" \"http://localhost:5001/api/planificacion_picos/resumen?empresa_id=1&sucursal_id=TODAS&anio=2026&mes=5\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\" -Force)",
+      "Bash(Select-Object Name, PSIsContainer)",
+      "Bash(powershell -command \"\\(Get-Content 'c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\\\\app\\\\static\\\\app.js' | Measure-Object -Line\\).Lines\")",
+      "Bash(powershell -command \"Add-Content -Path 'c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\\\\app\\\\static\\\\app.js' -Value '' -Encoding utf8\")",
+      "Bash(powershell -command \"Get-Content 'c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\\\\app\\\\static\\\\app.js' | Select-Object -Last 8\")",
+      "Bash(powershell -command \"Get-Content 'c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\\\\app\\\\static\\\\app.js' | Select-Object -Last 12\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\horac\\\\Desktop\\\\Proyectos WEB\\\\control_asistencia\\\\DashboardDiasPico\" -Recurse -Filter \"*.py\")"
+    ]
+  }
+}

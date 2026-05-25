@@ -1,0 +1,3312 @@
+// ─── CONFIG ──────────────────────────────────────────────────
+const API   = window.location.origin;
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DC    = ['Do','Lu','Ma','Mi','Ju','Vi','Sa'];
+
+let vY = new Date().getFullYear(), vM = new Date().getMonth();
+let selDay = null, picoSet = new Set(), diasData = [], mesKpis = {};
+let umbral = 1.20, metrica = 'bultos';
+let cfg = JSON.parse(localStorage.getItem('pico_cfg') || '{}');
+let _drawerAbort = null;
+let _mesAbort = null;
+let _loadMesSeq = 0;
+let _paramsAbort = null;
+let _loadParamsSeq = 0;
+let _histAbort = null;
+let _loadHistSeq = 0;
+let _hlAbort = null;
+let _loadHlSeq = 0;
+let _dropAbort = null;
+let _loadDropSeq = 0;
+let historicoChart = null;
+let dropDiarioChart = null;
+let dropMensualChart = null;
+let planActualId = null;
+let planEscenarioActivoId = null;
+let planEscenariosData = [];
+let planCharts = {};
+let dropsizeObjetivos = [];
+let kpiObjetivos = [];
+
+// ─── HELPERS ─────────────────────────────────────────────────
+const mesPad = () => `${vY}-${String(vM + 1).padStart(2, '0')}`;
+const dk     = (y, m, d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+const fmtN   = v => v == null ? '—' : Number(v).toLocaleString('es-AR');
+const fmtM   = v => v == null ? '—' : '$' + Number(v).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const fmtPct = v => (Number(v) || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + '%';
+const esc    = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const jsEsc  = v => String(v ?? '').replace(/['\\]/g, c => ({ "'": "\\'", '\\': '\\\\' }[c]));
+
+const fmtDrop = v => Number(v || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmt1 = v => Number(v || 0).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const fmtPct1 = v => `${fmt1(v)}%`;
+const fmtDelta = v => v == null ? '—' : `${v > 0 ? '+' : ''}${fmtPct(v)}`;
+
+function metricSummaryLabel(metric) {
+  return ({
+    bultos: 'Bultos desp.',
+    hectolitros: 'HL desp.',
+    pallets: 'Pallets mes',
+    up: 'UP mes',
+    pedidos: 'PDV atendidos',
+    clientes: 'Clientes mes',
+  })[metric] || 'Total mes';
+}
+
+function metricSummaryValue(kpis, metric) {
+  if (metric === 'pedidos' || metric === 'clientes') return fmtN(kpis?.[metric] ?? 0);
+  return fmtN(Math.round(kpis?.[metric] ?? 0));
+}
+
+async function api(path, options = {}) {
+  const timeoutMs = options.timeout ?? 30000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const fetchOptions = {
+    ...options,
+    signal: options.signal || controller.signal
+  };
+  try {
+    const r = await fetch(API + path, fetchOptions);
+    clearTimeout(timeoutId);
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+    return r.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError' && !options.signal) {
+      throw new Error('Timeout ' + timeoutMs + 'ms');
+    }
+    throw err;
+  }
+}
+
+function load(id)       { document.getElementById(id).innerHTML = '<div class="loading"><div class="spinner"></div>Cargando…</div>'; }
+function errBox(id, msg){ document.getElementById(id).innerHTML = `<div class="err-box">⚠ ${msg}</div>`; }
+
+// ─── INIT ────────────────────────────────────────────────────
+window.onload = async () => {
+  const hoy = new Date();
+  document.getElementById('hdrFecha').textContent = `${hoy.getDate()} ${MESES[hoy.getMonth()]} ${hoy.getFullYear()}`;
+  restoreConfig();
+  initDropsizeFilters();
+  initKpiObjetivosDefaults();
+  initPlanificacionDefaults();
+  await loadSucursales();
+  await loadParams();
+  renderCal();
+  await loadMes();
+  loadHistorico();
+  loadArticulosCount();
+};
+
+function restoreConfig() {
+  if (cfg.equiposUrl)     document.getElementById('cfgEquiposUrl').value     = cfg.equiposUrl;
+  if (cfg.disponiblesUrl) document.getElementById('cfgDisponiblesUrl').value = cfg.disponiblesUrl;
+  if (cfg.dotacionEntregaUrl && document.getElementById('cfgDotacionEntregaUrl')) document.getElementById('cfgDotacionEntregaUrl').value = cfg.dotacionEntregaUrl;
+  if (cfg.dotacionRecargasUrl && document.getElementById('cfgDotacionRecargasUrl')) document.getElementById('cfgDotacionRecargasUrl').value = cfg.dotacionRecargasUrl;
+  if (cfg.feriadosUrl)    document.getElementById('inputFeriadosUrl').value   = cfg.feriadosUrl;
+}
+
+// ─── SUCURSALES ───────────────────────────────────────────────
+function initKpiObjetivosDefaults() {
+  const desde = document.getElementById('kpiObjDesde');
+  const hasta = document.getElementById('kpiObjHasta');
+  if (desde && !desde.value) desde.value = `${vY}-01-01`;
+  if (hasta && !hasta.value) hasta.value = `${vY}-12-31`;
+}
+
+function initPlanificacionDefaults() {
+  const hoy = new Date();
+  const anio = document.getElementById('planAnio');
+  const mes = document.getElementById('planMes');
+  const anioBase = document.getElementById('planAnioBase');
+  if (anio && !anio.value) anio.value = hoy.getFullYear();
+  if (mes && !mes.value) mes.value = hoy.getMonth() + 1;
+  if (anioBase && !anioBase.value) anioBase.value = hoy.getFullYear() - 1;
+}
+
+async function loadSucursales() {
+  const selUp  = document.getElementById('uploadSucursal');
+  const sel    = document.getElementById('selSucursal');
+  const selCfg = document.getElementById('cfgSucursal');
+  const selEv  = document.getElementById('evSucursal');
+  const selDrop = document.getElementById('dropSucursal');
+  const selDropObj = document.getElementById('dropObjSucursal');
+  const selKpiObj = document.getElementById('kpiObjSucursal');
+  const selPlan = document.getElementById('planSucursal');
+  try {
+    const data = await api('/api/sucursales'); // [{value, label}, ...]
+    data.forEach(({ value, label }) => {
+      const txt = `${value} — ${label}`;
+      selUp.add(new Option(txt, value));
+      sel.add(new Option(txt, value));
+      selCfg.add(new Option(txt, value));
+      selEv.add(new Option(txt, value));
+      if (selDrop) selDrop.add(new Option(txt, value));
+      if (selDropObj) selDropObj.add(new Option(txt, value));
+      if (selKpiObj) selKpiObj.add(new Option(txt, value));
+      if (selPlan) selPlan.add(new Option(txt, value));
+      const selFlota = document.getElementById('flotaSucursal');
+      if (selFlota && !selFlota.querySelector(`option[value="${value}"]`)) selFlota.add(new Option(txt, value));
+    });
+  } catch (e) {}
+  await loadCatalogoPlanificacion();
+}
+
+function fillPlanSelect(select, items, allLabel = null) {
+  if (!select) return;
+  const current = select.value;
+  select.innerHTML = '';
+  if (allLabel) select.add(new Option(allLabel, 'TODAS'));
+  items.forEach(item => select.add(new Option(item.label, item.value)));
+  if ([...select.options].some(o => o.value === current)) select.value = current;
+}
+
+async function loadCatalogoPlanificacion() {
+  const empresaSel = document.getElementById('planEmpresa');
+  if (!empresaSel) return;
+  try {
+    const empresas = await fetchPlanJson('/api/catalogo/empresas?activa=1');
+    const items = (empresas.data || []).map(e => ({
+      value: String(e.id),
+      label: e.nombre_fantasia ? `${e.id} - ${e.nombre_fantasia}` : `${e.id} - ${e.razon_social}`,
+    }));
+    if (items.length) fillPlanSelect(empresaSel, items);
+    await loadCatalogoSucursalesPlanificacion();
+  } catch (e) {
+    // La API externa es opcional; si no esta configurada se conserva el catalogo local.
+  }
+}
+
+async function loadCatalogoSucursalesPlanificacion() {
+  const empresaSel = document.getElementById('planEmpresa');
+  const sucSel = document.getElementById('planSucursal');
+  if (!empresaSel || !sucSel) return;
+  try {
+    const qs = new URLSearchParams({ activa: '1' });
+    if (empresaSel.value) qs.set('empresa_id', empresaSel.value);
+    const sucursales = await fetchPlanJson('/api/catalogo/sucursales?' + qs.toString());
+    const items = (sucursales.data || []).map(s => ({
+      value: String(s.id),
+      label: `${s.id} - ${s.nombre}`,
+    }));
+    if (items.length) fillPlanSelect(sucSel, items, 'Todas');
+  } catch (e) {}
+}
+
+async function loadParams(applyMetric = true) {
+  const seq = ++_loadParamsSeq;
+  if (_paramsAbort) _paramsAbort.abort();
+  _paramsAbort = new AbortController();
+
+  try {
+    const suc = getSuc();
+    const p = await api(`/api/parametros?sucursal=${suc}`, { signal: _paramsAbort.signal });
+    if (seq !== _loadParamsSeq || suc !== getSuc()) return;
+    const u = p.umbral_pct || 1.20;
+    const m = p.metrica    || 'bultos';
+    document.getElementById('sliderUmbral').value = u;
+    document.getElementById('cfgUmbral').value    = u;
+    document.getElementById('cfgMetrica').value   = m;
+    if (applyMetric) {
+      document.getElementById('selMetrica').value = m;
+      metrica = m;
+    }
+    onUmbralChange(u);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+  }
+}
+
+function getSuc() { return document.getElementById('selSucursal').value; }
+
+// ─── CALENDAR ────────────────────────────────────────────────
+function renderCal() {
+  const now = new Date();
+  document.getElementById('calLbl').textContent = `${MESES[vM]} ${vY}`;
+  const g = document.getElementById('calGrid');
+  g.innerHTML = '';
+  DC.forEach(d => {
+    const e = document.createElement('div');
+    e.className = 'cal-dname';
+    e.textContent = d;
+    g.appendChild(e);
+  });
+  const first = new Date(vY, vM, 1).getDay();
+  const days  = new Date(vY, vM + 1, 0).getDate();
+  for (let i = 0; i < first; i++) {
+    const e = document.createElement('div');
+    e.className = 'cal-day empty';
+    g.appendChild(e);
+  }
+  for (let d = 1; d <= days; d++) {
+    const k  = dk(vY, vM, d);
+    const dd = diasData.find(x => x.fecha === k);
+    const isToday = d === now.getDate() && vM === now.getMonth() && vY === now.getFullYear();
+    const e = document.createElement('div');
+    let cls = 'cal-day';
+    if (selDay === k)       cls += ' selected';
+    else if (dd?.es_pico)   cls += ' pico';
+    if (dd?.es_feriado)     cls += ' feriado';
+    if (dd?.es_evento)      cls += ' evento';
+    if (isToday)            cls += ' today';
+    if (dd)                 cls += ' has-data';
+    e.className  = cls;
+    e.textContent = d;
+    e.title = dd
+      ? `${dd.bultos} bultos — ${dd.hectolitros} hl` +
+        ` — Rec: ${dd.pct_rechazo_pedidos ?? 0}% PDV / ${dd.pct_rechazo_bultos ?? 0}% blt / ${dd.pct_rechazo_hl ?? 0}% hl` +
+        (dd.es_feriado ? ` — ${dd.feriado_tipo || 'Feriado'}: ${dd.feriado_desc}` : '') +
+        (dd.es_evento  ? ` — Evento: ${dd.evento_desc}` : '')
+      : '';
+    e.onclick = () => selectDay(k);
+    g.appendChild(e);
+  }
+}
+
+async function changeMonth(dir) {
+  vM += dir;
+  if (vM > 11) { vM = 0; vY++; }
+  if (vM < 0)  { vM = 11; vY--; }
+  picoSet = new Set(); diasData = []; mesKpis = {};
+  renderCal();
+  await loadMes();
+  loadArticulosCount();
+  if (document.getElementById('tab-dropsize')?.style.display !== 'none') {
+    document.getElementById('dropMes').value = mesPad();
+    setDropsizeDatesFromMes(false);
+    loadDropsize();
+  }
+}
+
+// ─── CARGA PRINCIPAL ─────────────────────────────────────────
+async function loadMes() {
+  const seq = ++_loadMesSeq;
+  if (_mesAbort) _mesAbort.abort();
+  _mesAbort = new AbortController();
+
+  load('kpiGrid'); load('tablaDias');
+  try {
+    const u    = document.getElementById('sliderUmbral').value;
+    const m    = document.getElementById('selMetrica').value;
+    const mes  = mesPad();
+    const suc  = getSuc();
+    const data = await api(
+      `/api/picos/calendario?sucursal=${suc}&mes=${mes}&umbral=${u}&metrica=${m}`,
+      { signal: _mesAbort.signal }
+    );
+    if (seq !== _loadMesSeq || mes !== mesPad() || suc !== getSuc() || m !== document.getElementById('selMetrica').value || u !== document.getElementById('sliderUmbral').value) return;
+
+    diasData = data.dias || [];
+    picoSet  = new Set(diasData.filter(d => d.es_pico).map(d => d.fecha));
+    renderCal();
+
+    // Sidebar stats
+    const k = data.kpis || {};
+    mesKpis = k;
+    document.getElementById('sPicos').textContent    = data.picos_count ?? diasData.filter(d => d.es_pico).length;
+    document.getElementById('sMetricLbl').textContent = metricSummaryLabel(m);
+    document.getElementById('sMetricVal').textContent = metricSummaryValue(k, m);
+    document.getElementById('sCamiones').textContent = fmtN(k.camiones ?? 0);
+    document.getElementById('sClientes').textContent = fmtN(k.clientes ?? 0);
+    document.getElementById('sAvg').textContent      = data.avg_mes ?? data.avg_hist;
+    document.getElementById('sUmbral').textContent   = data.umbral_val;
+
+    // KPIs y tabla de días desde la misma respuesta
+    renderKpiGrid(k);
+    renderTablaDias();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    errBox('kpiGrid', 'Error al cargar datos: ' + e.message);
+    document.getElementById('sPicos').textContent = 'ERR';
+  }
+}
+
+function renderKpiGridLegacy(d) {
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-section">Volumen despachado</div>
+    <!-- BULTOS -->
+    <div class="kpi ora"><div class="kpi-lbl">Bultos despachados</div><div class="kpi-val ora">${fmtN(Math.round(d.bultos ?? 0))}</div></div>
+
+    <!-- HECTOLITROS -->
+    <div class="kpi pur"><div class="kpi-lbl">HL despachados</div><div class="kpi-val pur">${fmtN(Math.round(d.hectolitros ?? 0))}</div></div>
+
+    <!-- PEDIDOS -->
+    <div class="kpi blu"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val blu">${fmtN(d.pedidos ?? 0)}</div></div>
+
+    <!-- PALLETS -->
+    <div class="kpi grn"><div class="kpi-lbl">Pallets</div><div class="kpi-val grn">${fmtN(Math.round(d.pallets ?? 0))}</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">UP</div><div class="kpi-val grn">${fmtN(Math.round(d.up ?? 0))}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Importe total</div><div class="kpi-val ora" style="font-size:14px">${fmtM(d.importe)}</div></div>
+
+    <div class="kpi-section">Rechazos sobre volumen despachado</div>
+    <div class="kpi red"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_bultos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_hl ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val red">${fmtN(d.rechazo_pedidos ?? 0)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_parcial ?? 0)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_total ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_parcial ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_total ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_bultos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_bultos)}</div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_hl)}</div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_pedidos ?? 0)}</div></div>
+
+    <div class="kpi-section">Cuenta y orden RMCYO</div>
+    <div class="kpi blu"><div class="kpi-lbl">RMCYO bultos</div><div class="kpi-val blu">${fmtN(Math.round(d.rmcyo_bultos ?? 0))}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(d.rmcyo_hl ?? 0))}</div></div>
+    <div class="kpi blu"><div class="kpi-lbl">RMCYO PDV</div><div class="kpi-val blu">${fmtN(d.rmcyo_pedidos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">RMCYO bultos rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_bultos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_hl ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(d.rmcyo_pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_hl)}</div>
+
+    <div class="kpi-section">Operacion</div>
+    <!-- OTROS -->
+    <div class="kpi pur"><div class="kpi-lbl">PDV únicos</div><div class="kpi-val pur">${fmtN(d.clientes ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Salidas únicas</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">Días con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
+  `;
+}
+
+function renderKpiGrid(d) {
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="kpi-section">Bultos</div>
+    <div class="kpi ora"><div class="kpi-lbl">Bultos despachados</div><div class="kpi-val ora">${fmtN(Math.round(d.bultos ?? 0))}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_bultos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_bultos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_bultos)}</div>
+    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_parcial ?? 0)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_total ?? 0)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">RMCYO bultos</div><div class="kpi-val ora">${fmtN(Math.round(d.rmcyo_bultos ?? 0))}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">RMCYO bultos rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_bultos ?? 0)}</div></div>
+
+    <div class="kpi-section">Hectolitros</div>
+    <div class="kpi pur"><div class="kpi-lbl">HL despachados</div><div class="kpi-val pur">${fmtN(Math.round(d.hectolitros ?? 0))}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_hl ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_hl)}</div>
+    <div class="kpi pur"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_parcial ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_total ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(d.rmcyo_hl ?? 0))}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_hl ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(d.rmcyo_pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_hl)}</div>
+
+    <div class="kpi-section">Pallets y UP</div>
+    <div class="kpi grn"><div class="kpi-lbl">Pallets</div><div class="kpi-val grn">${fmtN(Math.round(d.pallets ?? 0))}</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">UP</div><div class="kpi-val grn">${fmtN(Math.round(d.up ?? 0))}</div></div>
+
+    <div class="kpi-section">Clientes</div>
+    <div class="kpi blu"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val blu">${fmtN(d.pedidos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val red">${fmtN(d.rechazo_pedidos ?? 0)}</div></div>
+    <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_pedidos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_pedidos)}</div>
+    <div class="kpi blu"><div class="kpi-lbl">RMCYO PDV</div><div class="kpi-val blu">${fmtN(d.rmcyo_pedidos ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">PDV unicos</div><div class="kpi-val pur">${fmtN(d.clientes ?? 0)}</div></div>
+
+    <div class="kpi-section">Operacion</div>
+    <div class="kpi ora"><div class="kpi-lbl">Importe total</div><div class="kpi-val ora" style="font-size:14px">${fmtM(d.importe)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Salidas unicas</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">Dias con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
+  `;
+}
+
+function renderTablaDias() {
+  if (!diasData.length) {
+    document.getElementById('tablaDias').innerHTML = '<div class="empty"><div class="icon">📅</div>Sin datos para este mes</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Fecha</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
+    <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th>
+    <th>Pico</th><th>Feriado</th><th>Evento</th>
+  </tr></thead><tbody>`;
+  diasData.forEach(d => {
+    const tagPico    = d.es_pico
+      ? `<span class="tag pico">PICO</span>`
+      : `<span class="tag ok">Normal</span>`;
+    const tagFeriado = d.es_feriado
+      ? (() => {
+          const t = (d.feriado_tipo || '').toLowerCase();
+          const lbl = t === 'nacional'    ? 'Feriado AR'
+                    : t === 'inamovible'  ? 'Feriado AR'
+                    : t === 'puente'      ? 'Puente'
+                    : t === 'trasladable' ? 'Trasladable'
+                    : 'Feriado AR';
+          return `<span class="tag fer" title="${d.feriado_desc || ''}">${lbl}</span>`;
+        })()
+      : `<span style="color:var(--muted);font-size:11px">—</span>`;
+    const tagEvento  = d.es_evento
+      ? `<span class="tag evento" title="${d.evento_desc || ''}">⚡ Evento</span>`
+      : `<span style="color:var(--muted);font-size:11px">—</span>`;
+    html += `<tr style="cursor:pointer" onclick="selectDay('${d.fecha}')">
+      <td style="font-family:var(--mono)">${d.fecha}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.bultos))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.hectolitros))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.pallets || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.up || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(d.pedidos)}</td>
+      <td style="font-family:var(--mono)">${fmtN(d.clientes_unicos || 0)}</td>
+      <td style="font-family:var(--mono);color:${(d.pct_rechazo_pedidos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_pedidos ?? 0}%</td>
+      <td style="font-family:var(--mono);color:${(d.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_bultos ?? 0}%</td>
+      <td><span class="pct-pill ${(d.pct_rechazo_hl ?? 0) > 5 ? 'bad' : 'ok'}">${fmtPct1(d.pct_rechazo_hl ?? 0)}</span></td>
+      <td style="font-family:var(--mono)">${d.camiones_salidos}</td>
+      <td>${tagPico}</td>
+      <td>${tagFeriado}</td>
+      <td>${tagEvento}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('tablaDias').innerHTML = html;
+}
+
+async function selectDay(k) {
+  selDay = k;
+  renderCal();
+  openDrawer(k);
+}
+
+// ─── HISTÓRICO ────────────────────────────────────────────────
+async function loadHistorico() {
+  const seq = ++_loadHistSeq;
+  if (_histAbort) _histAbort.abort();
+  _histAbort = new AbortController();
+
+  if (historicoChart) {
+    historicoChart.destroy();
+    historicoChart = null;
+  }
+  load('barHistorico'); load('tablaHistorico');
+  const n = document.getElementById('selPeriodoHist').value;
+  const suc = getSuc();
+  try {
+    const data  = await api(`/api/picos/historico?sucursal=${suc}&meses=${n}`, { signal: _histAbort.signal });
+    if (seq !== _loadHistSeq || suc !== getSuc() || n !== document.getElementById('selPeriodoHist').value) return;
+    const meses = data.meses || [];
+    if (!meses.length) {
+      document.getElementById('barHistorico').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos históricos</div>';
+      return;
+    }
+    const m      = document.getElementById('selMetrica').value;
+    document.getElementById('barHistorico').innerHTML = '<canvas id="histChart"></canvas>';
+    historicoChart = renderHistoricoChart(
+      meses.map(x => x.mes.slice(2)),
+      meses.map(x => Number(x[m] || 0)),
+      m
+    );
+
+    let html = `<table class="rtbl"><thead><tr>
+      <th>Mes</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
+      <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th><th>Días</th>
+    </tr></thead><tbody>`;
+    meses.forEach(x => {
+      html += `<tr>
+        <td style="font-family:var(--mono)">${x.mes}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.bultos))}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.hectolitros))}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.pallets || 0))}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.up || 0))}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.pedidos)}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.clientes || 0)}</td>
+        <td style="font-family:var(--mono);color:${(x.pct_rechazo_pedidos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_pedidos ?? 0}%</td>
+        <td style="font-family:var(--mono);color:${(x.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_bultos ?? 0}%</td>
+        <td style="font-family:var(--mono);color:${(x.pct_rechazo_hl ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_hl ?? 0}%</td>
+        <td style="font-family:var(--mono)">${x.camiones}</td>
+        <td style="font-family:var(--mono)">${x.dias}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    document.getElementById('tablaHistorico').innerHTML = html;
+  } catch (e) { if (e.name === 'AbortError') return; errBox('barHistorico', 'Error: ' + e.message); }
+}
+
+function renderHistoricoChart(labels, values, metric) {
+  if (!window.Chart) return historicoChart;
+  const el = document.getElementById('histChart');
+  if (!el) return historicoChart;
+  if (historicoChart) historicoChart.destroy();
+
+  const metricColors = {
+    bultos: '#f5a623',
+    hectolitros: '#a78bfa',
+    pallets: '#4caf82',
+    up: '#5b8dee',
+    pedidos: '#e05c5c',
+    clientes: '#5b8dee',
+  };
+  const color = metricColors[metric] || '#f5a623';
+
+  return new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: metricSummaryLabel(metric),
+        data: values,
+        borderColor: color,
+        backgroundColor: color + '22',
+        borderWidth: 2,
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        tension: .28,
+        fill: true,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7080', maxRotation: 0 }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: {
+          beginAtZero: true,
+          ticks: { color: '#6b7080', callback: value => fmtN(Math.round(value)) },
+          grid: { color: 'rgba(42,46,58,.35)' },
+        },
+      },
+    },
+  });
+}
+
+function onPeriodoChange() {
+  loadHistorico();
+  if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
+  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsize();
+}
+
+async function loadAnalisisHl() {
+  const seq = ++_loadHlSeq;
+  if (_hlAbort) _hlAbort.abort();
+  _hlAbort = new AbortController();
+
+  load('analisisHlKpis');
+  load('analisisHlChart');
+  load('analisisHlTabla');
+  load('analisisHlMotivos');
+
+  const n = document.getElementById('selPeriodoHist').value;
+  const suc = getSuc();
+  try {
+    const data = await api(`/api/picos/analisis-rechazos?sucursal=${suc}&meses=${n}`, { signal: _hlAbort.signal });
+    if (seq !== _loadHlSeq || suc !== getSuc() || n !== document.getElementById('selPeriodoHist').value) return;
+
+    const meses = data.meses || [];
+    const tot = data.totales || {};
+    if (!meses.length) {
+      document.getElementById('analisisHlKpis').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos de rechazos</div>';
+      document.getElementById('analisisHlChart').innerHTML = '';
+      document.getElementById('analisisHlTabla').innerHTML = '';
+      document.getElementById('analisisHlMotivos').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('analisisHlKpis').innerHTML = `
+      <div class="kpi pur"><div class="kpi-lbl">HL despachados</div><div class="kpi-val pur">${fmtN(Math.round(tot.hl_total || 0))}</div></div>
+      <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red">${fmt1(tot.hl_rechazo || 0)}</div></div>
+      <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red">${fmtPct1(tot.pct_rechazo_hl || 0)}</div></div>
+      <div class="kpi pur"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val pur">${fmt1(tot.hl_rechazo_parcial || 0)}</div></div>
+      <div class="kpi pur"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val pur">${fmt1(tot.hl_rechazo_total || 0)}</div></div>
+      <div class="kpi blu"><div class="kpi-lbl">Bultos despachados</div><div class="kpi-val blu">${fmtN(Math.round(tot.bultos_total || 0))}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val ora">${fmt1(tot.bultos_rechazo || 0)}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val ora">${fmtPct1(tot.pct_rechazo_bultos || 0)}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora">${fmt1(tot.bultos_rechazo_parcial || 0)}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora">${fmt1(tot.bultos_rechazo_total || 0)}</div></div>
+      <div class="kpi blu"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val blu">${fmtN(tot.pedidos_rechazo || 0)}</div></div>
+      <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(tot.rmcyo_hl || 0))}</div></div>
+      <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(tot.rmcyo_rechazo_hl || 0)}</div></div>
+      <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(tot.rmcyo_pct_rechazo_hl || 0)}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">Peor mes</div><div class="kpi-val ora" style="font-size:18px">${tot.peor_mes || '—'} ${fmtPct(tot.peor_pct_rechazo_hl || 0)}</div></div>
+      <div class="kpi blu"><div class="kpi-lbl">Mejor mes</div><div class="kpi-val blu" style="font-size:18px">${tot.mejor_mes || '—'} ${fmtPct(tot.mejor_pct_rechazo_hl || 0)}</div></div>
+    `;
+
+    const maxHl = Math.max(...meses.map(x => x.hl_total || 0), 1);
+    const maxBultos = Math.max(...meses.map(x => x.bultos_total || 0), 1);
+    let chart = '<div style="display:flex;flex-direction:column;gap:7px">';
+    meses.forEach(x => {
+      const okPct = Math.max(0, ((x.hl_total || 0) - (x.hl_rechazo || 0)) / maxHl * 100);
+      const recPct = Math.max(0, (x.hl_rechazo || 0) / maxHl * 100);
+      const okBltPct = Math.max(0, ((x.bultos_total || 0) - (x.bultos_rechazo || 0)) / maxBultos * 100);
+      const recBltPct = Math.max(0, (x.bultos_rechazo || 0) / maxBultos * 100);
+      chart += `<div class="hl-row">
+        <span class="bar-lbl">${x.mes.slice(2)} HL</span>
+        <div class="hl-stack" title="${fmtN(Math.round(x.hl_total || 0))} HL despachados">
+          <div class="hl-ok" style="width:${okPct}%"></div>
+          <div class="hl-rec" style="width:${recPct}%"></div>
+        </div>
+        <span class="bar-end">${fmtN(Math.round(x.hl_rechazo || 0))} HL rechazados</span>
+        <span class="bar-end" style="color:${(x.pct_rechazo_hl || 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${fmtPct(x.pct_rechazo_hl || 0)}</span>
+      </div>
+      <div class="hl-row">
+        <span class="bar-lbl">Bultos</span>
+        <div class="hl-stack" title="${fmtN(Math.round(x.bultos_total || 0))} bultos despachados">
+          <div class="blt-ok" style="width:${okBltPct}%"></div>
+          <div class="blt-rec" style="width:${recBltPct}%"></div>
+        </div>
+        <span class="bar-end">${fmtN(Math.round(x.bultos_rechazo || 0))} rechazados</span>
+        <span class="bar-end" style="color:${(x.pct_rechazo_bultos || 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${fmtPct(x.pct_rechazo_bultos || 0)}</span>
+      </div>`;
+    });
+    chart += '</div>';
+    document.getElementById('analisisHlChart').innerHTML = chart;
+
+    let table = `<table class="rtbl"><thead><tr>
+      <th>Mes</th><th>HL desp.</th><th>Total HL rechazados</th><th>HL rechazo parcial</th><th>HL rechazo completo</th><th>% rechazo HL</th>
+      <th>Bultos desp.</th><th>Total bultos rechazados</th><th>Bultos rechazo parcial</th><th>Bultos rechazo completo</th><th>% rechazo bultos</th>
+      <th>RMCYO HL</th><th>RMCYO HL rechazados</th><th>PDV rechazados</th><th>Salidas</th><th>Dias</th>
+    </tr></thead><tbody>`;
+    meses.forEach(x => {
+      table += `<tr>
+        <td style="font-family:var(--mono)">${x.mes}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.hl_total || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.hl_rechazo || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--acc)">${fmtN(Math.round(x.hl_rechazo_parcial || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.hl_rechazo_total || 0))}</td>
+        <td style="font-family:var(--mono);color:${(x.pct_rechazo_hl || 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${fmtPct(x.pct_rechazo_hl || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.bultos_total || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.bultos_rechazo || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--acc)">${fmtN(Math.round(x.bultos_rechazo_parcial || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.bultos_rechazo_total || 0))}</td>
+        <td style="font-family:var(--mono);color:${(x.pct_rechazo_bultos || 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${fmtPct(x.pct_rechazo_bultos || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(Math.round(x.rmcyo_hl || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.rmcyo_rechazo_hl || 0))}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.pedidos_rechazo || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.salidas || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.dias || 0)}</td>
+      </tr>`;
+    });
+    table += '</tbody></table>';
+    document.getElementById('analisisHlTabla').innerHTML = table;
+
+    const motivos = data.motivos || [];
+    if (!motivos.length) {
+      document.getElementById('analisisHlMotivos').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin rechazos tomados para el periodo</div>';
+      return;
+    }
+    let mot = `<table class="rtbl"><thead><tr>
+      <th>Sector</th><th>Motivo</th><th>Total bultos rechazados</th><th>Bultos rechazo parcial</th><th>Bultos rechazo completo</th><th>Total HL rechazados</th><th>HL rechazo parcial</th><th>HL rechazo completo</th>
+      <th>PDV rechazados</th><th>Ocurrencias</th><th>% rechazo bultos</th><th>% rechazo HL</th><th>Meses</th>
+    </tr></thead><tbody>`;
+    motivos.forEach(x => {
+      mot += `<tr>
+        <td>${esc(x.sector)}</td>
+        <td>${esc(x.motivo)}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.bultos_rechazo || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--acc)">${fmtN(Math.round(x.bultos_rechazo_parcial || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.bultos_rechazo_total || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.hl_rechazo || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--acc)">${fmtN(Math.round(x.hl_rechazo_parcial || 0))}</td>
+        <td style="font-family:var(--mono);color:var(--red)">${fmtN(Math.round(x.hl_rechazo_total || 0))}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.pedidos_rechazo || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.ocurrencias || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtPct(x.pct_del_rechazo_bultos || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtPct(x.pct_del_rechazo_hl || 0)}</td>
+        <td style="font-family:var(--mono)">${fmtN(x.meses_con_rechazo || 0)}</td>
+      </tr>`;
+    });
+    mot += '</tbody></table>';
+    document.getElementById('analisisHlMotivos').innerHTML = mot;
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    errBox('analisisHlKpis', 'Error: ' + e.message);
+    errBox('analisisHlChart', 'Error: ' + e.message);
+  }
+}
+
+// ─── DRAWER ──────────────────────────────────────────────────
+// ─── DROPSIZE ────────────────────────────────────────────────────────────────
+function initDropsizeFilters() {
+  const mesEl = document.getElementById('dropMes');
+  if (!mesEl) return;
+  mesEl.value = mesPad();
+  setDropsizeDatesFromMes(false);
+  const objDesde = document.getElementById('dropObjDesde');
+  if (objDesde) objDesde.value = `${new Date().getFullYear()}-01-01`;
+}
+
+function setDropsizeDatesFromMes(reloadData = false) {
+  const mesEl = document.getElementById('dropMes');
+  if (!mesEl?.value) return;
+  const [y, m] = mesEl.value.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  document.getElementById('dropDesde').value = `${y}-${String(m).padStart(2, '0')}-01`;
+  document.getElementById('dropHasta').value = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+  if (reloadData) loadDropsize();
+}
+
+function getDropSuc() {
+  return document.getElementById('dropSucursal')?.value || getSuc();
+}
+
+function dropsizeQuery(extra = {}) {
+  const p = new URLSearchParams({
+    sucursal: getDropSuc(),
+    fecha_desde: document.getElementById('dropDesde')?.value || '',
+    fecha_hasta: document.getElementById('dropHasta')?.value || '',
+    mes: document.getElementById('dropMes')?.value || mesPad(),
+    ...extra,
+  });
+  return p.toString();
+}
+
+function trafficBadge(item) {
+  const estado = item?.estado || 'sin_objetivo';
+  const obj = item?.objetivo;
+  const txt = obj ? `Min ${fmtDrop(obj.objetivo_minimo)} / Ideal ${fmtDrop(obj.objetivo_ideal)}` : 'Sin objetivo';
+  return `<span class="traffic ${estado}" title="${txt}">${item?.label || 'Sin objetivo'}</span>`;
+}
+
+function kpiGoalBadge(item) {
+  if (!item?.objetivo) return '';
+  const obj = item.objetivo;
+  const signo = obj.direccion === 'max' ? '<=' : '>=';
+  const alerta = obj.alerta == null ? '' : ` / alerta ${fmtDrop(obj.alerta)}${obj.unidad || ''}`;
+  const txt = `${obj.nombre}: ${signo} ${fmtDrop(obj.objetivo)}${obj.unidad || ''}${alerta}`;
+  return `<div style="margin-top:6px"><span class="traffic ${item.estado}" title="${esc(txt)}">${item.label}</span></div>`;
+}
+
+function dropDeltaColor(v) {
+  if (v == null) return 'var(--muted)';
+  return v >= 0 ? 'var(--grn)' : 'var(--red)';
+}
+
+function renderDropsizeKpis(d) {
+  document.getElementById('dropKpis').innerHTML = `
+    <div class="kpi-section">Clientes</div>
+    <div class="kpi blu"><div class="kpi-lbl">Clientes entregados</div><div class="kpi-val blu">${fmtN(d.clientes_entregados || 0)}</div></div>
+
+    <div class="kpi-section">Bultos</div>
+    <div class="kpi ora"><div class="kpi-lbl">Total bultos</div><div class="kpi-val ora">${fmtN(Math.round(d.total_bultos || 0))}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Dropsize bultos</div><div class="kpi-val ora">${fmtDrop(d.dropsize_bultos || 0)}</div><div>${trafficBadge(d.objetivos?.bultos)}</div></div>
+
+    <div class="kpi-section">Hectolitros</div>
+    <div class="kpi pur"><div class="kpi-lbl">Total HL</div><div class="kpi-val pur">${fmtN(Math.round(d.total_hl || 0))}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Dropsize HL</div><div class="kpi-val pur">${fmtDrop(d.dropsize_hl || 0)}</div><div>${trafficBadge(d.objetivos?.hl)}</div></div>
+
+    <div class="kpi-section">Pallets</div>
+    <div class="kpi grn"><div class="kpi-lbl">Total pallets</div><div class="kpi-val grn">${fmtDrop(d.total_pallets || 0)}</div></div>
+    <div class="kpi grn"><div class="kpi-lbl">Dropsize pallets</div><div class="kpi-val grn">${fmtDrop(d.dropsize_pallets || 0)}</div><div>${trafficBadge(d.objetivos?.pallets)}</div></div>
+  `;
+}
+
+function renderDropChart(canvasId, currentChart, labels, datasets) {
+  if (!window.Chart) return currentChart;
+  const el = document.getElementById(canvasId);
+  if (!el) return currentChart;
+  if (currentChart) currentChart.destroy();
+  return new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { labels: { color: '#e8eaf0', boxWidth: 10 } } },
+      scales: {
+        x: { ticks: { color: '#6b7080', maxRotation: 0 }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+      },
+    },
+  });
+}
+
+function renderDropsizeDiaria(data) {
+  const dias = data.dias || [];
+  dropDiarioChart = renderDropChart('dropChartDiario', dropDiarioChart, dias.map(x => x.fecha?.slice(5)), [
+    { label: 'Bultos/cliente', data: dias.map(x => x.dropsize_bultos), borderColor: '#f5a623', backgroundColor: 'rgba(245,166,35,.12)', tension: .25 },
+    { label: 'HL/cliente', data: dias.map(x => x.dropsize_hl), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,.12)', tension: .25 },
+    { label: 'Pallets/cliente', data: dias.map(x => x.dropsize_pallets), borderColor: '#4caf82', backgroundColor: 'rgba(76,175,130,.12)', tension: .25 },
+  ]);
+
+  if (!dias.length) {
+    document.getElementById('dropTabla').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos de Dropsize</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Fecha</th><th>Clientes</th><th>Bultos</th><th>HL</th><th>Pallets</th>
+    <th>Drop bultos</th><th>Drop HL</th><th>Drop pallets</th>
+  </tr></thead><tbody>`;
+  dias.forEach(x => {
+    html += `<tr>
+      <td style="font-family:var(--mono)">${x.fecha}</td>
+      <td style="font-family:var(--mono)">${fmtN(x.clientes_entregados || 0)}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(x.total_bultos || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(x.total_hl || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtDrop(x.total_pallets || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--acc)">${fmtDrop(x.dropsize_bultos || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--pur)">${fmtDrop(x.dropsize_hl || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--grn)">${fmtDrop(x.dropsize_pallets || 0)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('dropTabla').innerHTML = html;
+}
+
+function renderDropsizeMensual(data) {
+  const meses = data.meses || [];
+  dropMensualChart = renderDropChart('dropChartMensual', dropMensualChart, meses.map(x => x.mes?.slice(2)), [
+    { label: 'Bultos/cliente', data: meses.map(x => x.dropsize_bultos), borderColor: '#f5a623', backgroundColor: 'rgba(245,166,35,.12)', tension: .25 },
+    { label: 'HL/cliente', data: meses.map(x => x.dropsize_hl), borderColor: '#a78bfa', backgroundColor: 'rgba(167,139,250,.12)', tension: .25 },
+    { label: 'Pallets/cliente', data: meses.map(x => x.dropsize_pallets), borderColor: '#4caf82', backgroundColor: 'rgba(76,175,130,.12)', tension: .25 },
+  ]);
+}
+
+function renderDropsizeRanking(data) {
+  const rows = data.ranking || [];
+  if (!rows.length) {
+    document.getElementById('dropRanking').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin ranking</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>#</th><th>Sucursal</th><th>Clientes</th><th>Drop bultos</th><th>Drop HL</th><th>Drop pallets</th>
+  </tr></thead><tbody>`;
+  rows.forEach(x => {
+    html += `<tr>
+      <td style="font-family:var(--mono)">${x.ranking}</td>
+      <td>${esc(x.sucursal)}</td>
+      <td style="font-family:var(--mono)">${fmtN(x.clientes_entregados || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--acc)">${fmtDrop(x.dropsize_bultos || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--pur)">${fmtDrop(x.dropsize_hl || 0)}</td>
+      <td style="font-family:var(--mono);color:var(--grn)">${fmtDrop(x.dropsize_pallets || 0)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('dropRanking').innerHTML = html;
+}
+
+function renderDropsizeComparativo(data) {
+  const actual = data.actual || {};
+  const prev = data.mes_anterior || {};
+  const aa = data.anio_anterior || {};
+  const rows = [
+    ['Clientes', 'clientes_entregados', v => fmtN(v || 0)],
+    ['Bultos', 'total_bultos', v => fmtN(Math.round(v || 0))],
+    ['HL', 'total_hl', v => fmtN(Math.round(v || 0))],
+    ['Pallets', 'total_pallets', v => fmtDrop(v || 0)],
+    ['Drop bultos', 'dropsize_bultos', v => fmtDrop(v || 0)],
+    ['Drop HL', 'dropsize_hl', v => fmtDrop(v || 0)],
+    ['Drop pallets', 'dropsize_pallets', v => fmtDrop(v || 0)],
+  ];
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Indicador</th><th>Actual</th><th>Mes ant.</th><th>Var.</th><th>Año ant.</th><th>Var.</th>
+  </tr></thead><tbody>`;
+  rows.forEach(([label, key, fmt]) => {
+    const vm = prev.variacion_pct?.[key];
+    const va = aa.variacion_pct?.[key];
+    html += `<tr>
+      <td>${label}</td>
+      <td style="font-family:var(--mono)">${fmt(actual[key])}</td>
+      <td style="font-family:var(--mono)">${fmt(prev.resumen?.[key])}</td>
+      <td style="font-family:var(--mono);color:${dropDeltaColor(vm)}">${fmtDelta(vm)}</td>
+      <td style="font-family:var(--mono)">${fmt(aa.resumen?.[key])}</td>
+      <td style="font-family:var(--mono);color:${dropDeltaColor(va)}">${fmtDelta(va)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('dropComparativo').innerHTML = html;
+}
+
+function renderDropsizePicos(data) {
+  const rows = data.dias || [];
+  if (!rows.length) {
+    document.getElementById('dropPicos').innerHTML = '<div class="empty"><div class="icon">📈</div>Sin días pico en el período</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr><th>Fecha</th><th>Motivo</th><th>Clientes</th><th>Bultos</th><th>HL</th><th>Pallets</th></tr></thead><tbody>`;
+  rows.forEach(x => {
+    html += `<tr>
+      <td style="font-family:var(--mono)">${x.fecha}</td>
+      <td>${(x.motivos || []).map(m => `<span class="tag pico">${m}</span>`).join(' ')}</td>
+      <td style="font-family:var(--mono)">${fmtN(x.clientes_entregados || 0)}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(x.total_bultos || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(x.total_hl || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtDrop(x.total_pallets || 0)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('dropPicos').innerHTML = html;
+}
+
+function renderDropsizeObjetivos(rows) {
+  dropsizeObjetivos = rows || [];
+  if (!dropsizeObjetivos.length) {
+    document.getElementById('dropObjetivos').innerHTML = '<div class="empty"><div class="icon">🎯</div>Sin objetivos cargados</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Sucursal</th><th>Unidad</th><th>Mínimo</th><th>Ideal</th><th>Desde</th><th>Hasta</th><th>Estado</th><th></th>
+  </tr></thead><tbody>`;
+  dropsizeObjetivos.forEach(x => {
+    html += `<tr>
+      <td>${esc(x.sucursal || 'Todas')}</td>
+      <td style="font-family:var(--mono)">${x.unidad}</td>
+      <td style="font-family:var(--mono)">${fmtDrop(x.objetivo_minimo)}</td>
+      <td style="font-family:var(--mono)">${fmtDrop(x.objetivo_ideal)}</td>
+      <td style="font-family:var(--mono)">${x.fecha_desde}</td>
+      <td style="font-family:var(--mono)">${x.fecha_hasta || '—'}</td>
+      <td>${x.activo ? '<span class="tag ok">Activo</span>' : '<span class="tag err">Inactivo</span>'}</td>
+      <td style="display:flex;gap:4px"><button class="btn sm" onclick="editDropsizeObjetivo(${x.id})">Editar</button><button class="btn sm danger" onclick="deleteDropsizeObjetivo(${x.id})">Eliminar</button></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('dropObjetivos').innerHTML = html;
+}
+
+async function loadDropsizePicos() {
+  load('dropPicos');
+  try {
+    const met = document.getElementById('dropPicoMetrica').value;
+    const data = await api(`/api/dropsize/dias_pico?${dropsizeQuery({ metrica: met })}`);
+    renderDropsizePicos(data);
+  } catch (e) {
+    errBox('dropPicos', 'Error: ' + e.message);
+  }
+}
+
+async function loadDropsize() {
+  const seq = ++_loadDropSeq;
+  if (_dropAbort) _dropAbort.abort();
+  _dropAbort = new AbortController();
+  ['dropKpis', 'dropRanking', 'dropComparativo', 'dropTabla', 'dropPicos'].forEach(load);
+  const q = dropsizeQuery();
+  const monthlyQ = new URLSearchParams({ sucursal: getDropSuc(), mes: document.getElementById('dropMes')?.value || mesPad(), meses: document.getElementById('selPeriodoHist').value || '12' });
+  const rankQ = dropsizeQuery({ unidad: document.getElementById('dropRankingUnidad').value });
+
+  try {
+    const [resumen, diaria, mensual, ranking, comparativo, picos] = await Promise.all([
+      api(`/api/dropsize/resumen?${q}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/evolucion_diaria?${q}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/evolucion_mensual?${monthlyQ.toString()}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/ranking_sucursales?${rankQ}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/comparativo?sucursal=${getDropSuc()}&mes=${document.getElementById('dropMes')?.value || mesPad()}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/dias_pico?${dropsizeQuery({ metrica: document.getElementById('dropPicoMetrica').value })}`, { signal: _dropAbort.signal }),
+    ]);
+    if (seq !== _loadDropSeq) return;
+    renderDropsizeKpis(resumen);
+    renderDropsizeDiaria(diaria);
+    renderDropsizeMensual(mensual);
+    renderDropsizeRanking(ranking);
+    renderDropsizeComparativo(comparativo);
+    renderDropsizePicos(picos);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    errBox('dropKpis', 'Error: ' + e.message);
+  }
+}
+
+async function loadDropsizeObjetivos() {
+  if (!document.getElementById('dropObjetivos')) return;
+  load('dropObjetivos');
+  try {
+    const rows = await api(`/api/dropsize/objetivos?sucursal=${getSuc()}`);
+    renderDropsizeObjetivos(rows);
+  } catch (e) {
+    errBox('dropObjetivos', 'Error: ' + e.message);
+  }
+}
+
+function editDropsizeObjetivo(id) {
+  const x = dropsizeObjetivos.find(o => Number(o.id) === Number(id));
+  if (!x) return;
+  document.getElementById('dropObjId').value = x.id;
+  document.getElementById('dropObjSucursal').value = x.sucursal_id || 'TODAS';
+  document.getElementById('dropObjUnidad').value = x.unidad;
+  document.getElementById('dropObjMin').value = x.objetivo_minimo;
+  document.getElementById('dropObjIdeal').value = x.objetivo_ideal;
+  document.getElementById('dropObjDesde').value = x.fecha_desde;
+  document.getElementById('dropObjHasta').value = x.fecha_hasta || '';
+}
+
+async function deleteDropsizeObjetivo(id) {
+  if (!confirm('¿Eliminar este objetivo?')) return;
+  try {
+    const r = await fetch(API + '/api/dropsize/objetivos/' + id, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Error al eliminar');
+    await loadDropsizeObjetivos();
+    if (document.getElementById('tab-dropsize')?.style.display !== 'none') await loadDropsize();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function saveDropsizeObjetivo() {
+  const msg = document.getElementById('dropObjMsg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  const payload = {
+    id: document.getElementById('dropObjId').value || null,
+    sucursal_id: document.getElementById('dropObjSucursal').value,
+    unidad: document.getElementById('dropObjUnidad').value,
+    objetivo_minimo: Number(document.getElementById('dropObjMin').value || 0),
+    objetivo_ideal: Number(document.getElementById('dropObjIdeal').value || 0),
+    fecha_desde: document.getElementById('dropObjDesde').value,
+    fecha_hasta: document.getElementById('dropObjHasta').value || null,
+    activo: true,
+  };
+  try {
+    const r = await fetch(API + '/api/dropsize/objetivos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Error');
+    msg.style.color = 'var(--grn)';
+    msg.textContent = 'Objetivo guardado';
+    document.getElementById('dropObjId').value = '';
+    await loadDropsizeObjetivos();
+    if (document.getElementById('tab-dropsize')?.style.display !== 'none') await loadDropsize();
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = e.message;
+  }
+}
+
+async function recalcularDropsize() {
+  const msg = document.getElementById('dropObjMsg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Recalculando historico...';
+  try {
+    const r = await fetch(API + '/api/dropsize/recalcular', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sucursal: getDropSuc(),
+        fecha_desde: document.getElementById('dropDesde').value,
+        fecha_hasta: document.getElementById('dropHasta').value,
+        mes: document.getElementById('dropMes').value,
+      }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Error');
+    msg.style.color = 'var(--grn)';
+    msg.textContent = `Historico recalculado: ${fmtN(data.registros || 0)} filas`;
+    await loadDropsize();
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = e.message;
+  }
+}
+
+function exportDropsizeExcel() {
+  window.location.href = `${API}/api/dropsize/export?${dropsizeQuery()}`;
+}
+
+function openDrawer(fecha) {
+  document.getElementById('drawerTitle').textContent = fecha;
+  document.getElementById('drawerBody').innerHTML = '<div class="loading"><div class="spinner"></div>Cargando detalle…</div>';
+  document.getElementById('drawer').classList.add('open');
+  loadDayDetail(fecha);
+}
+
+function closeDrawer() {
+  if (_drawerAbort) _drawerAbort.abort();
+  document.getElementById('drawer').classList.remove('open');
+  selDay = null;
+  renderCal();
+}
+
+async function loadDayDetail(fecha) {
+  if (_drawerAbort) _drawerAbort.abort();
+  _drawerAbort = new AbortController();
+  const sig  = _drawerAbort.signal;
+  const body = document.getElementById('drawerBody');
+
+  try {
+    const fetchJ = (url) => fetch(url, { signal: sig }).then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+    const [detail, equipos, disponibles] = await Promise.allSettled([
+      fetchJ(`${API}/api/picos/dia?sucursal=${getSuc()}&fecha=${fecha}`),
+      cfg.equiposUrl     ? fetchJ(`${API}/api/recursos/equipos?url=${encodeURIComponent(cfg.equiposUrl)}&fecha=${fecha}&sucursal=${getSuc()}`)     : Promise.reject('no url'),
+      cfg.disponiblesUrl ? fetchJ(`${API}/api/recursos/disponibles?url=${encodeURIComponent(cfg.disponiblesUrl)}&fecha=${fecha}&sucursal=${getSuc()}`) : Promise.reject('no url'),
+    ]);
+
+    if (sig.aborted) return;
+
+    const d    = detail.status      === 'fulfilled' ? detail.value              : null;
+    const eq   = equipos.status     === 'fulfilled' ? equipos.value.equipos     || [] : [];
+    const disp = disponibles.status === 'fulfilled' ? disponibles.value.disponibles || [] : [];
+    const di   = diasData.find(x => x.fecha === fecha) || {};
+
+    let html = '';
+
+    if (di.es_evento && di.evento_desc) {
+      html += `<div style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.45);border-radius:6px;padding:10px 14px;font-size:12px">
+        <span style="font-weight:600;color:var(--red)">⚡ Evento especial</span>
+        <span style="color:var(--muted);margin-left:8px">${di.evento_desc}</span>
+        <div style="margin-top:4px;font-size:11px;color:var(--muted)">La venta de este día se distribuye antes o después.</div>
+      </div>`;
+    }
+    if (di.es_feriado && di.feriado_desc) {
+      html += `<div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.35);border-radius:6px;padding:8px 14px;font-size:12px">
+        <span style="font-weight:600;color:var(--pur)">Feriado:</span>
+        <span style="color:var(--muted);margin-left:6px">${di.feriado_desc}</span>
+      </div>`;
+    }
+
+    if (di.bultos != null) {
+      html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div class="kpi ora"><div class="kpi-lbl">Bultos desp.</div><div class="kpi-val ora" style="font-size:18px">${fmtN(Math.round(di.bultos))}</div></div>
+        <div class="kpi pur"><div class="kpi-lbl">HL desp.</div><div class="kpi-val pur" style="font-size:18px">${fmtN(Math.round(di.hectolitros))}</div></div>
+        <div class="kpi grn"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val grn" style="font-size:18px">${fmtN(di.pedidos || 0)}</div></div>
+        <div class="kpi pur"><div class="kpi-lbl">Clientes únicos</div><div class="kpi-val pur" style="font-size:18px">${fmtN(d?.clientes_unicos || di.clientes_unicos || 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_pedidos ?? 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_bultos ?? 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_hl ?? 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val red" style="font-size:18px">${fmt1(di.rechazo_bultos || 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red" style="font-size:18px">${fmt1(di.rechazo_hl || 0)}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val red" style="font-size:18px">${fmtN(di.rechazo_pedidos || 0)}</div></div>
+        <div class="kpi ora"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val ora" style="font-size:18px">${fmt1(di.rechazo_hl_parcial || 0)}</div></div>
+        <div class="kpi ora"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val ora" style="font-size:18px">${fmt1(di.rechazo_hl_total || 0)}</div></div>
+        <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora" style="font-size:18px">${fmt1(di.rechazo_bultos_parcial || 0)}</div></div>
+        <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora" style="font-size:18px">${fmt1(di.rechazo_bultos_total || 0)}</div></div>
+        <div class="kpi blu"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val blu" style="font-size:18px">${fmtN(Math.round(di.rmcyo_hl || 0))}</div></div>
+        <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red" style="font-size:18px">${fmt1(di.rmcyo_rechazo_hl || 0)}</div></div>
+      </div>`;
+    }
+
+    if (disp.length) {
+      html += `<div class="sec">Disponibilidad</div>`;
+      disp.forEach(r => {
+        html += `<div class="box" style="padding:10px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div><div style="font-size:9px;color:var(--muted)">CAMIONES DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--grn)">${r.camiones_disponibles || '—'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">EN TALLER</div><div style="font-family:var(--mono);font-size:18px;color:var(--red)">${r.camiones_en_taller || '—'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">PERSONAS DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--blu)">${r.personas_disponibles || '—'}</div></div>
+        </div>`;
+      });
+    }
+
+    if (d?.planillas?.length) {
+      html += `<div class="sec">Salidas únicas (${d.salidas_unicas || d.planillas.length})</div>`;
+      let t = `<table class="rtbl"><thead><tr><th>Camión</th><th>Patente</th><th>Bultos</th><th>Pallets</th><th>Salida</th></tr></thead><tbody>`;
+      d.planillas.forEach(p => {
+        const sal    = p.fecha_salida ? String(p.fecha_salida).slice(11, 16) : '—';
+        const camion = p.transporte || p.camion_key || '—';
+        t += `<tr>
+          <td style="font-family:var(--mono)">${camion}</td>
+          <td style="font-family:var(--mono)">${p.patente || '—'}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(p.bultos_totales || 0))}</td>
+          <td style="font-family:var(--mono)">${Math.round(p.pallets || 0)}</td>
+          <td style="font-family:var(--mono)">${sal}</td>
+        </tr>`;
+      });
+      t += '</tbody></table>';
+      html += t;
+    }
+
+    if (d?.clientes_por_sucursal?.length) {
+      html += `<div class="sec">Clientes por sucursal</div>
+        <table class="rtbl"><thead><tr><th>Sucursal</th><th>Clientes únicos</th></tr></thead><tbody>`;
+      d.clientes_por_sucursal.forEach(r => {
+        html += `<tr><td>${r.sucursal || 'SIN SUCURSAL'}</td><td style="font-family:var(--mono)">${fmtN(r.clientes_unicos || 0)}</td></tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    if (d?.clientes?.length) {
+      html += `<div class="sec">Clientes únicos</div>
+        <table class="rtbl"><thead><tr><th>ID cliente</th><th>Cliente</th><th>Sucursal</th></tr></thead><tbody>`;
+      d.clientes.slice(0, 100).forEach(c => {
+        html += `<tr>
+          <td style="font-family:var(--mono)">${c.id_cliente || '—'}</td>
+          <td>${c.nombre_cliente || '—'}</td>
+          <td>${c.sucursal || '—'}</td>
+        </tr>`;
+      });
+      if (d.clientes.length > 100) {
+        html += `<tr><td colspan="3" style="font-size:12px;color:var(--muted)">Mostrando 100 de ${d.clientes.length} clientes</td></tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    if (eq.length) {
+      html += `<div class="sec">Equipos de reparto</div>`;
+      eq.forEach(r => {
+        const ok = r.cargado_tiempo?.toLowerCase().includes('si') || r.cargado_tiempo === '1';
+        html += `<div class="box" style="padding:10px 14px">
+          <div style="font-size:13px;font-weight:600">${r.chofer || '—'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:3px">
+            🚛 ${r.camion || '?'} ${r.nro_camion ? '#' + r.nro_camion : ''}
+            ${r.ayudante1 ? ' · ' + r.ayudante1 : ''}${r.ayudante2 ? ' · ' + r.ayudante2 : ''}
+            · ${r.personas || '?'} pers. · ${r.pallets || '?'} pallets
+            ${r.kms ? ' · ' + r.kms + ' km' : ''}${r.horas ? ' · ' + r.horas + ' hs' : ''}
+          </div>
+          ${r.cargado_tiempo ? `<div style="margin-top:5px"><span class="tag ${ok ? 'ok' : 'err'}">${ok ? '✓ A tiempo' : '✗ Tarde'}</span></div>` : ''}
+        </div>`;
+      });
+    }
+
+    if (d?.top_articulos?.length) {
+      html += `<div class="sec">Top artículos</div>
+        <table class="rtbl"><thead><tr><th>Artículo</th><th>Bultos</th><th>HL</th><th>Bultos rechazados</th><th>HL rechazados</th><th>PDV rechazados</th></tr></thead><tbody>`;
+      d.top_articulos.slice(0, 15).forEach(a => {
+        html += `<tr>
+          <td>${a.descripcion_articulo || '—'}</td>
+          <td style="font-family:var(--mono)">${Math.round(a.bultos || 0)}</td>
+          <td style="font-family:var(--mono)">${Math.round(a.hl || 0)}</td>
+          <td style="font-family:var(--mono);color:${a.b_rec > 0 ? 'var(--red)' : 'var(--muted)'}">${Math.round(a.b_rec || 0)}</td>
+          <td style="font-family:var(--mono);color:${a.hl_rec > 0 ? 'var(--red)' : 'var(--muted)'}">${Math.round(a.hl_rec || 0)}</td>
+          <td style="font-family:var(--mono);color:${a.p_rec > 0 ? 'var(--red)' : 'var(--muted)'}">${a.p_rec || 0}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    if (d?.rechazos?.length) {
+      html += `<div class="sec">Motivos de rechazo</div>
+        <table class="rtbl"><thead><tr><th>Motivo</th><th>PDV rechazados</th><th>Total bultos rechazados</th><th>Bultos rechazo parcial</th><th>Bultos rechazo completo</th><th>Total HL rechazados</th><th>HL rechazo parcial</th><th>HL rechazo completo</th></tr></thead><tbody>`;
+      d.rechazos.forEach(r => {
+        html += `<tr>
+          <td>${r.motivo}</td>
+          <td style="font-family:var(--mono)">${r.pedidos || 0}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(r.bultos || 0)}</td>
+          <td style="font-family:var(--mono);color:var(--acc)">${Math.round(r.bultos_parcial || 0)}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(r.bultos_total || 0)}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(r.hectolitros || 0)}</td>
+          <td style="font-family:var(--mono);color:var(--acc)">${Math.round(r.hectolitros_parcial || 0)}</td>
+          <td style="font-family:var(--mono);color:var(--red)">${Math.round(r.hectolitros_total || 0)}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+
+    if (!html) html = '<div class="empty"><div class="icon">📋</div>Sin datos para este día</div>';
+    body.innerHTML = html;
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    body.innerHTML = `<div class="err-box">Error: ${e.message}</div>`;
+  }
+}
+
+// ─── UMBRAL / MÉTRICA ─────────────────────────────────────────
+function onUmbralChange(v) {
+  document.getElementById('lblUmbral').textContent = '+' + Math.round((v - 1) * 100) + '%';
+  umbral = parseFloat(v);
+}
+
+function setUmbral(v) {
+  document.getElementById('sliderUmbral').value = v;
+  onUmbralChange(v);
+  loadMes();
+}
+
+async function guardarUmbral() {
+  const v  = parseFloat(document.getElementById('sliderUmbral').value);
+  const m  = document.getElementById('selMetrica').value;
+  const el = document.getElementById('umbralMsg');
+  try {
+    await fetch(API + '/api/parametros', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sucursal: getSuc(), umbral_pct: v, metrica: m }),
+    });
+    el.style.color  = 'var(--grn)';
+    el.textContent  = '✓ Guardado';
+    setTimeout(() => el.textContent = '', 2000);
+    await loadMes();
+  } catch (e) {
+    el.style.color = 'var(--red)';
+    el.textContent = 'Error';
+  }
+}
+
+async function onMetricaChange() {
+  metrica = document.getElementById('selMetrica').value;
+  await loadMes();
+  loadHistorico();
+  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsizePicos();
+}
+
+async function onSucursalChange() {
+  document.getElementById('cfgSucursal').value = getSuc();
+  if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();
+  if (document.getElementById('planSucursal')) document.getElementById('planSucursal').value = getSuc();
+  await loadParams(false);
+  await loadMes();
+  loadHistorico();
+  if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
+  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsize();
+  if (document.getElementById('tab-planificacion')?.style.display !== 'none') loadPlanificacion();
+  if (document.getElementById('tab-config')?.style.display !== 'none') loadKpiObjetivos();
+  loadArticulosCount();
+}
+
+// ─── UPLOAD ──────────────────────────────────────────────────
+let uploadOpen = true;
+function toggleUpload() {
+  uploadOpen = !uploadOpen;
+  document.getElementById('uploadBody').style.display  = uploadOpen ? '' : 'none';
+  document.getElementById('uploadToggleIcon').textContent = uploadOpen ? '▾' : '▸';
+}
+
+async function loadArticulosCount() {
+  const el = document.getElementById('articulosCount');
+  const missingEl = document.getElementById('articulosSinClasificar');
+  const infoEl = document.getElementById('articulosSinClasificarInfo');
+  if (!el) return;
+  try {
+    const d = await api('/api/articulos/count');
+    el.textContent = fmtN(d.total);
+  } catch (e) { el.textContent = 'Error'; }
+  if (!missingEl) return;
+  try {
+    const d = await api(`/api/articulos/sin-clasificar?mes=${mesPad()}&sucursal=${getSuc()}&limit=3`);
+    missingEl.textContent = fmtN(d.articulos);
+    missingEl.style.color = d.articulos > 0 ? 'var(--red)' : 'var(--grn)';
+    if (infoEl) {
+      if (d.articulos > 0) {
+        const top = (d.top || [])
+          .map(x => `${x.id_articulo} - ${esc(x.descripcion_articulo)} (${fmtN(x.filas)} filas)`)
+          .join('<br>');
+        infoEl.innerHTML = `${fmtN(d.filas)} filas excluidas del calculo del mes.${top ? '<br>' + top : ''}`;
+      } else {
+        infoEl.textContent = 'Sin articulos del detalle pendientes de cargar en la tabla articulos.';
+      }
+    }
+  } catch (e) {
+    missingEl.textContent = 'Error';
+    if (infoEl) infoEl.textContent = '';
+  }
+}
+
+async function uploadFile(tipo, force = false) {
+  const ids = {
+    articulos: 'fileArticulos',
+    resumen: 'fileResumen',
+    detalle: 'fileDetalle',
+    ventasDetalle: 'fileVentasDetalle',
+    clientes: 'fileClientes',
+    transportes: 'fileTransportes',
+    rechazos: 'fileRechazos',
+  };
+  const stIds = {
+    articulos: 'stArticulos',
+    resumen: 'stResumen',
+    detalle: 'stDetalle',
+    ventasDetalle: 'stVentasDetalle',
+    clientes: 'stClientes',
+    transportes: 'stTransportes',
+    rechazos: 'stRechazos',
+  };
+  const fi = document.getElementById(ids[tipo]);
+  const st = document.getElementById(stIds[tipo]);
+  if (!fi.files.length) { st.textContent = 'Sin archivo'; st.className = 'upload-status err'; return; }
+  const fd = new FormData();
+  fd.append('file', fi.files[0]);
+  if (force) fd.append('force', 'true');
+  if (tipo === 'resumen' || tipo === 'detalle' || tipo === 'ventasDetalle') {
+    const suc = document.getElementById('uploadSucursal').value;
+    if (!suc) { st.textContent = 'Elegí sucursal'; st.className = 'upload-status err'; return; }
+    fd.append('sucursal', suc);
+  }
+  st.textContent = 'Subiendo…'; st.className = 'upload-status';
+  try {
+    const endpoint = tipo === 'ventasDetalle' ? 'ventas-detalle' : tipo;
+    const r = await fetch(`${API}/api/upload/${endpoint}`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Error');
+    st.textContent = `✓ ${d.inserted || d.total || 0} filas`;
+    st.className   = 'upload-status ok';
+    if (tipo === 'articulos') loadArticulosCount();
+    else {
+      await loadMes();
+      loadHistorico();
+      if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
+      loadArticulosCount();
+    }
+  } catch (e) { st.textContent = '✗ ' + e.message; st.className = 'upload-status err'; }
+}
+
+// ─── FERIADOS ────────────────────────────────────────────────
+async function syncFeriados() {
+  const url = document.getElementById('inputFeriadosUrl').value.trim();
+  const st  = document.getElementById('stFeriados');
+  if (!url) { st.style.color = 'var(--red)'; st.textContent = 'Ingresá la URL del Sheet'; return; }
+  st.style.color = 'var(--muted)'; st.textContent = 'Sincronizando…';
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 30000); // 30s max
+  try {
+    const r = await fetch(API + '/api/feriados', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheets_url: url }),
+      signal: abort.signal,
+    });
+    clearTimeout(timer);
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Error del servidor');
+    const extra = d.errors > 0 ? ` (${d.errors} errores, ${d.skipped || 0} omitidos)` : '';
+    st.style.color = 'var(--grn)';
+    st.textContent = `✓ ${d.imported} feriados importados${extra}`;
+    cfg.feriadosUrl = url;
+    localStorage.setItem('pico_cfg', JSON.stringify(cfg));
+    loadMes(); loadFeriados();
+  } catch (e) {
+    clearTimeout(timer);
+    st.style.color = 'var(--red)';
+    st.textContent = e.name === 'AbortError' ? 'Tiempo agotado (30s). Verificá la URL.' : 'Error: ' + e.message;
+  }
+}
+
+async function loadFeriados() {
+  const el = document.getElementById('ferList');
+  if (!el) return;
+  try {
+    const data      = await api(`/api/feriados?anio=${vY}`);
+    const mesFiltro = mesPad();
+    const delMes    = data.filter(f => f.fecha.startsWith(mesFiltro));
+    const otros     = data.filter(f => !f.fecha.startsWith(mesFiltro));
+    const mesNombre = MESES[vM] + ' ' + vY;
+
+    const tipoTag = (t) => {
+      const v = (t || '').toLowerCase();
+      const lbl = v === 'local' ? 'Empresa' : t ? 'Feriado AR' : '';
+      const col = v === 'local' ? 'var(--acc)' : 'var(--pur)';
+      return lbl ? `<span style="font-family:var(--mono);font-size:10px;color:${col};background:rgba(0,0,0,.25);padding:1px 6px;border-radius:3px;margin:0 6px">${lbl}</span>` : '';
+    };
+
+    const list = delMes.length ? delMes : data.slice(0, 12);
+
+    const mesHeader = delMes.length
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+           <span style="font-size:11px;color:var(--muted)">${delMes.length} feriado${delMes.length !== 1 ? 's' : ''} en ${mesNombre}</span>
+           ${delMes.length > 2
+             ? `<button class="btn sm danger" onclick="limpiarFeriadosMes()" title="Elimina todos los feriados de ${mesNombre}">Limpiar ${MESES[vM]}</button>`
+             : ''}
+         </div>`
+      : `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sin feriados en ${mesNombre}. Mostrando otros del año.</div>`;
+
+    if (!data.length) {
+      el.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:4px 0">Sin feriados registrados para ${vY}.</div>`;
+      return;
+    }
+
+    const rows = list.map(f => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--brd);font-size:12px">
+        <span>
+          <span style="font-family:var(--mono);color:var(--pur)">${f.fecha}</span>
+          ${tipoTag(f.tipo)}
+          ${f.descripcion}
+        </span>
+        <button class="btn sm danger" onclick="deleteFeriado('${f.fecha}')">✕</button>
+      </div>`).join('');
+
+    const extra = otros.length && delMes.length
+      ? `<div style="font-size:11px;color:var(--muted);padding:4px 0;margin-top:4px">${otros.length} feriado${otros.length !== 1 ? 's' : ''} más en ${vY}</div>`
+      : '';
+
+    el.innerHTML = mesHeader + rows + extra;
+  } catch (er) { if (el) el.innerHTML = ''; }
+}
+
+async function limpiarFeriadosMes() {
+  const mesNombre = MESES[vM] + ' ' + vY;
+  if (!confirm(`¿Eliminar TODOS los feriados de ${mesNombre}?`)) return;
+  try {
+    await fetch(`${API}/api/feriados/mes/${vY}/${vM + 1}`, { method: 'DELETE' });
+    loadFeriados();
+    loadMes();
+  } catch(e) { alert('Error: ' + e.message); }
+}
+
+async function limpiarAnio() {
+  const st = document.getElementById('stFeriados');
+  if (!confirm(`¿Eliminar TODOS los feriados de ${vY}? Luego podés volver a sincronizar desde el Sheet.`)) return;
+  st.style.color = 'var(--muted)';
+  st.textContent = 'Limpiando…';
+  try {
+    const r = await fetch(`${API}/api/feriados/anio/${vY}`, { method: 'DELETE' });
+    const d = await r.json();
+    st.style.color = 'var(--grn)';
+    st.textContent = `✓ ${d.deleted} feriados eliminados de ${vY}`;
+    loadFeriados();
+    loadMes();
+  } catch(e) {
+    st.style.color = 'var(--red)';
+    st.textContent = 'Error: ' + e.message;
+  }
+}
+
+async function addFeriado() {
+  const fecha = document.getElementById('ferFecha').value;
+  const desc  = document.getElementById('ferDesc').value.trim();
+  const tipo  = document.getElementById('ferTipo').value;
+  const inp   = document.getElementById('ferDesc');
+  if (!fecha || !desc) { inp.style.borderColor = 'var(--red)'; return; }
+  inp.style.borderColor = '';
+  try {
+    await fetch(`${API}/api/feriados`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha, descripcion: desc, tipo }),
+    });
+    inp.value = '';
+    loadFeriados(); loadMes();
+  } catch (e) { alert('Error al guardar feriado'); }
+}
+
+async function deleteFeriado(fecha) {
+  await fetch(`${API}/api/feriados/${fecha}`, { method: 'DELETE' });
+  loadFeriados(); loadMes();
+}
+
+// ─── EVENTOS ESPECIALES ───────────────────────────────────────
+async function loadEventos() {
+  const el = document.getElementById('evList');
+  if (!el) return;
+  try {
+    const data = await api(`/api/eventos?mes=${mesPad()}&sucursal=${getSuc()}`);
+    if (!data.length) {
+      el.innerHTML = '<div style="font-size:11px;color:var(--muted);padding:6px 0">Sin eventos para este mes.</div>';
+      return;
+    }
+    el.innerHTML = data.map(e => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--brd);font-size:12px">
+        <span>
+          <span style="font-family:var(--mono);color:var(--acc)">${e.fecha}</span>
+          <span style="color:var(--muted);margin:0 6px;font-size:10px">${e.sucursal}</span>
+          ${e.descripcion}
+        </span>
+        <button class="btn sm danger" onclick="deleteEvento(${e.id})">✕</button>
+      </div>`).join('');
+  } catch (er) { if (el) el.innerHTML = ''; }
+}
+
+async function addEvento() {
+  const fecha = document.getElementById('evFecha').value;
+  const suc   = document.getElementById('evSucursal').value;
+  const desc  = document.getElementById('evDesc').value.trim();
+  const inp   = document.getElementById('evDesc');
+  if (!fecha || !desc) { inp.style.borderColor = 'var(--red)'; return; }
+  inp.style.borderColor = '';
+  try {
+    await fetch(`${API}/api/eventos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fecha, sucursal: suc, descripcion: desc }),
+    });
+    inp.value = '';
+    await loadEventos(); await loadMes();
+  } catch (e) { alert('Error al guardar evento'); }
+}
+
+async function deleteEvento(id) {
+  await fetch(`${API}/api/eventos/${id}`, { method: 'DELETE' });
+  await loadEventos(); await loadMes();
+}
+
+// ─── RECHAZOS ─────────────────────────────────────────────────
+async function loadRechazos() {
+  load('rechazosGrid');
+  try {
+    const data = await api('/api/rechazos');
+    renderRechazosTable(data);
+  } catch(e) { errBox('rechazosGrid', e.message); }
+}
+
+function renderRechazosTable(rows) {
+  if (!rows.length) {
+    document.getElementById('rechazosGrid').innerHTML =
+      '<div class="empty"><div class="icon">📋</div>Sin motivos registrados. Sincronizá desde el detalle.</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Motivo</th><th>Filas en DB</th><th>Bultos</th><th>¿Contar?</th>
+  </tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr>
+      <td>${esc(r.motivo_rechazo)}</td>
+      <td style="font-family:var(--mono);color:var(--muted)">${fmtN(r.filas)}</td>
+      <td style="font-family:var(--mono);color:var(--muted)">${fmtN(Math.round(r.bultos))}</td>
+      <td>
+        <button class="tag ${r.tomar ? 'ok' : 'err'}"
+                onclick="toggleTomar('${jsEsc(r.motivo_key)}', ${!r.tomar})"
+                style="cursor:pointer;border:none;font-size:11px;padding:3px 10px">
+          ${r.tomar ? 'SÍ' : 'NO'}
+        </button>
+      </td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('rechazosGrid').innerHTML = html;
+}
+
+async function toggleTomar(key, val) {
+  try {
+    const res = await fetch(API + '/api/rechazos/' + encodeURIComponent(key), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tomar: val }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `HTTP ${res.status}`);
+    }
+    loadRechazos();
+  } catch(e) { alert('Error al actualizar: ' + e.message); }
+}
+
+async function syncRechazos() {
+  const btn = document.getElementById('btnSyncRechazos');
+  const msg = document.getElementById('syncRechazosMsg');
+  btn.disabled = true;
+  btn.textContent = 'Sincronizando…';
+  try {
+    const r = await fetch(API + '/api/rechazos/sync', { method: 'POST' });
+    const d = await r.json();
+    msg.style.color = 'var(--grn)';
+    msg.textContent = d.inserted > 0 ? `✓ ${d.inserted} nuevos motivos` : '✓ Sin nuevos motivos';
+    loadRechazos();
+  } catch(e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Error: ' + e.message;
+  }
+  btn.disabled = false;
+  btn.textContent = '↻ Sincronizar desde detalle';
+}
+
+// ─── CONFIG ──────────────────────────────────────────────────
+function saveConfig() {
+  cfg.equiposUrl     = document.getElementById('cfgEquiposUrl').value.trim();
+  cfg.disponiblesUrl = document.getElementById('cfgDisponiblesUrl').value.trim();
+  cfg.dotacionEntregaUrl = document.getElementById('cfgDotacionEntregaUrl')?.value.trim() || '';
+  cfg.dotacionRecargasUrl = document.getElementById('cfgDotacionRecargasUrl')?.value.trim() || '';
+  localStorage.setItem('pico_cfg', JSON.stringify(cfg));
+  const m = document.getElementById('cfgMsg');
+  m.textContent = '✓ Guardado';
+  setTimeout(() => m.textContent = '', 2000);
+}
+
+async function saveParams() {
+  const suc = document.getElementById('cfgSucursal').value;
+  const u   = parseFloat(document.getElementById('cfgUmbral').value);
+  const met = document.getElementById('cfgMetrica').value;
+  try {
+    await fetch(API + '/api/parametros', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sucursal: suc, umbral_pct: u, metrica: met }),
+    });
+    const m = document.getElementById('paramsMsg');
+    m.textContent = '✓ Guardado';
+    setTimeout(() => m.textContent = '', 2000);
+    if (suc === getSuc()) {
+      document.getElementById('sliderUmbral').value = u;
+      document.getElementById('selMetrica').value   = met;
+      onUmbralChange(u);
+      metrica = met;
+      await loadMes();
+    }
+  } catch (e) {
+    document.getElementById('paramsMsg').style.color  = 'var(--red)';
+    document.getElementById('paramsMsg').textContent  = 'Error';
+  }
+}
+
+// ─── TABS ────────────────────────────────────────────────────
+function renderKpiObjetivos(rows) {
+  kpiObjetivos = rows || [];
+  const el = document.getElementById('kpiObjetivos');
+  if (!el) return;
+  if (!kpiObjetivos.length) {
+    el.innerHTML = '<div class="empty"><div class="icon">🎯</div>Sin objetivos KPI cargados</div>';
+    return;
+  }
+  const sum = key => diasData.reduce((acc, d) => acc + Number(d[key] || 0), 0);
+  const total = {
+    bultos: mesKpis.bultos ?? sum('bultos'),
+    hectolitros: mesKpis.hectolitros ?? sum('hectolitros'),
+    pallets: mesKpis.pallets ?? sum('pallets'),
+    up: mesKpis.up ?? sum('up'),
+    pedidos: mesKpis.pedidos ?? sum('pedidos'),
+    clientes: mesKpis.clientes ?? sum('clientes_unicos'),
+    pct_rechazo_pedidos: mesKpis.pct_rechazo_pedidos ?? 0,
+    pct_rechazo_bultos: mesKpis.pct_rechazo_bultos ?? 0,
+    pct_rechazo_hl: mesKpis.pct_rechazo_hl ?? 0,
+    camiones: mesKpis.camiones ?? sum('camiones_salidos'),
+    picos: diasData.filter(d => d.es_pico).length,
+    feriados: diasData.filter(d => d.es_feriado).length,
+    eventos: diasData.filter(d => d.es_evento).length,
+  };
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Sucursal</th><th>Indicador</th><th>Regla</th><th>Alerta</th><th>Desde</th><th>Hasta</th><th>Estado</th><th></th>
+  </tr></thead><tbody>`;
+  kpiObjetivos.forEach(x => {
+    const signo = x.direccion === 'max' ? '<=' : '>=';
+    html += `<tr>
+      <td>${esc(x.sucursal || 'Todas')}</td>
+      <td>${esc(x.nombre)}</td>
+      <td style="font-family:var(--mono)">${signo} ${fmtDrop(x.objetivo)}${x.unidad || ''}</td>
+      <td style="font-family:var(--mono)">${x.alerta == null ? '—' : fmtDrop(x.alerta) + (x.unidad || '')}</td>
+      <td style="font-family:var(--mono)">${x.fecha_desde}</td>
+      <td style="font-family:var(--mono)">${x.fecha_hasta || '—'}</td>
+      <td>${x.activo ? '<span class="tag ok">Activo</span>' : '<span class="tag err">Inactivo</span>'}</td>
+      <td style="display:flex;gap:4px"><button class="btn sm" onclick="editKpiObjetivo(${x.id})">Editar</button><button class="btn sm danger" onclick="deleteKpiObjetivo(${x.id})">Eliminar</button></td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr class="total-row">
+    <td>Total mes</td>
+    <td>${fmtN(Math.round(total.bultos || 0))}</td>
+    <td>${fmtN(Math.round(total.hectolitros || 0))}</td>
+    <td>${fmtN(Math.round(total.pallets || 0))}</td>
+    <td>${fmtN(Math.round(total.up || 0))}</td>
+    <td>${fmtN(total.pedidos || 0)}</td>
+    <td>${fmtN(total.clientes || 0)}</td>
+    <td>${fmtPct1(total.pct_rechazo_pedidos || 0)}</td>
+    <td>${fmtPct1(total.pct_rechazo_bultos || 0)}</td>
+    <td><span class="pct-pill ${(total.pct_rechazo_hl || 0) > 5 ? 'bad' : 'ok'}">${fmtPct1(total.pct_rechazo_hl || 0)}</span></td>
+    <td>${fmtN(total.camiones || 0)}</td>
+    <td>${fmtN(total.picos || 0)}</td>
+    <td>${fmtN(total.feriados || 0)}</td>
+    <td>${fmtN(total.eventos || 0)}</td>
+  </tr></tfoot></table>`;
+  el.innerHTML = html;
+}
+
+async function loadKpiObjetivos() {
+  const el = document.getElementById('kpiObjetivos');
+  if (!el) return;
+  load('kpiObjetivos');
+  try {
+    const rows = await api(`/api/kpi-objetivos?sucursal=${getSuc()}`);
+    renderKpiObjetivos(rows);
+  } catch (e) {
+    errBox('kpiObjetivos', 'Error: ' + e.message);
+  }
+}
+
+function editKpiObjetivo(id) {
+  const x = kpiObjetivos.find(o => Number(o.id) === Number(id));
+  if (!x) return;
+  document.getElementById('kpiObjId').value = x.id;
+  document.getElementById('kpiObjSucursal').value = x.sucursal_id || 'TODAS';
+  document.getElementById('kpiObjIndicador').value = x.indicador;
+  document.getElementById('kpiObjObjetivo').value = x.objetivo;
+  document.getElementById('kpiObjAlerta').value = x.alerta ?? '';
+  document.getElementById('kpiObjDesde').value = x.fecha_desde;
+  document.getElementById('kpiObjHasta').value = x.fecha_hasta || '';
+}
+
+async function deleteKpiObjetivo(id) {
+  if (!confirm('¿Eliminar este objetivo KPI?')) return;
+  try {
+    const r = await fetch(API + '/api/kpi-objetivos/' + id, { method: 'DELETE' });
+    if (!r.ok) throw new Error('Error al eliminar');
+    await loadKpiObjetivos();
+    await loadMes();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function saveKpiObjetivo() {
+  const msg = document.getElementById('kpiObjMsg');
+  msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando...';
+  const payload = {
+    id: document.getElementById('kpiObjId').value || null,
+    sucursal_id: document.getElementById('kpiObjSucursal').value,
+    indicador: document.getElementById('kpiObjIndicador').value,
+    objetivo: Number(document.getElementById('kpiObjObjetivo').value || 0),
+    alerta: document.getElementById('kpiObjAlerta').value || null,
+    fecha_desde: document.getElementById('kpiObjDesde').value,
+    fecha_hasta: document.getElementById('kpiObjHasta').value || null,
+    activo: true,
+  };
+  try {
+    const r = await fetch(API + '/api/kpi-objetivos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Error');
+    msg.style.color = 'var(--grn)';
+    msg.textContent = 'Objetivo KPI guardado';
+    document.getElementById('kpiObjId').value = '';
+    await loadKpiObjetivos();
+    await loadMes();
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = e.message;
+  }
+}
+
+// â”€â”€â”€ PLANIFICACION PICOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function setPlanMsg(msg, isErr = false) {
+  const el = document.getElementById('planMsg');
+  if (!el) return;
+  el.style.color = isErr ? 'var(--red)' : 'var(--grn)';
+  el.textContent = msg || '';
+}
+
+function planPayload() {
+  return {
+    empresa_id: document.getElementById('planEmpresa')?.value || '1',
+    sucursal_id: document.getElementById('planSucursal')?.value || 'TODAS',
+    anio_plan: Number(document.getElementById('planAnio')?.value || new Date().getFullYear()),
+    mes_plan: Number(document.getElementById('planMes')?.value || (new Date().getMonth() + 1)),
+    anio_base: Number(document.getElementById('planAnioBase')?.value || (new Date().getFullYear() - 1)),
+    factor_hl: Number(document.getElementById('planFactorHl')?.value || 1),
+    factor_pdv: Number(document.getElementById('planFactorPdv')?.value || 1),
+    factor_salidas: Number(document.getElementById('planFactorSalidas')?.value || 1),
+    factor_rechazos: Number(document.getElementById('planFactorRechazos')?.value || 1),
+    factor_dias_pico: Number(document.getElementById('planFactorDiasPico')?.value || 1),
+    factor_camiones: Number(document.getElementById('planFactorCamiones')?.value || 1),
+    factor_empleados: Number(document.getElementById('planFactorEmpleados')?.value || 1),
+  };
+}
+
+async function fetchPlanJson(url, options = {}) {
+  const r = await fetch(API + url, {
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    ...options,
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+function estadoClass(estado) {
+  const e = String(estado || '').toUpperCase();
+  if (e === 'CRITICO') return 'err';
+  if (e === 'ALERTA') return 'pico';
+  return 'ok';
+}
+
+function switchPlanSubtab(t, el) {
+  document.querySelectorAll('#tab-planificacion .plan-tab').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+  document.querySelectorAll('#tab-planificacion .plan-sub').forEach(x => x.style.display = 'none');
+  const target = document.getElementById('plan-sub-' + t);
+  if (target) target.style.display = '';
+}
+
+function _showPlanEmpty() {
+  const el = document.getElementById('planKpis');
+  if (el) el.innerHTML = `
+    <div style="padding:24px;text-align:center;color:var(--muted)">
+      <div style="font-size:13px;margin-bottom:12px">Seleccioná el mes y hacé clic en <strong style="color:var(--acc)">Buscar</strong> para ver el plan, o en <strong style="color:var(--acc)">Generar</strong> para crear uno nuevo.</div>
+    </div>`;
+  ['planResumenTabla','planDiasTabla','planAlertas','planCapacidadTabla'].forEach(id => {
+    const e = document.getElementById(id); if (e) e.innerHTML = '';
+  });
+  clearPlanCharts?.();
+}
+
+async function loadPlanificacion() {
+  const p = planPayload();
+  const kpiEl = document.getElementById('planKpis');
+  if (kpiEl) kpiEl.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando plan… (primera vez puede demorar hasta 90s mientras se prepara la base de datos)</div>';
+  try {
+    const qs = new URLSearchParams({
+      empresa_id: p.empresa_id,
+      sucursal_id: p.sucursal_id,
+      anio: p.anio_plan,
+      mes: p.mes_plan,
+    });
+    const data = await api('/api/planificacion_picos/resumen?' + qs.toString(), { timeout: 90000 });
+    renderPlanificacion(data);
+    loadDotacionExternaPlanificacion();
+    loadDotacionEntregaRealPlanificacion();
+    loadFlotaPlanificacion();
+    await loadConfigPlanificacion();
+  } catch (e) {
+    errBox('planKpis', e.message);
+    setPlanMsg(e.message, true);
+  }
+}
+
+function renderPlanificacion(data) {
+  const plan = data.plan;
+  planActualId = plan?.id || null;
+  planEscenarioActivoId = data.escenario_activo?.id || data.plan_comparativo?.escenario_id || null;
+  if (!plan) {
+    const mes = MESES[Number(document.getElementById('planMes')?.value || 0) - 1] || '';
+    const anio = document.getElementById('planAnio')?.value || '';
+    document.getElementById('planKpis').innerHTML = `
+      <div style="padding:24px;border-radius:8px;background:var(--surf2);text-align:center;grid-column:1/-1">
+        <div style="font-size:22px;margin-bottom:8px">📋</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:6px">No hay plan para ${mes} ${anio}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Hacé clic en <strong>Generar</strong> para crear el plan del mes basado en el histórico.</div>
+        <button class="btn primary" onclick="generarPlanificacion()">Generar plan para ${mes} ${anio}</button>
+      </div>`;
+    document.getElementById('planResumenTabla').innerHTML = '';
+    document.getElementById('planDiasTabla').innerHTML = '';
+    document.getElementById('planAlertas').innerHTML = '';
+    document.getElementById('planCapacidadTabla').innerHTML = '';
+    clearPlanCharts?.();
+    return;
+  }
+  renderPlanKpis(data);
+  renderPlanResumenTabla(data);
+  renderPlanEscenarios(data);
+  renderPlanVariables(data);
+  renderPlanDias(data.dias || []);
+  document.getElementById('planAlertas').innerHTML = renderPlanAlertas(data.alertas || []);
+  renderPlanCapacidad(data.capacidad || {});
+  renderPlanCharts(data);
+  setPlanMsg(`Planificación #${plan.id} cargada`);
+}
+
+function kpiCard(label, value, color = 'ora', badge = '') {
+  return `<div class="kpi ${color}"><div class="kpi-lbl">${label}</div><div class="kpi-val ${color}">${value}</div>${badge}</div>`;
+}
+
+function renderPlanKpis(data) {
+  const p = data.plan_comparativo || data.plan || {};
+  const r = data.real || {};
+  const icm = data.icm || {};
+  const badge = `<span class="tag ${estadoClass(r.estado_general || icm.estado)}">${r.estado_general || icm.estado || 'PLAN'}</span>`;
+  document.getElementById('planKpis').innerHTML = `
+    ${kpiCard('HL plan', fmtN(Math.round(p.hl_plan || 0)), 'pur')}
+    ${kpiCard('HL real', r.hl_real == null ? '—' : fmtN(Math.round(r.hl_real || 0)), 'pur')}
+    ${kpiCard('Desvío HL', r.desvio_hl_pct == null ? '—' : fmtPct1(r.desvio_hl_pct), 'red', badge)}
+    ${kpiCard('Días pico plan', fmtN(Math.round(p.dias_pico_plan || 0)), 'ora')}
+    ${kpiCard('Días pico real', r.dias_pico_real == null ? '—' : fmtN(Math.round(r.dias_pico_real || 0)), 'ora')}
+    ${kpiCard('ICM', `${fmt1(icm.valor || 0)}`, icm.estado === 'CRITICO' ? 'red' : icm.estado === 'ALERTA' ? 'ora' : 'grn', `<span class="tag ${estadoClass(icm.estado)}">${icm.estado || 'NORMAL'}</span>`)}
+    ${kpiCard('Salidas plan', fmtN(Math.round(p.salidas_plan || 0)), 'blu')}
+    ${kpiCard('PDV plan', fmtN(Math.round(p.pdv_unicos_plan || 0)), 'grn')}
+    ${kpiCard('Rechazos plan', fmtPct1(p.rechazos_pct_plan || 0), 'red')}
+    ${kpiCard('Escenario', esc(p.escenario_tipo || 'AUTO'), p.escenario_tipo === 'MANUAL' ? 'ora' : 'blu', `<span class="tag ok">${esc(p.escenario_nombre || 'AUTO')}</span>`)}
+  `;
+}
+
+function renderPlanResumenTabla(data) {
+  const base = data.plan || {};
+  const p = data.plan_comparativo || base;
+  const r = data.real || {};
+  const rows = [
+    ['HL', base.hl_base, p.hl_plan, r.hl_real, r.desvio_hl_pct],
+    ['Dias pico', base.dias_pico_base, p.dias_pico_plan, r.dias_pico_real, r.desvio_dias_pico_pct],
+    ['Rechazos %', base.rechazos_pct_base, p.rechazos_pct_plan, r.rechazos_pct_real, r.desvio_rechazos_pct],
+    ['Salidas', base.salidas_base, p.salidas_plan, r.salidas_real, r.desvio_salidas_pct],
+    ['PDV', base.pdv_unicos_base, p.pdv_unicos_plan, r.pdv_unicos_real, r.desvio_pdv_pct],
+    ['Camiones promedio', base.camiones_promedio_base, p.camiones_promedio_plan, r.camiones_promedio_real, r.desvio_camiones_pct],
+    ['Empleados normales', base.empleados_normal_base, p.empleados_normal_plan, r.empleados_normal_real, r.desvio_empleados_pct],
+  ];
+  let html = `<div class="plan-note" style="margin-bottom:8px">Comparando contra: ${esc(p.escenario_nombre || 'AUTO')}</div>`;
+  html += `<table class="rtbl"><thead><tr><th>Indicador</th><th>Base LY</th><th>Plan vigente</th><th>Real</th><th>Desvio</th></tr></thead><tbody>`;
+  rows.forEach(x => {
+    html += `<tr>
+      <td>${x[0]}</td>
+      <td style="font-family:var(--mono)">${x[1] == null ? '—' : fmtN(Math.round(x[1]))}</td>
+      <td style="font-family:var(--mono);color:var(--acc)">${x[2] == null ? '—' : fmtN(Math.round(x[2]))}</td>
+      <td style="font-family:var(--mono)">${x[3] == null ? '—' : fmtN(Math.round(x[3]))}</td>
+      <td><span class="pct-pill ${Math.abs(Number(x[4] || 0)) > 15 ? 'bad' : 'ok'}">${x[4] == null ? '—' : fmtPct1(x[4])}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('planResumenTabla').innerHTML = html;
+}
+
+function renderPlanDias(rows) {
+  if (!rows.length) {
+    document.getElementById('planDiasTabla').innerHTML = '<div class="empty">Sin detalle diario.</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Fecha</th><th>HL plan</th><th>HL real</th><th>Salidas plan</th><th>Salidas real</th>
+    <th>PDV plan</th><th>PDV real</th><th>Pico plan</th><th>Pico real</th><th>Base equiv.</th><th>Score</th><th>Camiones</th><th>Empleados</th><th>Estado</th>
+  </tr></thead><tbody>`;
+  rows.forEach(d => {
+    html += `<tr>
+      <td style="font-family:var(--mono)">${d.fecha}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.hl_plan || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.hl_real || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.salidas_plan || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.salidas_real || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.pdv_plan || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(d.pdv_real || 0))}</td>
+      <td>${d.es_pico_planificado ? '<span class="tag pico">PICO</span>' : '<span class="tag ok">Normal</span>'}</td>
+      <td>${d.es_pico_real ? '<span class="tag pico">PICO</span>' : '<span class="tag ok">Normal</span>'}</td>
+      <td style="font-family:var(--mono)">${d.fecha_base || '-'}</td>
+      <td style="font-family:var(--mono)">${fmt1(d.score_asignacion || 0)}</td>
+      <td style="font-family:var(--mono)">${fmt1(d.camiones_plan || 0)} / ${fmt1(d.camiones_real || 0)}</td>
+      <td style="font-family:var(--mono)">${fmt1(d.empleados_plan || 0)} / ${fmt1(d.empleados_real || 0)}</td>
+      <td><span class="tag ${estadoClass(d.estado)}">${d.estado}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('planDiasTabla').innerHTML = html;
+}
+
+function setEscenarioInput(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.value = value == null ? '' : Number(value || 0).toFixed(2);
+}
+
+function fillPlanEscenarioForm(plan) {
+  if (!plan) return;
+  setEscenarioInput('planEscHl', plan.hl_plan);
+  setEscenarioInput('planEscDiasPico', plan.dias_pico_plan);
+  setEscenarioInput('planEscRechazos', plan.rechazos_pct_plan);
+  setEscenarioInput('planEscSalidas', plan.salidas_plan);
+  setEscenarioInput('planEscPdv', plan.pdv_unicos_plan);
+  setEscenarioInput('planEscCamionesProm', plan.camiones_promedio_plan);
+  setEscenarioInput('planEscCamionesPico', plan.camiones_pico_plan);
+  setEscenarioInput('planEscEmpNorm', plan.empleados_normal_plan);
+  setEscenarioInput('planEscEmpPico', plan.empleados_pico_plan);
+}
+
+function renderPlanEscenarios(data) {
+  const select = document.getElementById('planEscenarioSelect');
+  if (!select) return;
+  const escenarios = data.escenarios || [];
+  planEscenariosData = escenarios;
+  select.innerHTML = escenarios.length
+    ? escenarios.map(e => `<option value="${e.id}" ${e.activo ? 'selected' : ''}>${esc(e.nombre)}${e.activo ? ' (vigente)' : ''}</option>`).join('')
+    : '<option value="">Sin escenarios</option>';
+  select.onchange = () => {
+    const selected = planEscenariosData.find(e => String(e.id) === String(select.value));
+    if (selected) fillPlanEscenarioForm(selected);
+  };
+  fillPlanEscenarioForm(data.plan_comparativo || data.plan);
+  const msg = document.getElementById('planEscenarioMsg');
+  if (msg) msg.textContent = data.escenario_activo ? `Vigente: ${data.escenario_activo.nombre}` : '';
+}
+
+function fmtPlanVarValue(value, unidad) {
+  if (value == null || value === '') return '<span style="color:var(--muted)">SIN INFORMACION</span>';
+  if (String(unidad || '').toUpperCase() === 'PCT') return fmtPct1(value);
+  return fmtN(Math.round(Number(value || 0)));
+}
+
+function renderPlanVariables(data) {
+  const el = document.getElementById('planVariablesTabla');
+  if (!el) return;
+  const varsPlan = data.variables_plan || [];
+  const vars = data.variables || [];
+  const rows = varsPlan.length
+    ? varsPlan
+    : vars.map(v => ({
+        codigo: v.codigo,
+        nombre: v.nombre,
+        categoria: v.categoria,
+        unidad: v.unidad,
+        activo: v.activo,
+      }));
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty">Sin variables configuradas.</div>';
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Codigo</th><th>Nombre</th><th>Categoria</th><th>Unidad</th>
+    <th>Base</th><th>Plan</th><th>Real</th><th>Desvio</th><th>Impacto ICM</th><th>Estado dato</th>
+  </tr></thead><tbody>`;
+  rows.forEach(v => {
+    const hasInfo = v.valor_plan != null && v.valor_real != null;
+    html += `<tr>
+      <td style="font-family:var(--mono)">${esc(v.codigo || '')}</td>
+      <td>${esc(v.nombre || '')}</td>
+      <td>${esc(v.categoria || '')}</td>
+      <td style="font-family:var(--mono)">${esc(v.unidad || '')}</td>
+      <td style="font-family:var(--mono)">${fmtPlanVarValue(v.valor_base, v.unidad)}</td>
+      <td style="font-family:var(--mono);color:var(--acc)">${fmtPlanVarValue(v.valor_plan, v.unidad)}</td>
+      <td style="font-family:var(--mono)">${fmtPlanVarValue(v.valor_real, v.unidad)}</td>
+      <td>${v.desvio == null ? '<span style="color:var(--muted)">SIN INFORMACION</span>' : `<span class="pct-pill ${Math.abs(Number(v.desvio || 0)) > 15 ? 'bad' : 'ok'}">${fmtPct1(v.desvio)}</span>`}</td>
+      <td style="font-family:var(--mono)">${v.impacto == null ? '<span style="color:var(--muted)">SIN INFORMACION</span>' : fmtPct1(v.impacto)}</td>
+      <td>${hasInfo ? '<span class="tag ok">OK</span>' : '<span class="tag pico">SIN INFORMACION</span>'}</td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  el.innerHTML = html;
+}
+
+function renderPlanAlertas(alertas) {
+  if (!alertas.length) return '<div class="empty"><div class="icon">✓</div>Sin alertas activas</div>';
+  return alertas.map(a => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--brd)">
+      <div><span class="tag ${estadoClass(a.estado)}">${a.estado}</span> <span style="font-family:var(--mono);color:var(--muted);font-size:11px">${a.tipo}</span></div>
+      <div style="font-size:12px">${a.mensaje}</div>
+    </div>
+  `).join('');
+}
+
+function renderPlanCapacidad(cap) {
+  const rows = cap.items || [];
+  if (!cap.disponible) {
+    document.getElementById('planCapacidadTabla').innerHTML = `<div class="empty"><div class="icon">⚙</div>${cap.mensaje || 'Sin capacidad cargada'}</div>`;
+    return;
+  }
+  let html = `<table class="rtbl"><thead><tr><th>Fecha</th><th>HL plan</th><th>Capacidad HL</th><th>Faltante HL</th><th>Camiones</th><th>Empleados</th><th>Estado</th></tr></thead><tbody>`;
+  rows.forEach(r => {
+    html += `<tr>
+      <td style="font-family:var(--mono)">${r.fecha}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(r.hl_plan || 0))}</td>
+      <td style="font-family:var(--mono)">${fmtN(Math.round(r.capacidad_hl || 0))}</td>
+      <td style="font-family:var(--mono);color:${r.faltante_hl > 0 ? 'var(--red)' : 'var(--grn)'}">${fmtN(Math.round(r.faltante_hl || 0))}</td>
+      <td style="font-family:var(--mono)">${fmt1(r.camiones_plan || 0)} / ${fmt1(r.camiones_disponibles || 0)}</td>
+      <td style="font-family:var(--mono)">${fmt1(r.empleados_plan || 0)} / ${fmt1(r.empleados_disponibles || 0)}</td>
+      <td><span class="tag ${estadoClass(r.estado)}">${r.estado}</span></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  document.getElementById('planCapacidadTabla').innerHTML = html;
+}
+
+async function loadDotacionExternaPlanificacion() {
+  const el = document.getElementById('planDotacionExterna');
+  if (!el) return;
+  const p = planPayload();
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando dotacion externa...</div>';
+  try {
+    const qs = new URLSearchParams({
+      empresa_id: p.empresa_id,
+      estado: 'activo',
+      per_page: '500',
+    });
+    if (p.sucursal_id && p.sucursal_id !== 'TODAS') qs.set('sucursal_id', p.sucursal_id);
+    const data = await fetchPlanJson('/api/catalogo/dotacion_operativa?' + qs.toString());
+    const r = data.resumen || {};
+    const rows = data.por_sucursal || [];
+    let html = `<div class="sec" style="margin-bottom:10px">Dotacion nominal externa</div>
+      <div class="kpi-grid">
+        ${kpiCard('Empleados activos', fmtN(r.total_empleados || 0), 'blu')}
+        ${kpiCard('Choferes', fmtN(r.choferes || 0), 'grn')}
+        ${kpiCard('Ayudantes', fmtN((r.ayudantes || 0) + (r.acompanantes || 0)), 'ora')}
+        ${kpiCard('Operarios', fmtN(r.operarios || 0), 'pur')}
+      </div>`;
+    if (rows.length) {
+      html += `<table class="rtbl" style="margin-top:10px"><thead><tr>
+        <th>Sucursal</th><th>Total</th><th>Choferes</th><th>Ayudantes</th><th>Operarios</th>
+      </tr></thead><tbody>`;
+      rows.forEach(x => {
+        html += `<tr>
+          <td>${esc(x.sucursal_nombre || x.sucursal_id)}</td>
+          <td style="font-family:var(--mono)">${fmtN(x.total_empleados || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN(x.choferes || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN((x.ayudantes || 0) + (x.acompanantes || 0))}</td>
+          <td style="font-family:var(--mono)">${fmtN(x.operarios || 0)}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Dotacion externa no disponible. Configurar EXTERNAL_API_BASE_URL y EXTERNAL_API_KEY en el backend.</div>`;
+  }
+}
+
+async function loadDotacionEntregaRealPlanificacion() {
+  const el = document.getElementById('planDotacionEntregaReal');
+  if (!el) return;
+  const p = planPayload();
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando dotacion real de entrega...</div>';
+  try {
+    const qs = new URLSearchParams({
+      mes: `${p.anio_plan}-${String(p.mes_plan).padStart(2, '0')}`,
+    });
+    if (p.sucursal_id && p.sucursal_id !== 'TODAS') qs.set('sucursal', p.sucursal_id);
+    if (cfg.dotacionEntregaUrl) qs.set('url', cfg.dotacionEntregaUrl);
+    if (cfg.dotacionRecargasUrl) qs.set('recargas_url', cfg.dotacionRecargasUrl);
+    const data = await fetchPlanJson('/api/recursos/dotacion-entrega?' + qs.toString());
+    const r = data.resumen || {};
+    const rr = data.recargas?.resumen || r.recargas || {};
+    const warnings = data.advertencias || [];
+    const dias = data.dias || [];
+    const diasRecargas = data.recargas?.dias || [];
+    let html = `<div class="sec" style="margin-bottom:10px">Dotacion real de entrega</div>
+      <div class="kpi-grid">
+        ${kpiCard('Camiones jornada', fmtN(r.camiones_jornada || 0), 'blu')}
+        ${kpiCard('Personas jornada', fmtN(r.personas_jornada || 0), 'grn')}
+        ${kpiCard('Choferes distintos', fmtN(r.choferes_distintos || 0), 'ora')}
+        ${kpiCard('Ayudantes distintos', fmtN(r.ayudantes_distintos || 0), 'pur')}
+        ${kpiCard('Clientes', fmtN(Math.round(r.clientes || 0)), 'grn')}
+        ${kpiCard('Pallets', fmtN(Math.round(r.pallets || 0)), 'blu')}
+      </div>`;
+    html += `<div class="sec" style="margin:12px 0 10px">Recargas</div>
+      <div class="kpi-grid">
+        ${kpiCard('Recargas', fmtN(rr.registros || 0), 'ora')}
+        ${kpiCard('Camiones recarga', fmtN(rr.camiones_jornada || 0), 'blu')}
+        ${kpiCard('Personas recarga', fmtN(rr.personas_jornada || 0), 'grn')}
+        ${kpiCard('Clientes recarga', fmtN(Math.round(rr.clientes || 0)), 'grn')}
+        ${kpiCard('UP recarga', fmtN(Math.round(rr.up || 0)), 'pur')}
+        ${kpiCard('Salidas total', fmtN(r.salidas_total_con_recargas || r.camiones_jornada || 0), 'ora')}
+      </div>`;
+    if (warnings.length) {
+      html += `<div class="err-box" style="margin-top:10px">${warnings.map(esc).join('<br>')}</div>`;
+    }
+    if (dias.length) {
+      html += `<table class="rtbl" style="margin-top:10px"><thead><tr>
+        <th>Fecha</th><th>Camiones</th><th>Personas</th><th>UP</th><th>Clientes</th><th>Pallets</th><th>Sucursales detectadas</th>
+      </tr></thead><tbody>`;
+      dias.slice(-12).forEach(d => {
+        html += `<tr>
+          <td style="font-family:var(--mono)">${d.fecha}</td>
+          <td style="font-family:var(--mono)">${fmtN(d.camiones || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN(d.personas || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.up || 0))}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.clientes || 0))}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.pallets || 0))}</td>
+          <td>${(d.sucursales || []).map(esc).join(', ') || '<span style="color:var(--muted)">SIN SUCURSAL</span>'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    } else {
+      html += '<div class="empty" style="margin-top:10px">Sin registros reales de entrega para el filtro seleccionado.</div>';
+    }
+    if (diasRecargas.length) {
+      html += `<div class="sec" style="margin:12px 0 8px">Detalle recargas</div>
+        <table class="rtbl"><thead><tr>
+          <th>Fecha</th><th>Camiones</th><th>Personas</th><th>UP</th><th>Clientes</th><th>Pallets</th><th>Sucursal</th>
+        </tr></thead><tbody>`;
+      diasRecargas.slice(-12).forEach(d => {
+        html += `<tr>
+          <td style="font-family:var(--mono)">${d.fecha}</td>
+          <td style="font-family:var(--mono)">${fmtN(d.camiones || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN(d.personas || 0)}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.up || 0))}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.clientes || 0))}</td>
+          <td style="font-family:var(--mono)">${fmtN(Math.round(d.pallets || 0))}</td>
+          <td>${(d.sucursales || []).map(esc).join(', ') || '<span style="color:var(--muted)">SIN SUCURSAL</span>'}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Dotacion real de entrega no disponible: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadFlotaPlanificacion() {
+  const el = document.getElementById('planFlotaOperativa');
+  if (!el) return;
+  const p = planPayload();
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando flota operativa...</div>';
+  try {
+    const qs = new URLSearchParams({
+      empresa_id: p.empresa_id,
+      sucursal_id: p.sucursal_id,
+      anio: p.anio_plan,
+      mes: p.mes_plan,
+    });
+    const data = await fetchPlanJson('/api/flota/vehiculos?' + qs.toString());
+    const r = data.resumen || {};
+    const rows = data.vehiculos || [];
+    let html = `<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <div class="sec">Flota operativa ${String(data.mes || p.mes_plan).padStart(2, '0')}/${data.anio || p.anio_plan}</div>
+      <button class="btn sm" onclick="loadFlotaPlanificacion()">Actualizar</button>
+    </div>
+    <div class="kpi-grid">
+      ${kpiCard('Vehiculos activos', fmtN(r.activos || 0), 'grn')}
+      ${kpiCard('Vehiculos inactivos', fmtN(r.inactivos || 0), 'red')}
+      ${kpiCard('Capacidad U.P activa', fmtN(Math.round(r.capacidad_up_activa || 0)), 'blu')}
+      ${kpiCard('Carga kg activa', fmtN(Math.round(r.carga_kg_activa || 0)), 'ora')}
+      ${kpiCard('Propios', fmtN(r.propios || 0), 'pur')}
+    </div>`;
+    if (!rows.length) {
+      el.innerHTML = html + '<div class="empty" style="margin-top:10px">Sin vehiculos cargados para el filtro seleccionado.</div>';
+      return;
+    }
+    html += `<table class="rtbl" style="margin-top:10px"><thead><tr>
+      <th>Estado mes</th><th>Codigo</th><th>Vehiculo</th><th>Sucursal</th><th>Placa</th>
+      <th>Marca</th><th>Modelo</th><th>Kg</th><th>U.P</th><th>Motivo</th>
+    </tr></thead><tbody>`;
+    rows.forEach(v => {
+      const disabled = v.anulado ? 'disabled' : '';
+      html += `<tr>
+        <td>
+          <input type="checkbox" ${v.activo_mes ? 'checked' : ''} ${disabled}
+            onchange="toggleFlotaMes(${Number(v.id)}, this.checked)">
+          <span class="tag ${v.activo_mes ? 'ok' : 'err'}">${v.activo_mes ? 'ACTIVA' : 'INACTIVA'}</span>
+        </td>
+        <td style="font-family:var(--mono)">${esc(v.codigo || '')}</td>
+        <td>${esc(v.descripcion || '')}</td>
+        <td>${esc(v.sucursal || v.sucursal_id || '')}</td>
+        <td style="font-family:var(--mono)">${esc(v.placa || '')}</td>
+        <td>${esc(v.marca || '')}</td>
+        <td style="font-family:var(--mono)">${esc(v.modelo || '')}</td>
+        <td style="font-family:var(--mono)">${v.carga_maxima_kg == null ? '-' : fmtN(Math.round(v.carga_maxima_kg || 0))}</td>
+        <td style="font-family:var(--mono)">${v.capacidad_up == null ? '-' : fmtN(Math.round(v.capacidad_up || 0))}</td>
+        <td>${esc(v.motivo_mes || '')}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div class="empty">Flota operativa no disponible: ${esc(e.message)}</div>`;
+  }
+}
+
+async function toggleFlotaMes(vehiculoId, activo) {
+  const p = planPayload();
+  let motivo = '';
+  if (!activo) {
+    motivo = window.prompt('Motivo de baja mensual', 'MANTENIMIENTO');
+    if (motivo === null) {
+      loadFlotaPlanificacion();
+      return;
+    }
+    motivo = motivo.trim() || 'NO DISPONIBLE';
+  }
+  try {
+    await fetchPlanJson('/api/flota/disponibilidad', {
+      method: 'POST',
+      body: JSON.stringify({
+        vehiculo_id: vehiculoId,
+        anio: p.anio_plan,
+        mes: p.mes_plan,
+        activo,
+        motivo,
+      }),
+    });
+    await loadFlotaPlanificacion();
+  } catch (e) {
+    setPlanMsg(e.message, true);
+    await loadFlotaPlanificacion();
+  }
+}
+
+function clearPlanCharts() {
+  Object.values(planCharts).forEach(ch => { if (ch) ch.destroy(); });
+  planCharts = {};
+}
+
+function renderPlanBar(canvasId, label, planVal, realVal, color = '#f5a623') {
+  if (!window.Chart) return;
+  const el = document.getElementById(canvasId);
+  if (!el) return;
+  if (planCharts[canvasId]) planCharts[canvasId].destroy();
+  planCharts[canvasId] = new Chart(el.getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: ['Plan', 'Real'],
+      datasets: [{ label, data: [Number(planVal || 0), Number(realVal || 0)], backgroundColor: [color + 'aa', '#5b8deeaa'], borderColor: [color, '#5b8dee'], borderWidth: 1 }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#e8eaf0' } } },
+      scales: {
+        x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: { beginAtZero: true, ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+      },
+    }
+  });
+}
+
+function renderPlanCharts(data) {
+  const p = data.plan_comparativo || data.plan || {};
+  const r = data.real || {};
+  renderPlanBar('planChartHl', 'HL', p.hl_plan, r.hl_real, '#a78bfa');
+  renderPlanBar('planChartSalidas', 'Salidas', p.salidas_plan, r.salidas_real, '#5b8dee');
+  renderPlanBar('planChartPdv', 'PDV', p.pdv_unicos_plan, r.pdv_unicos_real, '#4caf82');
+  renderPlanBar('planChartPicos', 'Días pico', p.dias_pico_plan, r.dias_pico_real, '#f5a623');
+  renderPlanBar('planChartCapacidad', 'HL capacidad', data.capacidad?.resumen?.hl_plan || p.hl_plan, data.capacidad?.resumen?.capacidad_hl || 0, '#e05c5c');
+  renderPlanBar('planChartIcm', 'ICM', 0, data.icm?.valor || 0, '#f5a623');
+}
+
+async function generarPlanificacion() {
+  setPlanMsg('Generando...');
+  try {
+    const data = await fetchPlanJson('/api/planificacion_picos/generar', {
+      method: 'POST',
+      body: JSON.stringify(planPayload()),
+    });
+    renderPlanificacion(data);
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+async function actualizarRealPlanificacion() {
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
+  setPlanMsg('Actualizando real...');
+  try {
+    const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/actualizar_real`, { method: 'POST', body: '{}' });
+    renderPlanificacion(data);
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+async function recalcularPlanificacion() {
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
+  setPlanMsg('Recalculando...');
+  try {
+    const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/recalcular`, { method: 'POST', body: '{}' });
+    renderPlanificacion(data);
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+function planEscenarioPayload() {
+  return {
+    nombre: document.getElementById('planEscNombre')?.value || 'Ajuste manual',
+    tipo: 'MANUAL',
+    activar: true,
+    hl_plan: Number(document.getElementById('planEscHl')?.value || 0),
+    dias_pico_plan: Number(document.getElementById('planEscDiasPico')?.value || 0),
+    rechazos_pct_plan: Number(document.getElementById('planEscRechazos')?.value || 0),
+    salidas_plan: Number(document.getElementById('planEscSalidas')?.value || 0),
+    pdv_unicos_plan: Number(document.getElementById('planEscPdv')?.value || 0),
+    camiones_promedio_plan: Number(document.getElementById('planEscCamionesProm')?.value || 0),
+    camiones_pico_plan: Number(document.getElementById('planEscCamionesPico')?.value || 0),
+    empleados_normal_plan: Number(document.getElementById('planEscEmpNorm')?.value || 0),
+    empleados_pico_plan: Number(document.getElementById('planEscEmpPico')?.value || 0),
+  };
+}
+
+async function guardarEscenarioPlanificacion() {
+  if (!planActualId) return setPlanMsg('Primero generÃ¡ o cargÃ¡ una planificaciÃ³n.', true);
+  setPlanMsg('Guardando escenario...');
+  try {
+    const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/escenarios`, {
+      method: 'POST',
+      body: JSON.stringify(planEscenarioPayload()),
+    });
+    renderPlanificacion(data);
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+async function activarEscenarioPlanificacion() {
+  if (!planActualId) return setPlanMsg('Primero generÃ¡ o cargÃ¡ una planificaciÃ³n.', true);
+  const escenarioId = document.getElementById('planEscenarioSelect')?.value;
+  if (!escenarioId) return setPlanMsg('SeleccionÃ¡ un escenario.', true);
+  setPlanMsg('Activando escenario...');
+  try {
+    const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/escenarios/${escenarioId}/activar`, {
+      method: 'POST',
+      body: '{}',
+    });
+    renderPlanificacion(data);
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+async function simularPlanificacion() {
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
+  try {
+    const data = await fetchPlanJson('/api/planificacion_picos/simulador', {
+      method: 'POST',
+      body: JSON.stringify({
+        planificacion_id: planActualId,
+        delta_hl_pct: Number(document.getElementById('simDeltaHl')?.value || 0),
+        delta_pdv_pct: Number(document.getElementById('simDeltaPdv')?.value || 0),
+        delta_dias_pico: Number(document.getElementById('simDeltaPicos')?.value || 0),
+        delta_rechazos_pct: Number(document.getElementById('simDeltaRechazos')?.value || 0),
+      }),
+    });
+    const p = data.proyeccion || {};
+    document.getElementById('planSimResultado').innerHTML = `
+      ${kpiCard('HL proyectados', fmtN(Math.round(p.hl || 0)), 'pur')}
+      ${kpiCard('PDV proyectados', fmtN(Math.round(p.pdv_unicos || 0)), 'grn')}
+      ${kpiCard('Días pico', fmtN(Math.round(p.dias_pico || 0)), 'ora')}
+      ${kpiCard('Rechazos', fmtPct1(p.rechazos_pct || 0), 'red')}
+      ${kpiCard('Camiones req.', fmt1(p.camiones_requeridos || 0), 'blu')}
+      ${kpiCard('Empleados req.', fmt1(p.empleados_requeridos || 0), 'blu', `<span class="tag ${estadoClass(data.riesgo)}">${data.riesgo}</span>`)}
+    `;
+    switchPlanSubtab('simulador', document.querySelector('.plan-tab[onclick*="simulador"]'));
+  } catch (e) {
+    setPlanMsg(e.message, true);
+  }
+}
+
+function exportPlanificacion(formato) {
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
+  if (formato === 'pdf') {
+    fetchPlanJson(`/api/planificacion_picos/export?planificacion_id=${planActualId}&formato=pdf`)
+      .catch(e => setPlanMsg(e.message, true));
+    return;
+  }
+  window.location.href = `${API}/api/planificacion_picos/export?planificacion_id=${planActualId}&formato=${formato}`;
+}
+
+async function loadConfigPlanificacion() {
+  const p = planPayload();
+  try {
+    const cfg = await api(`/api/planificacion_picos/configuracion?empresa_id=${p.empresa_id}&sucursal_id=${p.sucursal_id}`);
+    document.getElementById('cfgPlanUmbralHl').value = cfg.umbral_pico_hl_pct ?? 20;
+    document.getElementById('cfgPlanUmbralSalidas').value = cfg.umbral_pico_salidas_pct ?? 20;
+    document.getElementById('cfgPlanUmbralPdv').value = cfg.umbral_pico_pdv_pct ?? 20;
+    document.getElementById('cfgPlanAlerta').value = cfg.umbral_alerta_desvio_pct ?? 15;
+    document.getElementById('cfgPlanCritico').value = cfg.umbral_critico_desvio_pct ?? 30;
+  } catch (e) {}
+}
+
+async function guardarConfigPlanificacion() {
+  const p = planPayload();
+  const msg = document.getElementById('planCfgMsg');
+  try {
+    await fetchPlanJson('/api/planificacion_picos/configuracion', {
+      method: 'POST',
+      body: JSON.stringify({
+        empresa_id: p.empresa_id,
+        sucursal_id: p.sucursal_id,
+        umbral_pico_hl_pct: Number(document.getElementById('cfgPlanUmbralHl').value || 20),
+        umbral_pico_salidas_pct: Number(document.getElementById('cfgPlanUmbralSalidas').value || 20),
+        umbral_pico_pdv_pct: Number(document.getElementById('cfgPlanUmbralPdv').value || 20),
+        umbral_alerta_desvio_pct: Number(document.getElementById('cfgPlanAlerta').value || 15),
+        umbral_critico_desvio_pct: Number(document.getElementById('cfgPlanCritico').value || 30),
+      }),
+    });
+    msg.style.color = 'var(--grn)';
+    msg.textContent = 'Configuración guardada';
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = e.message;
+  }
+}
+
+async function guardarVariablePlanificacion() {
+  const p = planPayload();
+  const msg = document.getElementById('planVarMsg');
+  const payload = {
+    empresa_id: p.empresa_id,
+    sucursal_id: p.sucursal_id,
+    codigo: document.getElementById('varPlanCodigo')?.value || '',
+    nombre: document.getElementById('varPlanNombre')?.value || '',
+    categoria: document.getElementById('varPlanCategoria')?.value || 'OPERACION',
+    unidad: document.getElementById('varPlanUnidad')?.value || '',
+    activo: true,
+  };
+  if (!payload.codigo.trim() || !payload.nombre.trim()) {
+    if (msg) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = 'Codigo y nombre son requeridos';
+    }
+    return;
+  }
+  try {
+    await fetchPlanJson('/api/planificacion_picos/variables', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    if (msg) {
+      msg.style.color = 'var(--grn)';
+      msg.textContent = 'Variable guardada';
+    }
+    ['varPlanCodigo', 'varPlanNombre', 'varPlanCategoria', 'varPlanUnidad'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.value = '';
+    });
+    await loadPlanificacion();
+  } catch (e) {
+    if (msg) {
+      msg.style.color = 'var(--red)';
+      msg.textContent = e.message;
+    }
+  }
+}
+
+function switchTab(t, el) {
+  document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  ['kpis', 'historico', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'upload', 'config', 'ayuda'].forEach(x => {
+    const el2 = document.getElementById('tab-' + x);
+    if (el2) el2.style.display = x === t ? '' : 'none';
+  });
+  if (t === 'historico') loadHistorico();
+  if (t === 'analisis')  loadAnalisisHl();
+  if (t === 'dropsize')  {
+    if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();
+    if (document.getElementById('dropMes')) {
+      document.getElementById('dropMes').value = mesPad();
+      setDropsizeDatesFromMes(false);
+    }
+    loadDropsize();
+  }
+  if (t === 'upload')    { loadArticulosCount(); loadEventos(); loadFeriados(); }
+  if (t === 'config')    { loadSucursalesConfig(); loadRechazos(); loadKpiObjetivos(); loadDropsizeObjetivos(); }
+  if (t === 'planificacion') {
+    // Sync mes/año con el calendario principal
+    const anioEl = document.getElementById('planAnio');
+    const mesEl  = document.getElementById('planMes');
+    if (anioEl) anioEl.value = vY;
+    if (mesEl)  mesEl.value  = vM + 1;
+    if (document.getElementById('planSucursal')) document.getElementById('planSucursal').value = getSuc();
+    // No auto-cargar: mostrar estado vacío para evitar esperas largas
+    _showPlanEmpty();
+  }
+  if (t === 'operaciones') {
+    initFlotaSelects();
+    const subtabFlota = document.querySelector('#oper-sub-flota .plan-tab.active')?.textContent?.trim();
+    if (subtabFlota === 'Camiones') loadCamiones();
+    else loadFlota();
+  }
+  if (t === 'simulador') initSimulador();
+}
+
+// ── CRUD CAMIONES ──────────────────────────────────────────────────────────
+
+async function loadCamiones() {
+  const tbody = document.getElementById('camionesTbody');
+  if (!tbody) return;
+  const incluirAnulados = document.getElementById('camMostrarAnulados')?.checked ? '1' : '0';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando…</td></tr>';
+  try {
+    const data = await api(`/api/flota/vehiculos?incluir_anulados=${incluirAnulados}`);
+    _camionesTodos = data.vehiculos || [];
+    _renderCamionesResumen(data.resumen);
+    _renderCamionesTbody(_camionesTodos);
+    _populateCamSucursal();
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
+  }
+}
+
+function _renderCamionesResumen(resumen) {
+  const el = document.getElementById('camionesResumen');
+  if (!el || !resumen) return;
+  el.innerHTML = `
+    <div class="mini"><span class="lbl">Total</span><span class="val">${resumen.total||0}</span></div>
+    <div class="mini"><span class="lbl">Propios</span><span class="val">${resumen.propios||0}</span></div>
+    <div class="mini"><span class="lbl">Cap. UP</span><span class="val" style="color:var(--acc)">${resumen.capacidad_up_activa||0}</span></div>
+    <div class="mini"><span class="lbl">Carga kg</span><span class="val">${(resumen.carga_kg_activa||0).toLocaleString()}</span></div>
+  `;
+}
+
+function _renderCamionesTbody(rows) {
+  const tbody = document.getElementById('camionesTbody');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Sin camiones. Agregá uno o sincronizá desde Transportes.</td></tr>';
+    return;
+  }
+  const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  tbody.innerHTML = rows.map(v => {
+    const anulado = v.anulado;
+    const base    = v.activo_base;
+    return `<tr style="${anulado ? 'opacity:.5' : ''}">
+      <td style="font-family:var(--mono);font-size:11px">${esc(v.codigo)}</td>
+      <td style="font-size:12px">${esc(v.descripcion)}</td>
+      <td style="font-family:var(--mono);font-size:11px">${esc(v.placa||'—')}</td>
+      <td style="font-size:11px">${esc(v.sucursal||v.sucursal_id)}</td>
+      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up??'—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.carga_maxima_kg??'—'}</td>
+      <td style="font-size:11px;text-align:center">${v.propio ? '✓' : '—'}</td>
+      <td style="font-size:11px;text-align:center;color:${base?'var(--grn)':'var(--red)'}">${base?'Activo':'Inactivo'}</td>
+      <td>
+        <div style="display:flex;gap:4px">
+          <button class="btn sm" onclick="editarCamion(${v.id})" style="font-size:10px">✎</button>
+          <button class="btn sm danger" onclick="confirmarEliminarCamion(${v.id},'${esc(v.codigo)}')" style="font-size:10px">✕</button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarCamiones() {
+  const q = (document.getElementById('camBuscar')?.value || '').toLowerCase();
+  if (!q) { _renderCamionesTbody(_camionesTodos); return; }
+  const filtrados = _camionesTodos.filter(v =>
+    String(v.codigo||'').toLowerCase().includes(q) ||
+    String(v.descripcion||'').toLowerCase().includes(q) ||
+    String(v.placa||'').toLowerCase().includes(q)
+  );
+  _renderCamionesTbody(filtrados);
+}
+
+function _populateCamSucursal() {
+  const sel = document.getElementById('camSucursal');
+  if (!sel || sel.options.length > 1) return;
+  api('/api/sucursales').then(list => {
+    list.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.value; opt.textContent = `${s.value} — ${s.label}`;
+      sel.appendChild(opt);
+    });
+  }).catch(() => {});
+}
+
+function editarCamion(id) {
+  const v = _camionesTodos.find(x => x.id === id);
+  if (!v) return;
+  document.getElementById('camionId').value          = v.id;
+  document.getElementById('camCodigo').value         = v.codigo || '';
+  document.getElementById('camDescripcion').value    = v.descripcion || '';
+  document.getElementById('camSucursal').value       = v.sucursal_id || '';
+  document.getElementById('camMarca').value          = v.marca || '';
+  document.getElementById('camModelo').value         = v.modelo || '';
+  document.getElementById('camPlaca').value          = v.placa || '';
+  document.getElementById('camCargaKg').value        = v.carga_maxima_kg ?? '';
+  document.getElementById('camCapacidadUp').value    = v.capacidad_up ?? '';
+  document.getElementById('camPropio').value         = v.propio ? '1' : '0';
+  document.getElementById('camActivoBase').value     = v.activo_base ? '1' : '0';
+  document.getElementById('camAnulado').value        = v.anulado ? '1' : '0';
+  document.getElementById('camDepositoId').value     = v.deposito_default_id || '';
+  document.getElementById('camDepositoNombre').value = v.deposito_default_nombre || '';
+  document.getElementById('camObservaciones').value  = v.observaciones || '';
+  document.getElementById('camionFormTitulo').textContent = `Editando: ${v.codigo} — ${v.descripcion}`;
+  document.getElementById('camionMsg').textContent = '';
+  document.getElementById('camCodigo').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function limpiarFormCamion() {
+  ['camionId','camCodigo','camDescripcion','camMarca','camModelo','camPlaca',
+   'camCargaKg','camCapacidadUp','camDepositoId','camDepositoNombre','camObservaciones'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('camSucursal').value    = '';
+  document.getElementById('camPropio').value      = '1';
+  document.getElementById('camActivoBase').value  = '1';
+  document.getElementById('camAnulado').value     = '0';
+  document.getElementById('camionFormTitulo').textContent = 'Nuevo camión';
+  document.getElementById('camionMsg').textContent = '';
+}
+
+async function guardarCamion() {
+  const msg     = document.getElementById('camionMsg');
+  const codigo  = document.getElementById('camCodigo').value.trim();
+  const desc    = document.getElementById('camDescripcion').value.trim();
+  const sucursal= document.getElementById('camSucursal').value.trim();
+  if (!codigo) { msg.textContent='⚠ Código requerido'; msg.style.color='var(--red)'; return; }
+  if (!desc)   { msg.textContent='⚠ Descripción requerida'; msg.style.color='var(--red)'; return; }
+  if (!sucursal){ msg.textContent='⚠ Sucursal requerida'; msg.style.color='var(--red)'; return; }
+
+  const payload = {
+    empresa_id:             '1',
+    sucursal_id:            sucursal,
+    codigo,
+    descripcion:            desc,
+    marca:                  document.getElementById('camMarca').value.trim() || null,
+    modelo:                 document.getElementById('camModelo').value.trim() || null,
+    placa:                  document.getElementById('camPlaca').value.trim() || null,
+    carga_maxima_kg:        parseFloat(document.getElementById('camCargaKg').value) || null,
+    capacidad_up:           parseFloat(document.getElementById('camCapacidadUp').value) || null,
+    propio:                 document.getElementById('camPropio').value === '1',
+    activo_base:            document.getElementById('camActivoBase').value === '1',
+    anulado:                document.getElementById('camAnulado').value === '1',
+    deposito_default_id:    document.getElementById('camDepositoId').value.trim() || null,
+    deposito_default_nombre:document.getElementById('camDepositoNombre').value.trim() || null,
+    observaciones:          document.getElementById('camObservaciones').value.trim() || null,
+    fuente:                 'MANUAL',
+  };
+
+  msg.textContent = 'Guardando…'; msg.style.color = 'var(--muted)';
+  try {
+    await api('/api/flota/vehiculos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    msg.textContent = `✓ Camión "${codigo}" guardado`;
+    msg.style.color = 'var(--grn)';
+    limpiarFormCamion();
+    await loadCamiones();
+  } catch(e) {
+    msg.textContent = '⚠ ' + e.message;
+    msg.style.color = 'var(--red)';
+  }
+}
+
+async function confirmarEliminarCamion(id, codigo) {
+  if (!confirm(`¿Eliminar el camión ${codigo}? Esta acción no se puede deshacer.`)) return;
+  try {
+    await api(`/api/flota/vehiculos/${id}`, { method: 'DELETE' });
+    await loadCamiones();
+  } catch(e) {
+    alert('Error al eliminar: ' + e.message);
+  }
+}
+
+// ── SUCURSALES CONFIG ──────────────────────────────────────────────────────
+
+async function loadSucursalesConfig() {
+  const el = document.getElementById('sucList');
+  if (!el) return;
+  try {
+    const rows = await api('/api/sucursales');
+    if (!rows.length) {
+      el.innerHTML = '<div style="color:var(--muted);font-size:11px">Sin sucursales cargadas.</div>';
+      return;
+    }
+    el.innerHTML = `<table class="rtbl" style="width:100%">
+      <thead><tr><th style="width:60px">ID</th><th>Nombre</th><th style="width:80px">Estado</th><th style="width:60px"></th></tr></thead>
+      <tbody>${rows.map(s => `
+        <tr>
+          <td style="font-family:var(--mono);font-size:11px">${s.value}</td>
+          <td style="font-size:12px">${s.label}</td>
+          <td><span style="color:${s.activa !== false ? 'var(--grn)' : 'var(--muted)'};font-size:11px">${s.activa !== false ? 'Activa' : 'Inactiva'}</span></td>
+          <td><button class="btn sm" onclick="editarSucursal('${s.value}','${s.label}',${s.activa !== false})" style="font-size:10px">Editar</button></td>
+        </tr>`).join('')}
+      </tbody></table>`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:11px">${e.message}</div>`;
+  }
+}
+
+function editarSucursal(id, nombre, activa) {
+  document.getElementById('sucId').value = id;
+  document.getElementById('sucNombre').value = nombre;
+  document.getElementById('sucActiva').value = activa ? '1' : '0';
+}
+
+async function guardarSucursal() {
+  const id     = document.getElementById('sucId').value.trim();
+  const nombre = document.getElementById('sucNombre').value.trim();
+  const activa = document.getElementById('sucActiva').value === '1';
+  const msg    = document.getElementById('sucMsg');
+  if (!id || !nombre) { msg.textContent = 'ID y nombre requeridos'; msg.style.color='var(--red)'; return; }
+  try {
+    const res = await fetch('/api/sucursales', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id, nombre, activa }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.statusText);
+    msg.textContent = `✓ Sucursal "${nombre}" guardada`;
+    msg.style.color = 'var(--grn)';
+    document.getElementById('sucId').value = '';
+    document.getElementById('sucNombre').value = '';
+    await loadSucursalesConfig();
+    await loadSucursales();
+  } catch(e) {
+    msg.textContent = '⚠ ' + e.message;
+    msg.style.color = 'var(--red)';
+  }
+}
+
+// ── FLOTA ──────────────────────────────────────────────────────────────────
+
+let _flotaData = [];
+let _camionesTodos = [];
+
+function switchOperSubtab(t, el) {
+  document.querySelectorAll('#tab-operaciones > .plan-tabs .plan-tab').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('oper-sub-flota').style.display     = t === 'flota'     ? '' : 'none';
+  document.getElementById('oper-sub-capacidad').style.display = t === 'capacidad' ? '' : 'none';
+  document.getElementById('oper-sub-planilla').style.display  = t === 'planilla'  ? '' : 'none';
+  if (t === 'capacidad') {
+    loadDotacionExternaPlanificacion();
+    loadDotacionEntregaRealPlanificacion();
+    loadFlotaPlanificacion();
+  }
+  if (t === 'planilla') initPlanillaOperativa();
+}
+
+function switchFlotaSubtab(t, el) {
+  document.querySelectorAll('#oper-sub-flota > .plan-tabs .plan-tab').forEach(x => x.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('flota-activacion').style.display = t === 'activacion' ? '' : 'none';
+  document.getElementById('flota-camiones').style.display   = t === 'camiones'   ? '' : 'none';
+  if (t === 'camiones') loadCamiones();
+}
+
+function initFlotaSelects() {
+  const hoy = new Date();
+  const anioEl = document.getElementById('flotaAnio');
+  const mesEl  = document.getElementById('flotaMes');
+  if (!anioEl.value) anioEl.value = hoy.getFullYear();
+  if (!mesEl.value || mesEl.value === '0') mesEl.value = hoy.getMonth() + 1;
+
+  const sucEl = document.getElementById('flotaSucursal');
+  if (sucEl.options.length <= 1) {
+    api('/api/sucursales').then(list => {
+      list.forEach(s => {
+        if (sucEl.querySelector(`option[value="${s.value}"]`)) return;
+        const opt = document.createElement('option');
+        opt.value = s.value; opt.textContent = `${s.value} — ${s.label}`;
+        sucEl.appendChild(opt);
+      });
+    }).catch(() => {});
+  }
+}
+
+async function loadFlota() {
+  const anio = document.getElementById('flotaAnio')?.value;
+  const mes  = document.getElementById('flotaMes')?.value;
+  const suc  = document.getElementById('flotaSucursal')?.value;
+  const tbody = document.getElementById('flotaTbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando…</td></tr>';
+
+  try {
+    let path = `/api/flota/vehiculos?anio=${anio||''}&mes=${mes||''}&incluir_anulados=0`;
+    if (suc && suc !== 'TODAS') path += `&sucursal_id=${encodeURIComponent(suc)}`;
+    const data = await api(path);
+    _flotaData = data.vehiculos || [];
+    renderFlotaTabla(_flotaData, data.resumen);
+  } catch(e) {
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
+  }
+}
+
+function renderFlotaTabla(vehiculos, resumen) {
+  const summaryEl = document.getElementById('flotaSummary');
+  if (resumen) {
+    summaryEl.innerHTML = `
+      <div class="mini" style="min-width:120px"><span class="lbl">Total</span><span class="val">${resumen.total || 0}</span></div>
+      <div class="mini" style="min-width:120px"><span class="lbl">Activos mes</span><span class="val" style="color:var(--grn)">${resumen.activos || 0}</span></div>
+      <div class="mini" style="min-width:120px"><span class="lbl">Inactivos mes</span><span class="val" style="color:var(--red)">${resumen.inactivos || 0}</span></div>
+      <div class="mini" style="min-width:140px"><span class="lbl">Cap. UP activa</span><span class="val" style="color:var(--acc)">${resumen.capacidad_up_activa || 0}</span></div>
+    `;
+  }
+
+  const tbody = document.getElementById('flotaTbody');
+  if (!vehiculos.length) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Sin vehículos. Sincronizá desde Transportes primero.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = vehiculos.map((v, i) => {
+    const activo = v.activo_mes;
+    return `
+      <tr id="flotaRow${v.id}">
+        <td style="font-family:var(--mono);font-size:11px">${v.codigo}</td>
+        <td style="font-size:12px">${v.descripcion || ''}</td>
+        <td style="font-family:var(--mono);font-size:11px">${v.placa || '—'}</td>
+        <td style="font-size:11px">${v.sucursal || v.sucursal_id}</td>
+        <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up != null ? v.capacidad_up : '—'}</td>
+        <td>${_flotaToggleBtn(v.id, activo, i)}</td>
+        <td>
+          <input type="text" id="flotaMotivo${v.id}" value="${v.motivo_mes || ''}"
+            placeholder="Motivo inactividad"
+            style="width:100%;font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+        </td>
+        <td>
+          <button class="btn sm" onclick="guardarDisponibilidadFlota(${v.id}, ${i})" style="font-size:11px">✓</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function _flotaToggleBtn(vehiculoId, activo, idx) {
+  const color = activo ? 'var(--grn)' : 'var(--red)';
+  const label = activo ? '● ACTIVO' : '○ INACTIVO';
+  return `<button data-toggle onclick="toggleFlotaEstado(${vehiculoId}, ${activo}, ${idx})"
+    style="background:${color}22;border:1px solid ${color};color:${color};
+           border-radius:12px;padding:3px 10px;font-size:11px;cursor:pointer;font-weight:600;white-space:nowrap">
+    ${label}
+  </button>`;
+}
+
+function _actualizarToggle(vehiculoId, activo, idx) {
+  const row = document.getElementById(`flotaRow${vehiculoId}`);
+  if (!row) return;
+  const td = row.querySelector('[data-toggle]')?.parentElement;
+  if (td) td.innerHTML = _flotaToggleBtn(vehiculoId, activo, idx);
+}
+
+function _actualizarSummaryFlota() {
+  const summaryEl = document.getElementById('flotaSummary');
+  if (!summaryEl) return;
+  const activos   = _flotaData.filter(v => v.activo_mes).length;
+  const inactivos = _flotaData.filter(v => !v.activo_mes).length;
+  const capUp     = _flotaData.filter(v => v.activo_mes).reduce((s, v) => s + (v.capacidad_up || 0), 0);
+  summaryEl.innerHTML = `
+    <div class="mini" style="min-width:120px"><span class="lbl">Total</span><span class="val">${_flotaData.length}</span></div>
+    <div class="mini" style="min-width:120px"><span class="lbl">Activos mes</span><span class="val" style="color:var(--grn)">${activos}</span></div>
+    <div class="mini" style="min-width:120px"><span class="lbl">Inactivos mes</span><span class="val" style="color:var(--red)">${inactivos}</span></div>
+    <div class="mini" style="min-width:140px"><span class="lbl">Cap. UP activa</span><span class="val" style="color:var(--acc)">${Math.round(capUp * 100) / 100}</span></div>
+  `;
+}
+
+function toggleFlotaEstado(vehiculoId, estadoActual, idx) {
+  const nuevoEstado = !estadoActual;
+  _flotaData[idx].activo_mes = nuevoEstado;
+  _actualizarToggle(vehiculoId, nuevoEstado, idx);
+  guardarDisponibilidadFlota(vehiculoId, idx, estadoActual);
+}
+
+async function guardarDisponibilidadFlota(vehiculoId, idx, estadoAnterior) {
+  const anio   = parseInt(document.getElementById('flotaAnio').value);
+  const mes    = parseInt(document.getElementById('flotaMes').value);
+  const activo = _flotaData[idx].activo_mes;
+  const motivo = (document.getElementById(`flotaMotivo${vehiculoId}`)?.value || '').trim();
+  const msgEl  = document.getElementById('flotaSyncMsg');
+
+  try {
+    await api('/api/flota/disponibilidad', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ vehiculo_id: vehiculoId, anio, mes, activo, motivo }),
+    });
+    _flotaData[idx].motivo_mes = motivo;
+    _actualizarSummaryFlota();
+    if (msgEl) { msgEl.textContent = ''; }
+  } catch(e) {
+    // Revertir el toggle si falló
+    if (estadoAnterior !== undefined) {
+      _flotaData[idx].activo_mes = estadoAnterior;
+      _actualizarToggle(vehiculoId, estadoAnterior, idx);
+    }
+    if (msgEl) { msgEl.textContent = '⚠ ' + e.message; msgEl.style.color = 'var(--red)'; }
+  }
+}
+
+async function syncFlotaDesdeTransportes() {
+  const btn = document.getElementById('btnSyncFlota');
+  const msg = document.getElementById('flotaSyncMsg');
+  btn.disabled = true;
+  msg.textContent = 'Sincronizando…';
+  msg.style.color = 'var(--muted)';
+  try {
+    const data = await api('/api/flota/sync-transportes', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ empresa_id: '1' }),
+      timeout: 60000,
+    });
+    msg.textContent = `✓ ${data.sincronizados} vehículo(s) sincronizados desde Transportes`;
+    msg.style.color = 'var(--grn)';
+    await loadFlota();
+  } catch(e) {
+    msg.textContent = '⚠ Error: ' + e.message;
+    msg.style.color = 'var(--red)';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function reload() {
+  const drawerOpen = document.getElementById('drawer').classList.contains('open');
+  picoSet = new Set(); diasData = [];
+  renderCal();
+  await loadMes();
+  loadHistorico();
+  if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
+  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsize();
+  if (document.getElementById('tab-planificacion')?.style.display !== 'none') loadPlanificacion();
+  loadArticulosCount();
+  if (drawerOpen && selDay) await loadDayDetail(selDay);
+}
+
+function abrirReportePicos() {
+  const mes    = mesPad();
+  const suc    = getSuc();
+  const umbral = document.getElementById('sliderUmbral')?.value || '1.20';
+  const metrica= document.getElementById('selMetrica')?.value  || 'bultos';
+  const url    = `/reporte-picos?sucursal=${encodeURIComponent(suc)}&mes=${mes}&umbral=${umbral}&metrica=${metrica}`;
+  window.open(url, '_blank');
+}
+
+// ── PLANILLA OPERATIVA ─────────────────────────────────────────────────────
+
+const MESES_PLANILLA = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
+  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+const SUC_LABELS = { '1': 'Casa Central', '2': 'Dolores' };
+
+async function initPlanillaOperativa() {
+  const selAnio = document.getElementById('planillaAnio');
+  if (selAnio && selAnio.options.length === 0) {
+    const now = new Date();
+    for (let y = now.getFullYear(); y >= 2022; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      selAnio.appendChild(o);
+    }
+  }
+  // Default month to current
+  const selMes = document.getElementById('planillaMes');
+  if (selMes && !selMes.dataset.init) {
+    selMes.value = new Date().getMonth() + 1;
+    selMes.dataset.init = '1';
+  }
+  // Auto-select year/month with most recent data in DB
+  try {
+    const r = await fetch(`${API}/api/sync/operacion-camiones/anios?empresa_id=1`);
+    const d = await r.json();
+    if (d.anio_mas_reciente && selAnio) {
+      selAnio.value = d.anio_mas_reciente;
+      if (d.mes_mas_reciente && selMes) selMes.value = d.mes_mas_reciente;
+    }
+  } catch(_) {}
+}
+
+async function cargarPlanillaOperativa() {
+  const anio = document.getElementById('planillaAnio')?.value;
+  const mes  = document.getElementById('planillaMes')?.value;
+  const cont = document.getElementById('planillaContenido');
+  if (!anio || !mes) return;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando…</div>';
+  try {
+    const resp = await fetch(`${API}/api/sync/operacion-camiones/mensual?empresa_id=1&sucursal_id=TODAS&anio=${anio}&mes=${mes}`);
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    _renderPlanilla(data.filas || [], parseInt(anio), parseInt(mes));
+  } catch(e) {
+    cont.innerHTML = `<div style="color:var(--red);padding:16px">⚠ ${esc(e.message)}</div>`;
+  }
+}
+
+async function syncYCargarPlanilla() {
+  const btn   = document.getElementById('planillaBtnSync');
+  const msgEl = document.getElementById('planillaSyncMsg');
+  const cont  = document.getElementById('planillaContenido');
+  if (btn) btn.disabled = true;
+  if (msgEl) { msgEl.textContent = 'Sincronizando desde Google Sheets…'; msgEl.style.color = 'var(--muted)'; }
+  if (cont)  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Importando datos…</div>';
+  try {
+    const resp = await fetch(`${API}/api/sync/sheets-operativo`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ empresa_id: '1' }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+
+    // Mostrar detalle por tab
+    const n    = data.insertados ?? 0;
+    const errs = data.errores ?? [];
+    const det  = data.detalle ?? [];
+    let resumen = det.map(d => d.error
+      ? `⚠ ${esc(d.url_tag)}: ${esc(d.error)}`
+      : `✓ Tab ${esc(d.url_tag)}: ${d.filas_csv} filas CSV → ${d.filas_parseadas} parseadas`
+    ).join('<br>');
+    const color = errs.length ? 'var(--acc)' : 'var(--grn)';
+    if (msgEl) {
+      msgEl.innerHTML = `<strong style="color:${color}">${n} registros procesados</strong><br><span style="color:var(--muted)">${resumen}</span>`;
+    }
+
+    // Auto-seleccionar año/mes más reciente de la DB
+    try {
+      const r2 = await fetch(`${API}/api/sync/operacion-camiones/anios?empresa_id=1`);
+      const d2 = await r2.json();
+      if (d2.anio_mas_reciente) {
+        const sa = document.getElementById('planillaAnio');
+        const sm = document.getElementById('planillaMes');
+        if (sa) sa.value = d2.anio_mas_reciente;
+        if (sm) sm.value = d2.mes_mas_reciente;
+      }
+    } catch(_) {}
+
+    await cargarPlanillaOperativa();
+  } catch(e) {
+    if (msgEl) { msgEl.textContent = '⚠ ' + esc(e.message); msgEl.style.color = 'var(--red)'; }
+    if (cont)  cont.innerHTML = '';
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function _renderPlanilla(filas, anio, mes) {
+  const cont = document.getElementById('planillaContenido');
+  if (!filas.length) {
+    cont.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px">
+      Sin datos para <strong>${esc(MESES_PLANILLA[mes])} ${anio}</strong>.<br>
+      <span style="font-size:11px">Si ya sincronizaste, verificá el año y mes — los datos en la planilla pueden ser de otro período.<br>
+      También podés usar <strong>"↻ Sincronizar y cargar"</strong> para importar y auto-seleccionar el período correcto.</span>
+    </div>`;
+    return;
+  }
+
+  // Group by sucursal_id
+  const bySuc = {};
+  for (const f of filas) {
+    (bySuc[f.sucursal_id] = bySuc[f.sucursal_id] || []).push(f);
+  }
+
+  // Group each sucursal by date → {s1: {...}, s2: {...}}
+  function groupByDate(rows) {
+    const byDate = {};
+    for (const r of rows) {
+      if (!byDate[r.fecha]) byDate[r.fecha] = {};
+      byDate[r.fecha][r.nro_salida] = r;
+    }
+    return byDate;
+  }
+
+  function buildTable(rows, sucLabel) {
+    const byDate = groupByDate(rows);
+    const dates  = Object.keys(byDate).sort();
+
+    // Totals
+    let totS1 = {camiones:0,choferes:0,ayudantes:0,personas:0};
+    let totS2 = {camiones:0,choferes:0,ayudantes:0,personas:0};
+
+    let tbody = '';
+    for (const fecha of dates) {
+      const s1 = byDate[fecha][1] || {};
+      const s2 = byDate[fecha][2] || {};
+      const totalCam  = (s1.camiones||0) + (s2.camiones||0);
+      const totalPers = (s1.personas||0) + (s2.personas||0);
+      totS1.camiones  += s1.camiones||0; totS1.choferes  += s1.choferes||0;
+      totS1.ayudantes += s1.ayudantes||0; totS1.personas += s1.personas||0;
+      totS2.camiones  += s2.camiones||0; totS2.choferes  += s2.choferes||0;
+      totS2.ayudantes += s2.ayudantes||0; totS2.personas += s2.personas||0;
+
+      const d = new Date(fecha + 'T00:00:00');
+      const dLabel = d.toLocaleDateString('es-AR', {weekday:'short', day:'numeric'});
+
+      tbody += `<tr>
+        <td style="font-size:11px;white-space:nowrap">${esc(dLabel)}</td>
+        <td style="text-align:center">${s1.camiones||'—'}</td>
+        <td style="text-align:center">${s1.choferes||'—'}</td>
+        <td style="text-align:center">${s1.ayudantes||'—'}</td>
+        <td style="text-align:center;color:var(--muted)">${s1.personas||'—'}</td>
+        <td style="text-align:center">${s2.camiones||'—'}</td>
+        <td style="text-align:center">${s2.choferes||'—'}</td>
+        <td style="text-align:center">${s2.ayudantes||'—'}</td>
+        <td style="text-align:center;color:var(--muted)">${s2.personas||'—'}</td>
+        <td style="text-align:center;font-weight:600;color:var(--acc)">${totalCam}</td>
+        <td style="text-align:center;font-weight:600">${totalPers}</td>
+      </tr>`;
+    }
+
+    const totTotalCam  = totS1.camiones + totS2.camiones;
+    const totTotalPers = totS1.personas + totS2.personas;
+
+    return `
+      <div style="margin-bottom:18px">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+                    color:var(--acc);margin-bottom:8px;padding:6px 0;border-bottom:2px solid var(--acc)">
+          ${esc(sucLabel)} — ${esc(MESES_PLANILLA[mes])} ${anio}
+        </div>
+        <div style="overflow-x:auto">
+          <table class="rtbl" style="width:100%;font-size:12px">
+            <thead>
+              <tr>
+                <th rowspan="2" style="min-width:90px">Fecha</th>
+                <th colspan="4" style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.08)">1ª Salida</th>
+                <th colspan="4" style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.08)">2ª Salida</th>
+                <th colspan="2" style="text-align:center;background:rgba(var(--acc-rgb,154,95,5),.08)">Total día</th>
+              </tr>
+              <tr>
+                <th style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.05)">Cam.</th>
+                <th style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.05)">Chor.</th>
+                <th style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.05)">Ayd.</th>
+                <th style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.05);color:var(--muted)">Pers.</th>
+                <th style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.05)">Cam.</th>
+                <th style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.05)">Chor.</th>
+                <th style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.05)">Ayd.</th>
+                <th style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.05);color:var(--muted)">Pers.</th>
+                <th style="text-align:center">Cam.</th>
+                <th style="text-align:center">Pers.</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tbody}
+            </tbody>
+            <tfoot>
+              <tr style="font-weight:700;border-top:2px solid var(--brd)">
+                <td>TOTAL</td>
+                <td style="text-align:center">${totS1.camiones}</td>
+                <td style="text-align:center">${totS1.choferes}</td>
+                <td style="text-align:center">${totS1.ayudantes}</td>
+                <td style="text-align:center;color:var(--muted)">${totS1.personas}</td>
+                <td style="text-align:center">${totS2.camiones}</td>
+                <td style="text-align:center">${totS2.choferes}</td>
+                <td style="text-align:center">${totS2.ayudantes}</td>
+                <td style="text-align:center;color:var(--muted)">${totS2.personas}</td>
+                <td style="text-align:center;color:var(--acc)">${totTotalCam}</td>
+                <td style="text-align:center">${totTotalPers}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  let html = '';
+  const sucIds = Object.keys(bySuc).sort();
+  for (const sid of sucIds) {
+    html += buildTable(bySuc[sid], SUC_LABELS[sid] || ('Sucursal ' + sid));
+  }
+  cont.innerHTML = html;
+}
+

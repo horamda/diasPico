@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1280">
+<title>Reporte Días Pico</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  /* Accent — dark mode (vibrant) */
+  --acc: #f5a623; --blu: #4a9eff; --grn: #3ecf8e; --red: #e05c5c;
+  --pur: #a78bfa; --evr: #f87171;
+  /* Surfaces */
+  --bg:  #0d0d0d; --surf: #161616; --surf2: #1e1e1e; --brd: #2c2c2c;
+  --txt: #e8e8e8; --muted: #777; --mono: 'Courier New', monospace;
+  /* Hardcoded-color replacements */
+  --ctrl-bg:       #111;
+  --ctrl-brd:      #222;
+  --ctrl-input-bg: #1e1e1e;
+  --ctrl-input-brd:#333;
+  --ctrl-btn-bg:   #333;
+  --ctrl-tip:      #555;
+  --res-bg:        #111;
+  --res-div:       #222;
+  --cal-cell-brd:  #222;
+  --cal-dn:        #aaa;
+  --cal-dname:     #555;
+  --row-div:       #1e1e1e;
+  --ftr-c:         #555;
+}
+html, body { background: var(--bg); color: var(--txt); font-family: system-ui, -apple-system, sans-serif; }
+
+/* ── CONTROL BAR ── */
+#ctrl-bar {
+  background: var(--ctrl-bg); border-bottom: 1px solid var(--ctrl-brd); padding: 10px 20px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+#ctrl-bar label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; white-space: nowrap; }
+#ctrl-bar select, #ctrl-bar input[type=month] {
+  background: var(--ctrl-input-bg); color: var(--txt); border: 1px solid var(--ctrl-input-brd); border-radius: 5px;
+  padding: 5px 8px; font-size: 12px; min-width: 0;
+}
+#rptSuc { min-width: 160px; }
+.ctrl-btn { padding: 6px 16px; border-radius: 5px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ctrl-btn.gen { background: var(--blu); color: #fff; }
+.ctrl-btn.prt { background: var(--grn); color: #000; }
+.ctrl-btn.drk { background: var(--ctrl-btn-bg); color: var(--txt); }
+#ctrl-bar .vsp { width: 1px; height: 22px; background: var(--ctrl-brd); flex-shrink: 0; }
+#ctrl-bar .tip { margin-left: auto; font-size: 10px; color: var(--ctrl-tip); white-space: nowrap; }
+#ctrl-bar .tip strong { color: var(--muted); }
+
+/* ── SLIDE 16:9 ── */
+#slide {
+  width: 1280px; height: 720px; overflow: hidden;
+  background: var(--bg); margin: 18px auto;
+  box-shadow: 0 4px 40px rgba(0,0,0,.7);
+}
+
+/* ── TOP BAR ── */
+.sl-top {
+  height: 54px; background: var(--surf); border-bottom: 2px solid var(--acc);
+  display: flex; align-items: center; padding: 0 24px; gap: 16px;
+}
+.sl-top .ttl { font-size: 18px; font-weight: 700; }
+.sl-top .ttl em { color: var(--acc); font-style: normal; }
+.sl-top .suc-pill {
+  background: rgba(74,158,255,.15); border: 1px solid rgba(74,158,255,.4);
+  color: var(--blu); font-size: 11px; font-weight: 600; padding: 3px 10px;
+  border-radius: 12px; letter-spacing: .3px;
+}
+.sl-top .badge-pico {
+  background: var(--acc); color: #000; font-size: 10px; font-weight: 700;
+  padding: 3px 10px; border-radius: 12px; text-transform: uppercase; letter-spacing: .5px;
+}
+.sl-top .spacer { flex: 1; }
+.sl-top .meta { font-size: 10px; color: var(--muted); text-align: right; line-height: 1.7; }
+.sl-top .meta strong { color: var(--txt); }
+
+/* ── RESUMEN STRIP ── */
+.sl-resumen {
+  height: 38px; background: var(--res-bg); border-bottom: 1px solid var(--brd);
+  display: flex; align-items: center; padding: 0 20px; gap: 0;
+}
+.sl-res-item {
+  display: flex; align-items: center; gap: 7px;
+  padding: 0 18px; border-right: 1px solid var(--res-div); height: 100%;
+}
+.sl-res-item:first-child { padding-left: 0; }
+.sl-res-item:last-child  { border-right: none; }
+.sl-res-item .rl { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); white-space: nowrap; }
+.sl-res-item .rv { font-size: 15px; font-weight: 700; font-family: var(--mono); white-space: nowrap; }
+.sl-res-item.pico .rv { color: var(--acc); }
+.sl-res-item.hl   .rv { color: var(--pur); }
+.sl-res-item.avg  .rv { color: var(--blu); }
+.sl-res-item.umb  .rv { color: var(--grn); }
+.sl-res-item.sal  .rv { color: var(--pur); }
+.sl-res-item.pdv  .rv { color: var(--grn); }
+
+/* ── BODY: left | center | right ── */
+.sl-body {
+  height: calc(720px - 54px - 38px - 30px);
+  display: grid; grid-template-columns: 210px 1fr 268px;
+  padding: 12px 16px 8px; gap: 0;
+}
+
+/* ── LEFT: KPIs ── */
+.sl-kpis { display: flex; flex-direction: column; gap: 7px; padding-right: 12px; }
+.sl-kpi {
+  background: var(--surf2); border: 1px solid var(--brd); border-radius: 7px;
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 1px; flex-shrink: 0;
+}
+.sl-kpi.pico { background: rgba(245,166,35,.08); border-color: rgba(245,166,35,.45); }
+.sl-kpi.blu  { background: rgba(74,158,255,.05);  border-color: rgba(74,158,255,.25); }
+.sl-kpi.grn  { background: rgba(62,207,142,.05);  border-color: rgba(62,207,142,.3);  }
+.sl-kpi.red  { background: rgba(224,92,92,.05);   border-color: rgba(224,92,92,.25);  }
+.sl-kpi .lbl { font-size: 8px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+.sl-kpi .val { font-size: 20px; font-weight: 700; font-family: var(--mono); line-height: 1.15; }
+.sl-kpi.pico .val { color: var(--acc); }
+.sl-kpi.blu  .val { color: var(--blu); }
+.sl-kpi.grn  .val { color: var(--grn); }
+.sl-kpi.red  .val { color: var(--red); }
+.sl-kpi .sub { font-size: 9px; color: var(--muted); }
+
+/* ── CENTER: CALENDAR ── */
+.sl-cal { border-left: 1px solid var(--brd); border-right: 1px solid var(--brd); padding: 0 14px; display: flex; flex-direction: column; }
+.sl-cal-hdr { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 7px; display: flex; justify-content: space-between; align-items: center; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; flex: 1; }
+.cal-dname { text-align: center; font-size: 7px; color: var(--cal-dname); text-transform: uppercase; padding: 2px 0; letter-spacing: .3px; }
+.cal-day {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  border: 1px solid var(--cal-cell-brd); border-radius: 4px; font-size: 11px;
+  position: relative; gap: 0; min-height: 0; overflow: hidden;
+  padding: 2px 1px;
+}
+.cal-day.empty { border-color: transparent; background: transparent; }
+.cal-day .dn { font-weight: 600; font-size: 12px; line-height: 1.1; }
+.cal-day .cv { font-size: 6.5px; font-family: var(--mono); line-height: 1; }
+.cal-day .ev-lbl { font-size: 5.5px; line-height: 1.1; text-align: center; width: 95%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-day .dots { display: flex; gap: 2px; margin-top: 1px; }
+.cal-day .dot { width: 3px; height: 3px; border-radius: 50%; }
+.cal-day .dot.p { background: var(--acc); }
+.cal-day .dot.f { background: var(--pur); }
+.cal-day .dot.e { background: var(--evr); }
+
+/* Estado normal */
+.cal-day .dn { color: var(--cal-dn); }
+.cal-day .cv { color: var(--muted); }
+
+/* Día pico */
+.cal-day.pico { background: rgba(245,166,35,.15); border-color: rgba(245,166,35,.6); }
+.cal-day.pico .dn { color: var(--acc); font-weight: 800; font-size: 13px; }
+.cal-day.pico .cv { color: rgba(245,166,35,.8); }
+
+/* Feriado */
+.cal-day.feriado { background: rgba(167,139,250,.1); border-color: rgba(167,139,250,.4); }
+.cal-day.feriado .dn { color: var(--pur); }
+
+/* Evento */
+.cal-day.evento { border-color: rgba(248,113,113,.6); border-style: dashed; }
+.cal-day.evento .ev-lbl { color: var(--evr); }
+
+/* Combos */
+.cal-day.pico.feriado { background: linear-gradient(135deg, rgba(245,166,35,.15), rgba(167,139,250,.1)); border-color: var(--pur); border-style: solid; }
+.cal-day.pico.evento  { border-style: dashed; border-color: var(--evr); }
+
+/* ── RIGHT PANEL ── */
+.sl-right { padding-left: 12px; display: flex; flex-direction: column; gap: 0; overflow: hidden; }
+
+/* Días pico list */
+.panel-lbl { font-size: 8px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); margin-bottom: 5px; }
+.peak-hdr {
+  display: grid; grid-template-columns: 56px 1fr 44px 44px; gap: 0;
+  background: rgba(245,166,35,.1); border-radius: 4px; padding: 4px 6px;
+  font-size: 7.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px;
+}
+.peak-hdr span:not(:first-child) { text-align: right; }
+.peak-row {
+  display: grid; grid-template-columns: 56px 1fr 44px 44px; gap: 0;
+  padding: 4px 6px; border-bottom: 1px solid var(--row-div); align-items: center;
+}
+.peak-row:last-of-type { border-bottom: none; }
+.peak-row .dt { font-family: var(--mono); color: var(--acc); font-weight: 700; font-size: 10px; }
+.peak-row .pv { font-family: var(--mono); color: var(--txt); font-size: 10px; }
+.peak-row .pc { font-family: var(--mono); font-size: 9px; text-align: right; }
+.peak-row .pc.bad { color: var(--red); }
+.peak-row .pc.ok  { color: var(--grn); }
+
+/* Divider */
+.panel-div { height: 1px; background: var(--brd); margin: 7px 0; }
+
+/* Eventos list */
+.ev-hdr {
+  display: grid; grid-template-columns: 48px 1fr auto; gap: 0;
+  background: rgba(248,113,113,.1); border-radius: 4px; padding: 4px 6px;
+  font-size: 7.5px; color: #e09090; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 2px;
+}
+.ev-row {
+  display: grid; grid-template-columns: 48px 1fr auto; gap: 4px;
+  padding: 4px 6px; border-bottom: 1px solid var(--row-div); align-items: center;
+}
+.ev-row:last-of-type { border-bottom: none; }
+.ev-row .ev-d { font-family: var(--mono); color: var(--evr); font-weight: 700; font-size: 10px; flex-shrink: 0; }
+.ev-row .ev-n { font-size: 10px; color: var(--txt); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ev-row .ev-p { font-size: 8px; color: var(--acc); font-weight: 700; white-space: nowrap; }
+
+/* ── FOOTER ── */
+.sl-footer {
+  height: 30px; background: var(--surf); border-top: 1px solid var(--brd);
+  display: flex; align-items: center; padding: 0 18px; gap: 18px;
+}
+.leg { display: flex; align-items: center; gap: 5px; font-size: 9px; color: var(--muted); }
+.leg .dot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
+.leg-sp { flex: 1; }
+.ftr-t { font-size: 9px; color: var(--ftr-c); }
+
+/* ── LOADING ── */
+.loading { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 14px; }
+
+/* ── PRINT ── */
+@media print {
+  @page { size: 1280px 720px landscape; margin: 0; }
+  body, html { width: 1280px; height: 720px; }
+  #ctrl-bar { display: none !important; }
+  #slide { margin: 0; box-shadow: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- CONTROL BAR -->
+<div id="ctrl-bar">
+  <label>Sucursal</label>
+  <select id="rptSuc" onchange=""></select>
+  <div class="vsp"></div>
+  <label>Mes</label>
+  <input type="month" id="rptMes">
+  <div class="vsp"></div>
+  <label>Umbral</label>
+  <select id="rptUmbral">
+    <option value="1.10">+10%</option><option value="1.15">+15%</option>
+    <option value="1.20" selected>+20%</option><option value="1.25">+25%</option>
+    <option value="1.30">+30%</option><option value="1.40">+40%</option>
+    <option value="1.50">+50%</option>
+  </select>
+  <label>Métrica</label>
+  <select id="rptMetrica">
+    <option value="bultos" selected>Bultos</option>
+    <option value="hectolitros">HL</option>
+    <option value="pedidos">PDV</option>
+    <option value="pallets">Pallets</option>
+  </select>
+  <div class="vsp"></div>
+  <button class="ctrl-btn gen" onclick="cargarReporte()">↻ Generar</button>
+  <button class="ctrl-btn prt" onclick="window.print()">🖨 Imprimir / PDF</button>
+  <button class="ctrl-btn drk" onclick="toggleTheme()">☀ Claro</button>
+  <span class="tip">PPT → <strong>Imprimir → Guardar como PDF</strong> o captura del slide</span>
+</div>
+
+<!-- SLIDE 16:9 -->
+<div id="slide">
+  <div class="loading">Seleccioná mes y presioná Generar</div>
+</div>
+
+<script>
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+const DC    = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+const fmtN  = n => Number(n || 0).toLocaleString('es-AR');
+const fmtN0 = n => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: 0});
+const fmt1  = n => Number(n || 0).toLocaleString('es-AR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const fmtPct= n => Number(n || 0).toFixed(1) + '%';
+const qp    = new URLSearchParams(location.search);
+let _light  = false;
+let _sucursales = [];
+
+function toggleTheme() {
+  _light = !_light;
+  const r = document.documentElement;
+  if (_light) {
+    // Superficies
+    r.style.setProperty('--bg',   '#f0f4f8');
+    r.style.setProperty('--surf', '#ffffff');
+    r.style.setProperty('--surf2','#edf2f7');
+    r.style.setProperty('--brd',  '#cbd5e0');
+    r.style.setProperty('--txt',  '#1a202c');
+    r.style.setProperty('--muted','#718096');
+    // Acentos oscurecidos para contraste sobre fondo claro (WCAG AA ≥ 4.5:1)
+    r.style.setProperty('--acc',  '#9a5f05');
+    r.style.setProperty('--blu',  '#1a5fa3');
+    r.style.setProperty('--grn',  '#0c6e42');
+    r.style.setProperty('--red',  '#b91c1c');
+    r.style.setProperty('--pur',  '#5b21b6');
+    r.style.setProperty('--evr',  '#b91c1c');
+    // Elementos con colores antes hardcodeados
+    r.style.setProperty('--ctrl-bg',        '#e2e8f0');
+    r.style.setProperty('--ctrl-brd',       '#cbd5e0');
+    r.style.setProperty('--ctrl-input-bg',  '#ffffff');
+    r.style.setProperty('--ctrl-input-brd', '#a0aec0');
+    r.style.setProperty('--ctrl-btn-bg',    '#cbd5e0');
+    r.style.setProperty('--ctrl-tip',       '#718096');
+    r.style.setProperty('--res-bg',         '#e8edf5');
+    r.style.setProperty('--res-div',        '#cbd5e0');
+    r.style.setProperty('--cal-cell-brd',   '#cbd5e0');
+    r.style.setProperty('--cal-dn',         '#2d3748');
+    r.style.setProperty('--cal-dname',      '#718096');
+    r.style.setProperty('--row-div',        '#e2e8f0');
+    r.style.setProperty('--ftr-c',          '#718096');
+    document.querySelector('.ctrl-btn.drk').textContent = '🌙 Oscuro';
+  } else {
+    // Superficies
+    r.style.setProperty('--bg',   '#0d0d0d');
+    r.style.setProperty('--surf', '#161616');
+    r.style.setProperty('--surf2','#1e1e1e');
+    r.style.setProperty('--brd',  '#2c2c2c');
+    r.style.setProperty('--txt',  '#e8e8e8');
+    r.style.setProperty('--muted','#777');
+    // Acentos vibrantes para modo oscuro
+    r.style.setProperty('--acc',  '#f5a623');
+    r.style.setProperty('--blu',  '#4a9eff');
+    r.style.setProperty('--grn',  '#3ecf8e');
+    r.style.setProperty('--red',  '#e05c5c');
+    r.style.setProperty('--pur',  '#a78bfa');
+    r.style.setProperty('--evr',  '#f87171');
+    // Restaurar hardcodeados
+    r.style.setProperty('--ctrl-bg',        '#111');
+    r.style.setProperty('--ctrl-brd',       '#222');
+    r.style.setProperty('--ctrl-input-bg',  '#1e1e1e');
+    r.style.setProperty('--ctrl-input-brd', '#333');
+    r.style.setProperty('--ctrl-btn-bg',    '#333');
+    r.style.setProperty('--ctrl-tip',       '#555');
+    r.style.setProperty('--res-bg',         '#111');
+    r.style.setProperty('--res-div',        '#222');
+    r.style.setProperty('--cal-cell-brd',   '#222');
+    r.style.setProperty('--cal-dn',         '#aaa');
+    r.style.setProperty('--cal-dname',      '#555');
+    r.style.setProperty('--row-div',        '#1e1e1e');
+    r.style.setProperty('--ftr-c',          '#555');
+    document.querySelector('.ctrl-btn.drk').textContent = '☀ Claro';
+  }
+}
+
+function _setSucSelect(val) {
+  const sel = document.getElementById('rptSuc');
+  if (!val) return;
+  // Intentar match exacto primero
+  if ([...sel.options].some(o => o.value === val)) {
+    sel.value = val;
+  }
+}
+
+async function cargarSucursales() {
+  const sel = document.getElementById('rptSuc');
+  const sucParam = qp.get('sucursal') || '';
+  try {
+    const r    = await fetch('/api/sucursales');
+    const data = await r.json();
+    // La API devuelve un array [{value, label, activa}, ...] directamente
+    _sucursales = Array.isArray(data) ? data : (data.sucursales || []);
+    sel.innerHTML =
+      '<option value="TODAS">General (todas las sucursales)</option>' +
+      _sucursales.map(s => `<option value="${s.value || s.id}">${s.label || s.nombre || s.value}</option>`).join('');
+  } catch {
+    sel.innerHTML = '<option value="TODAS">General (todas las sucursales)</option>';
+  }
+  _setSucSelect(sucParam);
+}
+
+async function cargarReporte() {
+  const suc     = document.getElementById('rptSuc')?.value     || 'TODAS';
+  const mes     = document.getElementById('rptMes')?.value     || '';
+  const umbral  = document.getElementById('rptUmbral')?.value  || '1.20';
+  const metrica = document.getElementById('rptMetrica')?.value || 'bultos';
+  const slide   = document.getElementById('slide');
+
+  if (!mes) {
+    slide.innerHTML = '<div class="loading">Seleccioná un mes y presioná Generar.</div>';
+    return;
+  }
+  slide.innerHTML = '<div class="loading">Cargando datos…</div>';
+
+  try {
+    const r    = await fetch(`/api/picos/calendario?sucursal=${encodeURIComponent(suc)}&mes=${mes}&umbral=${umbral}&metrica=${metrica}`);
+    const data = await r.json();
+    renderSlide(suc, mes, umbral, metrica, data);
+  } catch(e) {
+    slide.innerHTML = `<div class="loading" style="color:var(--red)">Error: ${e.message}</div>`;
+  }
+}
+
+function renderSlide(suc, mes, umbral, metrica, data) {
+  const dias      = data.dias || [];
+  const k         = data.kpis || {};
+  const picosCount= data.picos_count ?? dias.filter(d => d.es_pico).length;
+  const avgMes    = data.avg_mes ?? data.avg_hist ?? 0;
+  const umbralVal = data.umbral_val ?? 0;
+  const [anio, mesNum] = mes.split('-').map(Number);
+  const mesNom    = MESES[mesNum - 1] || '';
+  const sel       = document.getElementById('rptSuc');
+  const sucLabel  = sel?.options[sel?.selectedIndex]?.text || suc;
+  const mLbl      = { bultos:'Bultos', hectolitros:'HL', pedidos:'PDV', pallets:'Pallets' }[metrica] || metrica;
+  const ahora     = new Date().toLocaleDateString('es-AR');
+  const pctU      = ((+umbral - 1) * 100).toFixed(0);
+
+  // ── Eventos del mes ──
+  const eventos = dias.filter(d => d.es_evento).sort((a, b) => a.fecha.localeCompare(b.fecha));
+
+  // ── CALENDARIO ──
+  const firstDow  = new Date(anio, mesNum - 1, 1).getDay();
+  const totalDays = new Date(anio, mesNum, 0).getDate();
+  let calHtml = DC.map(d => `<div class="cal-dname">${d}</div>`).join('');
+  for (let i = 0; i < firstDow; i++) calHtml += '<div class="cal-day empty"></div>';
+  for (let d = 1; d <= totalDays; d++) {
+    const dateStr = `${anio}-${String(mesNum).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dd = dias.find(x => x.fecha === dateStr);
+    let cls = 'cal-day';
+    if (dd?.es_pico)    cls += ' pico';
+    if (dd?.es_feriado) cls += ' feriado';
+    if (dd?.es_evento)  cls += ' evento';
+
+    const dots = [
+      dd?.es_pico    ? '<span class="dot p"></span>' : '',
+      dd?.es_feriado ? '<span class="dot f"></span>' : '',
+      dd?.es_evento  ? '<span class="dot e"></span>' : '',
+    ].filter(Boolean).join('');
+
+    // Valor de métrica: mostrar en días pico
+    const metVal = (dd?.es_pico && dd) ? fmtN0(dd[metrica] ?? dd.bultos ?? 0) : '';
+    // Label de evento: primeras 12 chars del nombre
+    const evDesc = dd?.es_evento ? (dd.evento_desc || 'Evento').slice(0, 13) : '';
+
+    calHtml += `<div class="${cls}">
+      <span class="dn">${d}</span>
+      ${metVal ? `<span class="cv">${metVal}</span>` : ''}
+      ${evDesc ? `<span class="ev-lbl">${evDesc}</span>` : ''}
+      ${dots   ? `<div class="dots">${dots}</div>` : ''}
+    </div>`;
+  }
+
+  // ── DÍAS PICO (hasta 9 filas para dejar espacio a eventos) ──
+  const picosDias = dias.filter(d => d.es_pico).sort((a, b) => a.fecha.localeCompare(b.fecha));
+  const maxPicos  = eventos.length > 0 ? 9 : 14;
+  const picoSlice = picosDias.slice(0, maxPicos);
+  const picoHtml  = picoSlice.length === 0
+    ? `<div style="font-size:10px;color:var(--muted);padding:6px">Sin días pico en el período.</div>`
+    : picoSlice.map(d => {
+        const parts = (d.fecha || '').split('-');
+        const dLabel = parts.length === 3 ? `${parts[2]}/${parts[1]}` : d.fecha;
+        const rb = +(d.pct_rechazo_bultos ?? 0);
+        const rh = +(d.pct_rechazo_hl    ?? 0);
+        return `<div class="peak-row">
+          <span class="dt">${dLabel}</span>
+          <span class="pv">${fmtN0(d[metrica] ?? d.bultos ?? 0)}</span>
+          <span class="pc ${rb > 3 ? 'bad' : 'ok'}">${rb.toFixed(1)}%</span>
+          <span class="pc ${rh > 3 ? 'bad' : 'ok'}">${rh.toFixed(1)}%</span>
+        </div>`;
+      }).join('');
+  const picoExtra = picosDias.length > maxPicos
+    ? `<div style="font-size:8px;color:var(--muted);padding:3px 6px">+${picosDias.length - maxPicos} días más…</div>` : '';
+
+  // ── EVENTOS ──
+  const evHtml = eventos.length === 0 ? '' : `
+    <div class="panel-div"></div>
+    <div class="panel-lbl">⚡ Eventos especiales del mes (${eventos.length})</div>
+    <div class="ev-hdr"><span>Fecha</span><span>Evento</span><span>Pico</span></div>
+    ${eventos.slice(0, 8).map(d => {
+      const parts = (d.fecha || '').split('-');
+      const dLabel = parts.length === 3 ? `${parts[2]}/${parts[1]}` : d.fecha;
+      return `<div class="ev-row">
+        <span class="ev-d">${dLabel}</span>
+        <span class="ev-n" title="${d.evento_desc || ''}">${(d.evento_desc || 'Evento').slice(0, 32)}</span>
+        ${d.es_pico ? '<span class="ev-p">PICO</span>' : '<span></span>'}
+      </div>`;
+    }).join('')}
+    ${eventos.length > 8 ? `<div style="font-size:8px;color:var(--muted);padding:3px 6px">+${eventos.length-8} más…</div>` : ''}
+  `;
+
+  // ── KPIs ──
+  const kpis = [
+    { lbl: 'Días pico', val: picosCount, cls: 'pico', sub: `${mLbl} > ${fmtN0(umbralVal)} (prom. ${fmtN0(avgMes)})` },
+    { lbl: 'Bultos despachados', val: fmtN0(k.bultos), cls: 'blu', sub: '' },
+    { lbl: 'HL despachados', val: fmtN0(k.hectolitros), cls: 'blu', sub: '' },
+    { lbl: 'PDV atendidos', val: fmtN(k.pedidos), cls: 'grn', sub: `${fmtN(k.clientes)} PDV únicos` },
+    { lbl: 'Salidas únicas', val: fmtN(k.camiones), cls: 'grn', sub: '' },
+    { lbl: '% Rechazo bultos', val: fmtPct(k.pct_rechazo_bultos), cls: (k.pct_rechazo_bultos ?? 0) > 3 ? 'red' : 'grn', sub: `${fmtN0(k.rechazo_bultos)} blt rechazados` },
+    { lbl: '% Rechazo HL', val: fmtPct(k.pct_rechazo_hl), cls: (k.pct_rechazo_hl ?? 0) > 3 ? 'red' : 'grn', sub: `${fmt1(k.rechazo_hl)} HL rechazados` },
+    { lbl: 'Pallets', val: fmtN0(k.pallets), cls: 'blu', sub: '' },
+  ];
+
+  // Valores del resumen (mismo que sidebar del dashboard)
+  const metricTotalLbl = { bultos:'Bultos desp.', hectolitros:'HL desp.', pedidos:'PDV atend.', pallets:'Pallets' }[metrica] || mLbl;
+  const metricTotalVal = { bultos: k.bultos, hectolitros: k.hectolitros, pedidos: k.pedidos, pallets: k.pallets }[metrica] ?? 0;
+
+  document.getElementById('slide').innerHTML = `
+    <div class="sl-top">
+      <div class="ttl">Días Pico — <em>${mesNom} ${anio}</em></div>
+      <div class="suc-pill">${sucLabel}</div>
+      <div class="badge-pico">${picosCount} día${picosCount !== 1 ? 's' : ''} pico</div>
+      ${eventos.length > 0 ? `<div style="background:rgba(248,113,113,.15);border:1px solid rgba(248,113,113,.4);color:var(--evr);font-size:10px;font-weight:600;padding:3px 10px;border-radius:12px">⚡ ${eventos.length} evento${eventos.length !== 1 ? 's' : ''}</div>` : ''}
+      <div class="spacer"></div>
+      <div class="meta">Métrica: <strong>${mLbl}</strong> &nbsp;|&nbsp; Umbral: <strong>+${pctU}%</strong> &nbsp;|&nbsp; ${ahora}</div>
+    </div>
+
+    <div class="sl-resumen">
+      <div class="sl-res-item pico"><span class="rl">Días pico</span><span class="rv">${picosCount}</span></div>
+      <div class="sl-res-item hl">  <span class="rl">${metricTotalLbl}</span><span class="rv">${fmtN0(metricTotalVal)}</span></div>
+      <div class="sl-res-item avg"> <span class="rl">Promedio ${mLbl}</span><span class="rv">${fmtN0(avgMes)}</span></div>
+      <div class="sl-res-item umb"> <span class="rl">Umbral pico</span><span class="rv">${fmtN0(umbralVal)}</span></div>
+      <div class="sl-res-item sal"> <span class="rl">Salidas únicas</span><span class="rv">${fmtN(k.camiones ?? 0)}</span></div>
+      <div class="sl-res-item pdv"> <span class="rl">PDV únicos</span><span class="rv">${fmtN(k.clientes ?? 0)}</span></div>
+    </div>
+
+    <div class="sl-body">
+      <!-- KPIs -->
+      <div class="sl-kpis">
+        ${kpis.map(kp => `<div class="sl-kpi ${kp.cls}">
+          <span class="lbl">${kp.lbl}</span>
+          <span class="val">${kp.val}</span>
+          ${kp.sub ? `<span class="sub">${kp.sub}</span>` : ''}
+        </div>`).join('')}
+      </div>
+
+      <!-- Calendario -->
+      <div class="sl-cal">
+        <div class="sl-cal-hdr">
+          <span>Calendario — ${mesNom} ${anio}</span>
+          <span style="font-size:8px">Valor en días pico = ${mLbl}</span>
+        </div>
+        <div class="cal-grid">${calHtml}</div>
+      </div>
+
+      <!-- Días pico + Eventos -->
+      <div class="sl-right">
+        <div class="panel-lbl">Días pico (${picosDias.length})</div>
+        <div class="peak-hdr">
+          <span>Fecha</span><span style="text-align:right">${mLbl}</span>
+          <span style="text-align:right">%blt</span><span style="text-align:right">%hl</span>
+        </div>
+        ${picoHtml}${picoExtra}
+        ${evHtml}
+      </div>
+    </div>
+
+    <div class="sl-footer">
+      <div class="leg"><div class="dot" style="background:rgba(245,166,35,.5);border:1px solid var(--acc)"></div>Día pico</div>
+      <div class="leg"><div class="dot" style="background:rgba(167,139,250,.4);border:1px solid var(--pur)"></div>Feriado</div>
+      <div class="leg"><div class="dot" style="background:transparent;border:1.5px dashed var(--evr)"></div>Evento especial</div>
+      <div class="leg-sp"></div>
+      <span class="ftr-t">Dashboard Días Pico &nbsp;·&nbsp; ${sucLabel} &nbsp;·&nbsp; ${mesNom} ${anio} &nbsp;·&nbsp; Umbral ${mLbl}: +${pctU}% sobre promedio</span>
+    </div>
+  `;
+}
+
+// ── INIT ──
+(async () => {
+  await cargarSucursales();
+  const hoy = new Date();
+  const defMes = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+  document.getElementById('rptMes').value = qp.get('mes') || defMes;
+  if (qp.get('umbral'))  document.getElementById('rptUmbral').value  = qp.get('umbral');
+  if (qp.get('metrica')) document.getElementById('rptMetrica').value = qp.get('metrica');
+  if (qp.get('mes')) await cargarReporte();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1352 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Días Pico — Operaciones</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+:root{
+  --bg:#0d0f14;--surf:#15171e;--surf2:#1c1f28;--surf3:#22262f;
+  --brd:#2a2e3a;--acc:#f5a623;--red:#e05c5c;--grn:#4caf82;--blu:#5b8dee;--pur:#a78bfa;
+  --txt:#e8eaf0;--muted:#6b7080;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;}
+/* ── TOP BAR ── */
+.topbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
+.badge{background:var(--acc);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 7px;border-radius:3px;letter-spacing:1px;}
+.topbar h1{font-size:14px;font-weight:600;}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+select,input[type=text],input[type=number],input[type=date],input[type=month]{
+  background:var(--surf2);border:1px solid var(--brd);color:var(--txt);
+  padding:5px 9px;border-radius:5px;font-size:12px;font-family:var(--sans);outline:none;
+}
+select:focus,input:focus{border-color:var(--acc);}
+/* ── LAYOUT ── */
+.layout{display:grid;grid-template-columns:280px 1fr;flex:1;min-height:0;overflow:hidden;}
+/* ── SIDEBAR ── */
+.sidebar{background:var(--surf);border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;min-height:0;}
+/* ── CALENDAR ── */
+.cal-nav{display:flex;justify-content:space-between;align-items:center;}
+.cal-nav span{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.cal-nav div{display:flex;gap:3px;}
+.nav-btn{background:var(--surf2);border:1px solid var(--brd);color:var(--txt);width:24px;height:24px;border-radius:4px;cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;}
+.nav-btn:hover{background:var(--brd);}
+.cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(28px,1fr);gap:2px;margin-top:8px;}
+.cal-dname{font-family:var(--mono);font-size:9px;color:var(--muted);text-align:center;padding:3px 0;letter-spacing:.4px;}
+.cal-day{aspect-ratio:1 / 1;display:flex;align-items:center;justify-content:center;border-radius:4px;font-size:11px;cursor:pointer;border:1px solid transparent;transition:all .12s;font-family:var(--mono);position:relative;min-height:28px;}
+.cal-day.empty{cursor:default;}
+.cal-day:not(.empty):hover{background:var(--surf2);border-color:var(--brd);}
+.cal-day.pico{background:rgba(245,166,35,.18);border-color:rgba(245,166,35,.55);color:var(--acc);font-weight:600;}
+.cal-day.feriado{background:rgba(167,139,250,.15);border-color:rgba(167,139,250,.45);color:var(--pur);}
+.cal-day.pico.feriado{background:linear-gradient(135deg,rgba(245,166,35,.2),rgba(167,139,250,.2));border-color:var(--pur);}
+.cal-day.today{outline:2px solid var(--blu);outline-offset:-2px;}
+.cal-day.selected{background:var(--acc)!important;color:#000!important;font-weight:700;border-color:var(--acc)!important;}
+.cal-day.has-data::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.5;}
+.cal-day.selected::after{display:none;}
+/* ── LEGEND ── */
+.legend{display:flex;flex-wrap:wrap;gap:8px;}
+.leg{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);}
+.dot{width:7px;height:7px;border-radius:2px;}
+/* ── MINI STATS ── */
+.mini-stats{display:flex;flex-direction:column;gap:6px;}
+.mini{background:var(--surf2);border:1px solid var(--brd);border-radius:5px;padding:7px 10px;display:flex;justify-content:space-between;align-items:center;}
+.mini .lbl{font-size:10px;color:var(--muted);}
+.mini .val{font-family:var(--mono);font-size:13px;font-weight:600;text-align:center;min-width:58px;}
+/* ── CONTROLES PICO ── */
+.ctrl-block{background:var(--surf2);border:1px solid var(--brd);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.ctrl-block label{font-size:10px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;}
+.ctrl-row{display:flex;align-items:center;gap:8px;}
+input[type=range]{flex:1;accent-color:var(--acc);}
+.val-badge{font-family:var(--mono);font-size:11px;color:var(--acc);min-width:36px;text-align:center;}
+/* ── MAIN PANEL ── */
+.main{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px;}
+/* ── TABS ── */
+.tabs-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
+.tabs{display:flex;gap:2px;background:var(--surf2);padding:3px;border-radius:6px;}
+.tab{padding:5px 13px;border-radius:4px;font-size:12px;cursor:pointer;color:var(--muted);transition:all .12s;}
+.tab.active{background:var(--surf);color:var(--txt);font-weight:500;}
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;}
+.kpi-section{grid-column:1/-1;font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:8px;margin-top:2px;text-align:center;}
+.kpi-section::before,.kpi-section::after{content:'';height:1px;background:var(--brd);flex:1;}
+.kpi{background:var(--surf);border:1px solid var(--brd);border-radius:7px;padding:12px;position:relative;overflow:hidden;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:76px;}
+.kpi::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.kpi.ora::before{background:var(--acc);} .kpi.red::before{background:var(--red);}
+.kpi.grn::before{background:var(--grn);} .kpi.blu::before{background:var(--blu);}
+.kpi.pur::before{background:var(--pur);}
+.kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;text-align:center;width:100%;}
+.kpi-val{font-family:var(--mono);font-size:22px;font-weight:600;line-height:1;text-align:center;width:100%;}
+.kpi-val.ora{color:var(--acc);} .kpi-val.red{color:var(--red);}
+.kpi-val.grn{color:var(--grn);} .kpi-val.blu{color:var(--blu);}
+.kpi-val.pur{color:var(--pur);}
+/* ── SEC TITLE ── */
+.sec{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px;}
+.sec::after{content:'';flex:1;height:1px;background:var(--brd);}
+/* ── BAR CHART ── */
+.bar-chart{display:flex;flex-direction:column;gap:6px;}
+.bar-row{display:grid;grid-template-columns:60px 1fr 70px;align-items:center;gap:8px;}
+.bar-lbl{font-size:11px;color:var(--muted);font-family:var(--mono);text-align:right;}
+.bar-track{background:var(--surf2);border-radius:3px;height:20px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:3px;display:flex;align-items:center;padding-left:7px;font-size:10px;font-family:var(--mono);font-weight:600;transition:width .4s ease;}
+.bar-fill.acc{background:linear-gradient(90deg,rgba(245,166,35,.8),rgba(245,166,35,.3));color:var(--acc);}
+.bar-fill.blu{background:linear-gradient(90deg,rgba(91,141,238,.6),rgba(91,141,238,.2));color:var(--blu);}
+.bar-fill.grn{background:linear-gradient(90deg,rgba(76,175,130,.6),rgba(76,175,130,.2));color:var(--grn);}
+.bar-fill.pur{background:linear-gradient(90deg,rgba(167,139,250,.6),rgba(167,139,250,.2));color:var(--pur);}
+.bar-end{font-size:10px;color:var(--muted);font-family:var(--mono);text-align:center;}
+/* -- ANALISIS HL -- */
+.hl-row{display:grid;grid-template-columns:76px 1fr 96px 58px;align-items:center;gap:8px;}
+.hl-stack{height:22px;background:var(--surf2);border-radius:4px;overflow:hidden;display:flex;}
+.hl-ok{background:linear-gradient(90deg,rgba(76,175,130,.65),rgba(76,175,130,.25));height:100%;}
+.hl-rec{background:linear-gradient(90deg,rgba(224,92,92,.75),rgba(224,92,92,.35));height:100%;}
+.blt-ok{background:linear-gradient(90deg,rgba(91,141,238,.65),rgba(91,141,238,.25));height:100%;}
+.blt-rec{background:linear-gradient(90deg,rgba(245,166,35,.75),rgba(245,166,35,.35));height:100%;}
+.hl-legend{display:flex;gap:12px;align-items:center;font-size:11px;color:var(--muted);margin-bottom:10px;}
+.hl-legend span{display:inline-flex;gap:5px;align-items:center;}
+/* -- DROPSIZE -- */
+.filter-grid{display:grid;grid-template-columns:repeat(6,minmax(120px,1fr));gap:10px;align-items:end;}
+.filter-field{display:flex;flex-direction:column;gap:5px;}
+.filter-field label{font-size:10px;color:var(--muted);letter-spacing:.4px;text-transform:uppercase;}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.chart-wrap{height:260px;position:relative;}
+.drop-two{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.traffic{display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:4px;padding:3px 7px;font-size:10px;font-family:var(--mono);text-transform:uppercase;}
+.traffic.verde{background:rgba(76,175,130,.15);color:var(--grn);border:1px solid rgba(76,175,130,.35);}
+.traffic.amarillo{background:rgba(245,166,35,.15);color:var(--acc);border:1px solid rgba(245,166,35,.35);}
+.traffic.rojo{background:rgba(224,92,92,.15);color:var(--red);border:1px solid rgba(224,92,92,.35);}
+.traffic.sin_objetivo{background:rgba(107,112,128,.12);color:var(--muted);border:1px solid rgba(107,112,128,.3);}
+.objective-grid{display:grid;grid-template-columns:150px 120px 130px 130px 130px 130px auto;gap:8px;align-items:end;}
+.plan-tabs{display:flex;gap:2px;background:var(--surf2);padding:3px;border-radius:6px;overflow-x:auto;}
+.plan-tab{padding:5px 10px;border-radius:4px;font-size:11px;cursor:pointer;color:var(--muted);white-space:nowrap;}
+.plan-tab.active{background:var(--surf);color:var(--txt);font-weight:500;}
+.plan-grid{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:10px;align-items:end;}
+.plan-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+.plan-note{font-size:11px;color:var(--muted);line-height:1.5;}
+@media (max-width:1100px){
+  .filter-grid,.chart-grid,.drop-two,.objective-grid,.plan-grid{grid-template-columns:1fr;}
+}
+/* ── TABLE ── */
+.rtbl{width:100%;border-collapse:collapse;}
+.rtbl th{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:left;padding:7px 10px;border-bottom:1px solid var(--brd);letter-spacing:.3px;text-transform:uppercase;font-weight:400;}
+.rtbl td{padding:8px 10px;border-bottom:1px solid rgba(42,45,58,.5);font-size:12px;}
+.rtbl tr:hover td{background:rgba(28,31,40,.5);}
+.rtbl tfoot td{background:var(--surf2);border-top:1px solid var(--brd);border-bottom:0;font-family:var(--mono);font-weight:600;color:var(--txt);}
+.rtbl tfoot tr:hover td{background:var(--surf2);}
+.pct-pill{display:inline-flex;align-items:center;justify-content:center;min-width:54px;padding:3px 8px;border-radius:4px;font-family:var(--mono);font-size:11px;font-weight:600;text-align:center;}
+.pct-pill.ok{background:rgba(76,175,130,.14);color:var(--grn);border:1px solid rgba(76,175,130,.35);}
+.pct-pill.bad{background:rgba(224,92,92,.14);color:var(--red);border:1px solid rgba(224,92,92,.35);}
+/* ── TAGS ── */
+.tag{display:inline-flex;align-items:center;justify-content:center;text-align:center;padding:2px 7px;border-radius:3px;font-size:10px;font-family:var(--mono);font-weight:600;}
+.tag.pico{background:rgba(245,166,35,.15);color:var(--acc);border:1px solid rgba(245,166,35,.3);}
+.tag.ok{background:rgba(76,175,130,.15);color:var(--grn);border:1px solid rgba(76,175,130,.3);}
+.tag.err{background:rgba(224,92,92,.15);color:var(--red);border:1px solid rgba(224,92,92,.3);}
+.tag.fer{background:rgba(167,139,250,.15);color:var(--pur);border:1px solid rgba(167,139,250,.3);}
+.tag.evento{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.3);}
+.cal-day.evento{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.45);border-style:dashed;}
+.cal-day.pico.evento{background:linear-gradient(135deg,rgba(245,166,35,.18),rgba(239,68,68,.1));}
+.cal-day.feriado.evento{background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(239,68,68,.08));border-style:dashed;}
+/* ── BOX / CARD ── */
+.box{background:var(--surf);border:1px solid var(--brd);border-radius:7px;padding:16px;}
+.box{overflow-x:auto;}
+/* ── UPLOAD PANEL ── */
+.upload-panel{background:var(--surf);border:1px solid var(--brd);border-radius:7px;overflow:hidden;}
+.upload-hdr{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+.upload-hdr:hover{background:var(--surf2);}
+.upload-hdr span{font-size:12px;font-weight:500;}
+.upload-body{padding:16px;display:flex;flex-direction:column;gap:14px;border-top:1px solid var(--brd);}
+.upload-row{display:grid;grid-template-columns:130px 1fr auto auto;align-items:center;gap:10px;}
+.upload-lbl{font-size:11px;color:var(--muted);}
+input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:1px solid var(--brd);border-radius:4px;padding:4px 8px;cursor:pointer;width:100%;}
+.btn{padding:6px 13px;border-radius:5px;font-size:12px;font-family:var(--sans);cursor:pointer;border:1px solid var(--brd);background:var(--surf2);color:var(--txt);transition:all .12s;}
+.btn:hover{border-color:var(--acc);color:var(--acc);}
+.btn.primary{background:var(--acc);color:#000;border-color:var(--acc);font-weight:600;}
+.btn.primary:hover{opacity:.85;}
+.btn.sm{padding:4px 10px;font-size:11px;}
+.btn.danger{color:var(--red)!important;border-color:var(--red)!important;}
+.upload-status{font-size:11px;font-family:var(--mono);padding:4px 8px;border-radius:4px;min-width:80px;text-align:center;}
+.upload-status.ok{background:rgba(76,175,130,.15);color:var(--grn);}
+.upload-status.err{background:rgba(224,92,92,.15);color:var(--red);}
+.upload-meta{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surf2);border:1px solid var(--brd);border-radius:5px;padding:8px 10px;}
+.upload-meta span{font-size:11px;color:var(--muted);}
+.upload-meta strong{font-family:var(--mono);font-size:14px;color:var(--acc);text-align:center;min-width:70px;}
+/* ── SETTINGS ── */
+.settings-row{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:center;}
+.settings-row label{font-size:11px;color:var(--muted);}
+.settings-row input{width:100%;}
+/* ── DAY DETAIL DRAWER ── */
+.drawer{position:fixed;right:-480px;top:0;bottom:0;width:480px;background:var(--surf);border-left:1px solid var(--brd);z-index:100;transition:right .25s ease;overflow-y:auto;display:flex;flex-direction:column;}
+.drawer.open{right:0;}
+.drawer-hdr{padding:14px 18px;border-bottom:1px solid var(--brd);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;background:var(--surf);z-index:1;}
+.drawer-hdr h2{font-size:14px;font-weight:600;}
+.drawer-body{padding:18px;display:flex;flex-direction:column;gap:16px;}
+.close-btn{background:none;border:1px solid var(--brd);color:var(--muted);width:26px;height:26px;border-radius:4px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;}
+.close-btn:hover{color:var(--txt);border-color:var(--txt);}
+/* ── LOADING / EMPTY / ERROR ── */
+.loading{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;padding:16px;}
+.spinner{width:13px;height:13px;border:2px solid var(--brd);border-top-color:var(--acc);border-radius:50%;animation:spin .6s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.empty{display:flex;flex-direction:column;align-items:center;padding:30px;color:var(--muted);gap:6px;font-size:12px;}
+.empty .icon{font-size:28px;opacity:.35;}
+.err-box{background:rgba(224,92,92,.1);border:1px solid rgba(224,92,92,.3);border-radius:5px;padding:10px 14px;font-size:12px;color:var(--red);}
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--brd);border-radius:2px;}
+@media (max-width:900px){
+  body{display:block;min-height:100vh;overflow:auto;}
+  .topbar{padding:10px 12px;flex-wrap:wrap;align-items:flex-start;}
+  .topbar .right{margin-left:0;width:100%;flex-wrap:wrap;gap:8px;}
+  .topbar .right label{min-width:54px;}
+  .layout{display:block;overflow:visible;min-height:auto;}
+  .sidebar{border-right:0;border-bottom:1px solid var(--brd);min-height:auto;overflow:visible;padding:12px;}
+  .main{overflow:visible;padding:12px;gap:14px;}
+  .tabs-row{align-items:stretch;}
+  .tabs{width:100%;overflow-x:auto;white-space:nowrap;}
+  .tab{flex:0 0 auto;}
+  .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .hl-row{grid-template-columns:64px minmax(160px,1fr);align-items:center;}
+  .hl-row .bar-end{grid-column:auto;}
+  .bar-row{grid-template-columns:48px minmax(150px,1fr) 58px;}
+  .upload-row,.settings-row{grid-template-columns:1fr;}
+  .drawer{width:100%;right:-100%;}
+  .drawer-body{padding:12px;}
+  .rtbl{min-width:720px;}
+}
+@media (max-width:560px){
+  .topbar h1{width:100%;}
+  .topbar .right select,.topbar .right input{flex:1 1 140px;min-width:0;}
+  .kpi-grid{grid-template-columns:1fr;}
+  .cal-grid{grid-auto-rows:minmax(30px,1fr);}
+  .main{padding:10px;}
+  .box{padding:12px;}
+  .chart-wrap{height:220px;}
+  .mini{padding:7px 8px;}
+  .rtbl{min-width:640px;}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span class="badge">OPS</span>
+  <h1>Panel de Días Pico</h1>
+  <div class="right">
+    <label style="font-size:11px;color:var(--muted)">Sucursal</label>
+    <select id="selSucursal" onchange="onSucursalChange()"><option value="TODAS">Todas</option></select>
+    <label style="font-size:11px;color:var(--muted)">Métrica</label>
+    <select id="selMetrica" onchange="onMetricaChange()">
+      <option value="bultos">Bultos</option>
+      <option value="hectolitros">Hectolitros</option>
+      <option value="pallets">Pallets</option>
+      <option value="up">UP</option>
+      <option value="pedidos">PDV atendidos</option>
+      <option value="clientes">Clientes</option>
+    </select>
+    <span id="hdrFecha" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></span>
+  </div>
+</div>
+
+<div class="layout">
+<!-- SIDEBAR -->
+<div class="sidebar">
+
+  <!-- CALENDAR -->
+  <div>
+    <div class="cal-nav">
+      <span id="calLbl"></span>
+      <div>
+        <button class="nav-btn" onclick="changeMonth(-1)">&#8249;</button>
+        <button class="nav-btn" onclick="changeMonth(1)">&#8250;</button>
+      </div>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+  </div>
+
+  <!-- LEGEND -->
+  <div class="legend">
+    <div class="leg"><div class="dot" style="background:rgba(245,166,35,.6);border:1px solid var(--acc)"></div>Día pico</div>
+    <div class="leg"><div class="dot" style="background:rgba(167,139,250,.5);border:1px solid var(--pur)"></div>Feriado</div>
+    <div class="leg"><div class="dot" style="border:1px solid var(--blu);background:transparent"></div>Hoy</div>
+    <div class="leg"><div class="dot" style="background:var(--acc)"></div>Seleccionado</div>
+    <div class="leg"><div class="dot" style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.5)"></div>Evento</div>
+  </div>
+
+  <!-- MINI STATS -->
+  <div>
+    <div class="sec" style="margin-bottom:8px">Resumen del mes</div>
+    <div class="mini-stats">
+      <div class="mini"><span class="lbl">Días pico</span><span class="val" id="sPicos" style="color:var(--acc)">—</span></div>
+      <div class="mini"><span class="lbl" id="sMetricLbl">Total métrica</span><span class="val" id="sMetricVal" style="color:var(--acc)">—</span></div>
+      <div class="mini"><span class="lbl">Promedio mes</span><span class="val" id="sAvg" style="color:var(--blu)">—</span></div>
+      <div class="mini"><span class="lbl">Umbral pico</span><span class="val" id="sUmbral" style="color:var(--grn)">—</span></div>
+      <div class="mini"><span class="lbl">Salidas únicas</span><span class="val" id="sCamiones" style="color:var(--pur)">—</span></div>
+      <div class="mini"><span class="lbl">PDV únicos</span><span class="val" id="sClientes" style="color:var(--grn)">—</span></div>
+    </div>
+  </div>
+
+  <!-- UMBRAL CONTROL -->
+  <div class="ctrl-block">
+    <label>Umbral pico — % sobre promedio</label>
+    <div class="ctrl-row">
+      <input type="range" id="sliderUmbral" min="1.05" max="2.0" step="0.05" value="1.20" oninput="onUmbralChange(this.value)" onchange="loadMes()">
+      <span class="val-badge" id="lblUmbral">+20%</span>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button class="btn sm" onclick="setUmbral(1.10)">+10%</button>
+      <button class="btn sm" onclick="setUmbral(1.20)">+20%</button>
+      <button class="btn sm" onclick="setUmbral(1.35)">+35%</button>
+      <button class="btn sm primary" onclick="guardarUmbral()">Guardar</button>
+    </div>
+    <div id="umbralMsg" style="font-size:10px;color:var(--grn);min-height:14px"></div>
+  </div>
+
+</div>
+
+<!-- MAIN PANEL -->
+<div class="main">
+
+  <!-- TABS ROW -->
+  <div class="tabs-row">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('kpis',this)">KPIs</div>
+      <div class="tab" onclick="switchTab('historico',this)">Histórico</div>
+      <div class="tab" onclick="switchTab('analisis',this)">Rechazos</div>
+      <div class="tab" onclick="switchTab('dropsize',this)">Dropsize</div>
+      <div class="tab" onclick="switchTab('planificacion',this)">Plan Mensual</div>
+      <div class="tab" onclick="switchTab('operaciones',this)">Operaciones</div>
+      <div class="tab" onclick="switchTab('simulador',this)">Simulador</div>
+      <div class="tab" onclick="switchTab('upload',this)">Cargar datos</div>
+      <div class="tab" onclick="switchTab('config',this)">Configuración</div>
+      <div class="tab" onclick="switchTab('ayuda',this)">Ayuda</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <select id="selPeriodoHist" onchange="onPeriodoChange()">
+        <option value="6">6 meses</option>
+        <option value="12" selected>12 meses</option>
+        <option value="24">24 meses</option>
+      </select>
+      <button class="btn" onclick="reload()">↻ Actualizar</button>
+    </div>
+  </div>
+
+  <!-- TAB KPIs -->
+  <div id="tab-kpis">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div class="sec" style="margin-bottom:0">Indicadores del mes seleccionado</div>
+      <button class="btn" onclick="abrirReportePicos()" style="font-size:11px;padding:4px 12px;border-color:var(--acc);color:var(--acc)" title="Abrir reporte de días pico para presentación PPT">🖨 Reporte PPT</button>
+    </div>
+    <div class="kpi-grid" id="kpiGrid"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+    <div class="sec" style="margin-top:8px">Días del mes — detalle</div>
+    <div class="box"><div id="tablaDias"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB HISTÓRICO -->
+  <div id="tab-historico" style="display:none">
+    <div class="sec">Evolución mensual</div>
+    <div class="box"><div class="chart-wrap" id="barHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
+    <div class="sec" style="margin-top:8px">Tabla resumen</div>
+    <div class="box"><div id="tablaHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB ANALISIS RECHAZOS -->
+  <div id="tab-analisis" style="display:none">
+    <div class="sec">Entrega y rechazos mes por mes</div>
+    <div class="kpi-grid" id="analisisHlKpis"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+    <div class="box" style="margin-top:8px">
+      <div class="hl-legend">
+        <span><i class="dot" style="background:var(--grn)"></i>HL entregados</span>
+        <span><i class="dot" style="background:var(--red)"></i>HL rechazados</span>
+        <span><i class="dot" style="background:var(--blu)"></i>Bultos sin rechazo</span>
+        <span><i class="dot" style="background:var(--acc)"></i>Bultos rechazados</span>
+      </div>
+      <div id="analisisHlChart"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="sec" style="margin-top:8px">Tabla mensual</div>
+    <div class="box"><div id="analisisHlTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+    <div class="sec" style="margin-top:8px">Detalle completo de motivos</div>
+    <div class="box"><div id="analisisHlMotivos"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB DROPSIZE -->
+  <div id="tab-dropsize" style="display:none">
+    <div class="box">
+      <div class="sec" style="margin-bottom:12px">Filtros Dropsize</div>
+      <div class="filter-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="dropSucursal" onchange="loadDropsize()"><option value="TODAS">Todas</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Mes</label>
+          <input type="month" id="dropMes" onchange="setDropsizeDatesFromMes()">
+        </div>
+        <div class="filter-field">
+          <label>Desde</label>
+          <input type="date" id="dropDesde">
+        </div>
+        <div class="filter-field">
+          <label>Hasta</label>
+          <input type="date" id="dropHasta">
+        </div>
+        <div class="filter-field">
+          <label>Ranking</label>
+          <select id="dropRankingUnidad" onchange="loadDropsize()">
+            <option value="bultos">Bultos</option>
+            <option value="hl">HL</option>
+            <option value="pallets">Pallets</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn primary" onclick="loadDropsize()">Aplicar</button>
+          <button class="btn" onclick="exportDropsizeExcel()">Excel</button>
+          <button class="btn" onclick="recalcularDropsize()">Recalcular</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec" style="margin-top:8px">Indicadores Dropsize</div>
+    <div class="kpi-grid" id="dropKpis"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+
+    <div class="chart-grid" style="margin-top:8px">
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Evolución diaria</div>
+        <div class="chart-wrap"><canvas id="dropChartDiario"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Evolución mensual</div>
+        <div class="chart-wrap"><canvas id="dropChartMensual"></canvas></div>
+      </div>
+    </div>
+
+    <div class="drop-two" style="margin-top:12px">
+      <div>
+        <div class="sec" style="margin-bottom:8px">Ranking de sucursales</div>
+        <div class="box"><div id="dropRanking"><div class="loading"><div class="spinner"></div></div></div></div>
+      </div>
+      <div>
+        <div class="sec" style="margin-bottom:8px">Comparativo</div>
+        <div class="box"><div id="dropComparativo"><div class="loading"><div class="spinner"></div></div></div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px">
+      <div class="sec" style="margin-bottom:8px">Días pico Dropsize</div>
+      <div class="box">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+          <select id="dropPicoMetrica">
+            <option value="todos">Todos</option>
+            <option value="bultos">Bultos</option>
+            <option value="hl">HL</option>
+            <option value="pallets">Pallets</option>
+            <option value="clientes">Clientes</option>
+          </select>
+          <button class="btn sm" onclick="loadDropsizePicos()">Actualizar picos</button>
+        </div>
+        <div id="dropPicos"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <div class="sec" style="margin-top:12px">Tabla histórica diaria</div>
+    <div class="box"><div id="dropTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB PLANIFICACION PICOS -->
+  <div id="tab-planificacion" style="display:none">
+
+    <!-- Compact header -->
+    <div class="box" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
+        <select id="planEmpresa" onchange="loadCatalogoSucursalesPlanificacion()" title="Empresa"><option value="1">Empresa 1</option></select>
+        <select id="planSucursal" title="Sucursal"><option value="TODAS">Todas las sucursales</option></select>
+        <input type="number" id="planAnio" min="2020" max="2100" style="width:72px" title="Año plan">
+        <select id="planMes" title="Mes plan">
+          <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+          <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+          <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
+        <button class="btn sm" onclick="loadPlanificacion()" title="Buscar plan existente para el mes seleccionado">↻ Buscar</button>
+        <button class="btn primary sm" onclick="generarPlanificacion()">Generar</button>
+        <button class="btn sm" onclick="actualizarRealPlanificacion()">Actualizar real</button>
+        <button class="btn sm" onclick="recalcularPlanificacion()">Recalcular</button>
+        <span style="color:var(--brd);padding:0 2px">|</span>
+        <button class="btn sm" onclick="exportPlanificacion('xlsx')">Excel</button>
+        <button class="btn sm" onclick="exportPlanificacion('csv')">CSV</button>
+        <button class="btn sm" onclick="exportPlanificacion('pdf')">PDF</button>
+        <span id="planMsg" class="plan-note"></span>
+      </div>
+      <details>
+        <summary style="font-size:11px;color:var(--muted);cursor:pointer;user-select:none;letter-spacing:.3px">▸ Ajustes avanzados</summary>
+        <div class="plan-grid" style="margin-top:10px">
+          <div class="filter-field"><label>Año base histórico</label><input type="number" id="planAnioBase" min="2020" max="2100"></div>
+          <div class="filter-field"><label>Crec. HL</label><input type="number" id="planFactorHl" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Crec. PDV</label><input type="number" id="planFactorPdv" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Crec. salidas</label><input type="number" id="planFactorSalidas" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Ajuste rechazos</label><input type="number" id="planFactorRechazos" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Ajuste días pico</label><input type="number" id="planFactorDiasPico" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Ajuste camiones</label><input type="number" id="planFactorCamiones" step="0.01" value="1.00"></div>
+          <div class="filter-field"><label>Ajuste empleados</label><input type="number" id="planFactorEmpleados" step="0.01" value="1.00"></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Plan subtabs -->
+    <div class="plan-tabs" style="margin-bottom:0">
+      <div class="plan-tab active" onclick="switchPlanSubtab('resumen',this)">Resumen</div>
+      <div class="plan-tab" onclick="switchPlanSubtab('planificacion',this)">Días</div>
+      <div class="plan-tab" onclick="switchPlanSubtab('escenarios',this)">Escenarios</div>
+      <div class="plan-tab" onclick="switchPlanSubtab('simulador',this)">Simulador</div>
+      <div class="plan-tab" onclick="switchPlanSubtab('alertas',this)">Alertas</div>
+    </div>
+
+    <div id="plan-sub-resumen" class="plan-sub">
+      <div class="sec" style="margin-top:12px">KPIs plan vs real</div>
+      <div class="kpi-grid" id="planKpis"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+      <div class="chart-grid" style="margin-top:12px">
+        <div class="box"><div class="sec" style="margin-bottom:10px">HL plan vs real</div><div class="chart-wrap"><canvas id="planChartHl"></canvas></div></div>
+        <div class="box"><div class="sec" style="margin-bottom:10px">ICM</div><div class="chart-wrap"><canvas id="planChartIcm"></canvas></div></div>
+      </div>
+      <div class="chart-grid" style="margin-top:12px">
+        <div class="box"><div class="sec" style="margin-bottom:10px">Salidas plan vs real</div><div class="chart-wrap"><canvas id="planChartSalidas"></canvas></div></div>
+        <div class="box"><div class="sec" style="margin-bottom:10px">PDV plan vs real</div><div class="chart-wrap"><canvas id="planChartPdv"></canvas></div></div>
+      </div>
+    </div>
+
+    <div id="plan-sub-planificacion" class="plan-sub" style="display:none">
+      <div class="sec" style="margin-top:12px">Planificación generada</div>
+      <div class="box"><div id="planResumenTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+      <div class="sec" style="margin-top:12px">Detalle diario</div>
+      <div class="box"><div id="planDiasTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+      <div class="chart-grid" style="margin-top:12px">
+        <div class="box"><div class="sec" style="margin-bottom:10px">Picos planificados vs reales</div><div class="chart-wrap"><canvas id="planChartPicos"></canvas></div></div>
+        <div class="box"><div class="sec" style="margin-bottom:10px">Capacidad vs demanda</div><div class="chart-wrap"><canvas id="planChartCapacidad"></canvas></div></div>
+      </div>
+    </div>
+
+    <div id="plan-sub-escenarios" class="plan-sub" style="display:none">
+      <div class="box" style="margin-top:12px">
+        <div class="sec" style="margin-bottom:10px">Plan vigente / escenarios</div>
+        <div class="plan-grid">
+          <div class="filter-field"><label>Escenario activo</label><select id="planEscenarioSelect"></select></div>
+          <div class="filter-field"><label>Nombre ajuste</label><input type="text" id="planEscNombre" value="Ajuste manual"></div>
+          <div class="filter-field"><label>HL plan</label><input type="number" id="planEscHl" step="0.01"></div>
+          <div class="filter-field"><label>Días pico</label><input type="number" id="planEscDiasPico" step="0.01"></div>
+          <div class="filter-field"><label>Rechazos %</label><input type="number" id="planEscRechazos" step="0.01"></div>
+          <div class="filter-field"><label>Salidas</label><input type="number" id="planEscSalidas" step="0.01"></div>
+          <div class="filter-field"><label>PDV</label><input type="number" id="planEscPdv" step="0.01"></div>
+          <div class="filter-field"><label>Camiones prom.</label><input type="number" id="planEscCamionesProm" step="0.01"></div>
+          <div class="filter-field"><label>Camiones pico</label><input type="number" id="planEscCamionesPico" step="0.01"></div>
+          <div class="filter-field"><label>Empleados norm.</label><input type="number" id="planEscEmpNorm" step="0.01"></div>
+          <div class="filter-field"><label>Empleados pico</label><input type="number" id="planEscEmpPico" step="0.01"></div>
+        </div>
+        <div class="plan-actions" style="margin-top:10px">
+          <button class="btn" onclick="activarEscenarioPlanificacion()">Activar seleccionado</button>
+          <button class="btn primary" onclick="guardarEscenarioPlanificacion()">Guardar ajuste y activar</button>
+          <span id="planEscenarioMsg" class="plan-note"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="plan-sub-simulador" class="plan-sub" style="display:none">
+      <div class="box" style="margin-top:12px">
+        <div class="plan-grid">
+          <div class="filter-field"><label>+ % HL</label><input type="number" id="simDeltaHl" step="0.1" value="5"></div>
+          <div class="filter-field"><label>+ % PDV</label><input type="number" id="simDeltaPdv" step="0.1" value="10"></div>
+          <div class="filter-field"><label>+ días pico</label><input type="number" id="simDeltaPicos" step="1" value="2"></div>
+          <div class="filter-field"><label>+ % rechazos</label><input type="number" id="simDeltaRechazos" step="0.1" value="3"></div>
+        </div>
+        <div class="plan-actions" style="margin-top:10px"><button class="btn primary" onclick="simularPlanificacion()">Simular</button></div>
+      </div>
+      <div class="kpi-grid" id="planSimResultado" style="margin-top:12px"></div>
+    </div>
+
+    <div id="plan-sub-alertas" class="plan-sub" style="display:none">
+      <div class="sec" style="margin-top:12px">Alertas predictivas</div>
+      <div class="box"><div id="planAlertas"><div class="loading"><div class="spinner"></div></div></div></div>
+    </div>
+
+    <!-- Compat stubs for JS references to old subtabs -->
+    <div id="plan-sub-dias" class="plan-sub" style="display:none"></div>
+    <div id="plan-sub-comparativo" class="plan-sub" style="display:none"></div>
+    <div id="plan-sub-capacidad" class="plan-sub" style="display:none"></div>
+    <div id="plan-sub-configuracion" class="plan-sub" style="display:none"></div>
+  </div>
+
+  <!-- TAB UPLOAD -->
+  <div id="tab-upload" style="display:none">
+    <div class="upload-panel">
+      <div class="upload-hdr" onclick="toggleUpload()">
+        <span>Carga de archivos</span><span id="uploadToggleIcon">▾</span>
+      </div>
+      <div class="upload-body" id="uploadBody">
+        <div class="upload-row">
+          <span class="upload-lbl">Artículos (CSV)</span>
+          <input type="file" id="fileArticulos" accept=".csv">
+          <button class="btn sm" onclick="uploadFile('articulos')">Subir</button>
+          <span class="upload-status" id="stArticulos"></span>
+        </div>
+        <div class="upload-meta">
+          <span>Articulos en base</span>
+          <strong id="articulosCount">...</strong>
+        </div>
+        <div class="upload-meta">
+          <span>Articulos sin clasificar (mes)</span>
+          <strong id="articulosSinClasificar">...</strong>
+        </div>
+        <div id="articulosSinClasificarInfo" style="font-size:11px;color:var(--muted);line-height:1.5"></div>
+        <div class="upload-row" style="margin-bottom:2px">
+          <span class="upload-lbl" style="color:var(--fg);font-weight:500">Sucursal</span>
+          <select id="uploadSucursal" style="font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+            <option value="">— seleccionar —</option>
+          </select>
+          <span></span><span></span>
+        </div>
+        <div class="upload-row">
+          <span class="upload-lbl">Resumen repartos</span>
+          <input type="file" id="fileResumen" accept=".xlsx,.xls">
+          <div style="display:flex;gap:4px">
+            <button class="btn sm" onclick="uploadFile('resumen',false)">Subir</button>
+            <button class="btn sm danger" onclick="uploadFile('resumen',true)" title="Reemplaza datos históricos">Force</button>
+          </div>
+          <span class="upload-status" id="stResumen"></span>
+        </div>
+        <div class="upload-row">
+          <span class="upload-lbl">Clientes</span>
+          <input type="file" id="fileClientes" accept=".csv">
+          <button class="btn sm" onclick="uploadFile('clientes')">Subir</button>
+          <span class="upload-status" id="stClientes"></span>
+        </div>
+        <div class="upload-row">
+          <span class="upload-lbl">Transportes</span>
+          <input type="file" id="fileTransportes" accept=".xlsx,.xls">
+          <button class="btn sm" onclick="uploadFile('transportes')">Subir</button>
+          <span class="upload-status" id="stTransportes"></span>
+        </div>
+        <div class="upload-row">
+          <span class="upload-lbl">Detalle ventas/rechazos</span>
+          <input type="file" id="fileVentasDetalle" accept=".xlsx,.xls">
+          <div style="display:flex;gap:4px">
+            <button class="btn sm" onclick="uploadFile('ventasDetalle',false)">Subir</button>
+            <button class="btn sm danger" onclick="uploadFile('ventasDetalle',true)" title="Reemplaza datos históricos">Force</button>
+          </div>
+          <span class="upload-status" id="stVentasDetalle"></span>
+        </div>
+        <div class="upload-row">
+          <span class="upload-lbl">Rechazos</span>
+          <input type="file" id="fileRechazos" accept=".xlsx,.xls">
+          <button class="btn sm" onclick="uploadFile('rechazos')">Subir</button>
+          <span class="upload-status" id="stRechazos"></span>
+        </div>
+        <div style="font-size:11px;color:var(--muted);padding:6px 0;line-height:1.6">
+          <strong style="color:var(--acc)">Nota de seguridad:</strong> El botón <strong>Subir</strong> reemplaza solo el mes en curso.
+          El botón <strong>Force</strong> reemplaza también meses históricos — usar con cuidado.
+        </div>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:12px">Eventos especiales</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Marcá días en que <strong>no se trabaja</strong> (paros, feriados extra, etc.).<br>
+        La venta de ese día se desplaza antes o después, generando picos cercanos.
+      </div>
+      <div style="display:grid;grid-template-columns:140px 120px 1fr auto;gap:8px;align-items:center;margin-bottom:8px">
+        <select id="evSucursal" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+          <option value="TODAS">Todas</option>
+        </select>
+        <input type="date" id="evFecha" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+        <input type="text" id="evDesc" placeholder="Descripción (ej: Paro transportistas)" style="font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+        <button class="btn sm primary" onclick="addEvento()">Agregar</button>
+      </div>
+      <div id="evList"></div>
+    </div>
+
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:12px">Feriados</div>
+
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Importar desde Google Sheets (columnas: Fecha, Descripcion, Tipo)</div>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="inputFeriadosUrl" placeholder="URL del Google Sheet de feriados" style="flex:1">
+        <button class="btn primary" onclick="syncFeriados()">Sincronizar</button>
+        <button class="btn danger" onclick="limpiarAnio()" title="Borra todos los feriados del año visible en el calendario">Limpiar año</button>
+      </div>
+      <div id="stFeriados" style="font-size:11px;margin-top:6px;color:var(--grn);min-height:16px"></div>
+
+      <div style="border-top:1px solid var(--brd);padding-top:12px;margin-top:10px">
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Agregar feriado manualmente</div>
+        <div style="display:grid;grid-template-columns:130px 1fr 120px auto;gap:8px;align-items:center">
+          <input type="date" id="ferFecha" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+          <input type="text" id="ferDesc" placeholder="Descripción (ej: Carnaval)" style="font-size:12px;padding:3px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+          <select id="ferTipo" style="font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--fg)">
+            <option value="nacional">Nacional / Oficial AR</option>
+            <option value="local">Local / Empresa</option>
+          </select>
+          <button class="btn sm primary" onclick="addFeriado()">Agregar</button>
+        </div>
+      </div>
+
+      <div id="ferList" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- TAB OPERACIONES -->
+  <div id="tab-operaciones" style="display:none">
+
+    <div class="plan-tabs" style="margin-bottom:14px">
+      <div class="plan-tab active" onclick="switchOperSubtab('flota',this)">Flota</div>
+      <div class="plan-tab" onclick="switchOperSubtab('capacidad',this)">Capacidad</div>
+      <div class="plan-tab" onclick="switchOperSubtab('planilla',this)">Planilla operativa</div>
+    </div>
+
+    <!-- SUBTAB: Flota -->
+    <div id="oper-sub-flota">
+
+      <div class="plan-tabs" style="margin-bottom:14px">
+        <div class="plan-tab active" onclick="switchFlotaSubtab('activacion',this)">Activación mensual</div>
+        <div class="plan-tab" onclick="switchFlotaSubtab('camiones',this)">Camiones</div>
+      </div>
+
+      <!-- Activación mensual -->
+      <div id="flota-activacion">
+        <div class="box">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+            <div class="sec" style="margin:0">Activación de flota por mes</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <select id="flotaSucursal" onchange="loadFlota()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+                <option value="TODAS">Todas las sucursales</option>
+              </select>
+              <input type="number" id="flotaAnio" value="" min="2020" max="2100" style="width:70px;font-size:12px;padding:4px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)" onchange="loadFlota()">
+              <select id="flotaMes" onchange="loadFlota()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+                <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+                <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+                <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+                <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+              </select>
+              <button class="btn sm primary" onclick="loadFlota()">↻ Cargar</button>
+              <button class="btn sm" onclick="syncFlotaDesdeTransportes()" id="btnSyncFlota">⬆ Sync desde Transportes</button>
+            </div>
+          </div>
+          <div id="flotaSummary" style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap"></div>
+          <div id="flotaSyncMsg" style="font-size:11px;min-height:14px;margin-bottom:8px"></div>
+          <div style="overflow-x:auto">
+            <table class="rtbl" style="width:100%;min-width:600px">
+              <thead>
+                <tr>
+                  <th style="width:70px">Código</th>
+                  <th>Descripción</th>
+                  <th style="width:90px">Placa</th>
+                  <th style="width:110px">Sucursal</th>
+                  <th style="width:90px">Cap. UP</th>
+                  <th style="width:130px">Estado mes</th>
+                  <th style="width:180px">Motivo</th>
+                  <th style="width:70px">Guardar</th>
+                </tr>
+              </thead>
+              <tbody id="flotaTbody">
+                <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:20px">Seleccioná mes y hacé clic en Cargar</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- CRUD Camiones -->
+      <div id="flota-camiones" style="display:none">
+        <div class="box" style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+            <div class="sec" style="margin:0" id="camionFormTitulo">Nuevo camión</div>
+            <div style="display:flex;gap:8px">
+              <button class="btn sm primary" onclick="guardarCamion()">Guardar</button>
+              <button class="btn sm" onclick="limpiarFormCamion()">Limpiar</button>
+            </div>
+          </div>
+          <input type="hidden" id="camionId">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px">
+            <div class="filter-field"><label>Código *</label><input type="text" id="camCodigo" placeholder="Ej: 1100"></div>
+            <div class="filter-field" style="grid-column:span 2"><label>Descripción *</label><input type="text" id="camDescripcion" placeholder="Ej: (19) IVECO TECTOR (KTO613)"></div>
+            <div class="filter-field"><label>Sucursal *</label><select id="camSucursal"><option value="">— seleccionar —</option></select></div>
+            <div class="filter-field"><label>Marca</label><input type="text" id="camMarca" placeholder="Ej: IVECO"></div>
+            <div class="filter-field"><label>Modelo</label><input type="text" id="camModelo" placeholder="Ej: 2022"></div>
+            <div class="filter-field"><label>Placa</label><input type="text" id="camPlaca" placeholder="Ej: KTO613"></div>
+            <div class="filter-field"><label>Carga máx (kg)</label><input type="number" id="camCargaKg" min="0" step="any" placeholder="Ej: 11400"></div>
+            <div class="filter-field"><label>Capacidad (UP)</label><input type="number" id="camCapacidadUp" min="0" step="any" placeholder="Ej: 600"></div>
+            <div class="filter-field"><label>Propio</label><select id="camPropio"><option value="1">Sí</option><option value="0">No (tercero)</option></select></div>
+            <div class="filter-field"><label>Activo base</label><select id="camActivoBase"><option value="1">Sí</option><option value="0">No</option></select></div>
+            <div class="filter-field"><label>Anulado</label><select id="camAnulado"><option value="0">No</option><option value="1">Sí</option></select></div>
+            <div class="filter-field"><label>Depósito ID</label><input type="text" id="camDepositoId" placeholder="Ej: 1"></div>
+            <div class="filter-field" style="grid-column:span 2"><label>Nombre depósito</label><input type="text" id="camDepositoNombre" placeholder="Ej: CASA CENTRAL"></div>
+            <div class="filter-field" style="grid-column:1/-1"><label>Observaciones</label><input type="text" id="camObservaciones" placeholder=""></div>
+          </div>
+          <div id="camionMsg" style="font-size:11px;min-height:16px;margin-top:10px"></div>
+        </div>
+        <div class="box">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <div class="sec" style="margin:0">Lista de camiones</div>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="text" id="camBuscar" placeholder="Buscar código, descripción o placa…" oninput="filtrarCamiones()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt);width:260px">
+              <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:4px">
+                <input type="checkbox" id="camMostrarAnulados" onchange="loadCamiones()"> Mostrar anulados
+              </label>
+            </div>
+          </div>
+          <div id="camionesResumen" style="display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap"></div>
+          <div style="overflow-x:auto">
+            <table class="rtbl" style="width:100%;min-width:700px">
+              <thead>
+                <tr>
+                  <th style="width:70px">Código</th>
+                  <th>Descripción</th>
+                  <th style="width:80px">Placa</th>
+                  <th style="width:100px">Sucursal</th>
+                  <th style="width:80px">Cap. UP</th>
+                  <th style="width:80px">Carga kg</th>
+                  <th style="width:70px">Propio</th>
+                  <th style="width:70px">Base</th>
+                  <th style="width:90px">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="camionesTbody">
+                <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /oper-sub-flota -->
+
+    <!-- SUBTAB: Capacidad -->
+    <div id="oper-sub-capacidad" style="display:none">
+      <div class="sec" style="margin-top:12px">Plan vs capacidad</div>
+      <div class="box" style="margin-bottom:12px"><div id="planDotacionExterna"><div class="loading"><div class="spinner"></div></div></div></div>
+      <div class="box" style="margin-bottom:12px"><div id="planDotacionEntregaReal"><div class="loading"><div class="spinner"></div></div></div></div>
+      <div class="box" style="margin-bottom:12px"><div id="planFlotaOperativa"><div class="loading"><div class="spinner"></div></div></div></div>
+      <div class="box"><div id="planCapacidadTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+    </div>
+
+    <!-- SUBTAB: Planilla operativa -->
+    <div id="oper-sub-planilla" style="display:none">
+      <div class="box">
+        <!-- Filtros -->
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <div class="sec" style="margin:0">Salidas diarias por sucursal</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <select id="planillaAnio" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)"></select>
+            <select id="planillaMes" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+              <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+              <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+              <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+              <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+            </select>
+            <button class="btn sm primary" onclick="cargarPlanillaOperativa()">↻ Cargar</button>
+            <button class="btn sm" style="border-color:var(--grn);color:var(--grn)" onclick="syncYCargarPlanilla()" id="planillaBtnSync">↻ Sincronizar y cargar</button>
+          </div>
+        </div>
+        <div id="planillaSyncMsg" style="font-size:11px;min-height:14px;margin-bottom:8px;color:var(--muted)"></div>
+
+        <!-- Contenido: una tabla por sucursal -->
+        <div id="planillaContenido">
+          <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px">
+            Seleccioná año y mes y hacé clic en <strong>Cargar</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TAB CONFIG -->
+  <div id="tab-config" style="display:none">
+
+    <div class="box" style="margin-bottom:14px">
+      <div class="sec" style="margin-bottom:12px">Sucursales</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px">
+        Administrá las sucursales disponibles en el sistema. El ID es el código interno (ej: 1, 2).
+      </div>
+      <div style="display:grid;grid-template-columns:80px 1fr 80px auto;gap:8px;align-items:center;margin-bottom:10px">
+        <input type="text" id="sucId" placeholder="ID (ej: 3)" style="font-size:12px;padding:4px 7px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+        <input type="text" id="sucNombre" placeholder="Nombre (ej: Mar del Plata)" style="font-size:12px;padding:4px 7px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+        <select id="sucActiva" style="font-size:12px;padding:4px 7px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
+          <option value="1">Activa</option>
+          <option value="0">Inactiva</option>
+        </select>
+        <button class="btn sm primary" onclick="guardarSucursal()">Guardar</button>
+      </div>
+      <div id="sucMsg" style="font-size:11px;min-height:14px;margin-bottom:8px"></div>
+      <div id="sucList"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+    </div>
+
+    <div class="box">
+      <div class="sec" style="margin-bottom:12px">Motivos de rechazo</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Definí qué motivos se cuentan como rechazo real en los cálculos.<br>
+        Los marcados como <strong style="color:var(--grn)">SÍ</strong> afectan los indicadores de % rechazo del mes e histórico.
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <button class="btn sm" id="btnSyncRechazos" onclick="syncRechazos()">↻ Sincronizar desde detalle</button>
+        <span id="syncRechazosMsg" style="font-size:11px;min-height:14px"></span>
+      </div>
+      <div id="rechazosGrid"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:14px">URLs de Google Sheets</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="settings-row">
+          <label>Equipos de reparto</label>
+          <input type="text" id="cfgEquiposUrl" placeholder="https://docs.google.com/spreadsheets/...">
+        </div>
+        <div class="settings-row">
+          <label>Disponibilidad camiones</label>
+          <input type="text" id="cfgDisponiblesUrl" placeholder="https://docs.google.com/spreadsheets/...">
+        </div>
+        <div class="settings-row">
+          <label>Dotación real entrega</label>
+          <input type="text" id="cfgDotacionEntregaUrl" placeholder="https://docs.google.com/spreadsheets/...">
+        </div>
+        <div class="settings-row">
+          <label>Recargas entrega</label>
+          <input type="text" id="cfgDotacionRecargasUrl" placeholder="https://docs.google.com/spreadsheets/...">
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn primary" onclick="saveConfig()">Guardar configuración</button>
+        <span id="cfgMsg" style="font-size:11px;color:var(--grn);margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:14px">Parámetros de detección</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="settings-row">
+          <label>Sucursal</label>
+          <select id="cfgSucursal"><option value="TODAS">Todas</option></select>
+        </div>
+        <div class="settings-row">
+          <label>Umbral (%)</label>
+          <input type="number" id="cfgUmbral" min="1" max="3" step="0.05" value="1.20">
+        </div>
+        <div class="settings-row">
+          <label>Métrica base</label>
+          <select id="cfgMetrica">
+            <option value="bultos">Bultos</option>
+            <option value="hectolitros">Hectolitros</option>
+            <option value="pallets">Pallets</option>
+            <option value="up">UP</option>
+            <option value="pedidos">PDV atendidos</option>
+            <option value="clientes">Clientes</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn primary" onclick="saveParams()">Guardar parámetros</button>
+        <span id="paramsMsg" style="font-size:11px;color:var(--grn);margin-left:10px"></span>
+      </div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:14px">Objetivos KPI</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Para rechazos usá objetivos de máximo permitido. Ejemplo: <strong style="color:var(--grn)">% rechazo HL objetivo 2</strong> para marcar cumplimiento cuando el valor sea menor o igual a 2%.
+      </div>
+      <input type="hidden" id="kpiObjId">
+      <div class="objective-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="kpiObjSucursal"><option value="TODAS">Todas</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Indicador</label>
+          <select id="kpiObjIndicador">
+            <option value="pct_rechazo_hl">% rechazo HL</option>
+            <option value="pct_rechazo_bultos">% rechazo bultos</option>
+            <option value="pct_rechazo_pedidos">% rechazo PDV</option>
+            <option value="rmcyo_pct_rechazo_hl">% RMCYO rechazo HL</option>
+            <option value="rmcyo_pct_rechazo_bultos">% RMCYO rechazo bultos</option>
+            <option value="rmcyo_pct_rechazo_pedidos">% RMCYO rechazo PDV</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Objetivo</label>
+          <input type="number" id="kpiObjObjetivo" step="0.01" min="0" placeholder="2">
+        </div>
+        <div class="filter-field">
+          <label>Alerta</label>
+          <input type="number" id="kpiObjAlerta" step="0.01" min="0" placeholder="Opcional">
+        </div>
+        <div class="filter-field">
+          <label>Desde</label>
+          <input type="date" id="kpiObjDesde">
+        </div>
+        <div class="filter-field">
+          <label>Hasta</label>
+          <input type="date" id="kpiObjHasta">
+        </div>
+        <button class="btn primary" onclick="saveKpiObjetivo()">Guardar</button>
+      </div>
+      <div id="kpiObjMsg" style="font-size:11px;min-height:16px;margin-top:8px"></div>
+      <div id="kpiObjetivos" style="margin-top:10px"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="box" style="margin-top:14px">
+      <div class="sec" style="margin-bottom:14px">Objetivos Dropsize</div>
+      <input type="hidden" id="dropObjId">
+      <div class="objective-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="dropObjSucursal"><option value="TODAS">Todas</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Unidad</label>
+          <select id="dropObjUnidad">
+            <option value="bultos">Bultos</option>
+            <option value="hl">HL</option>
+            <option value="pallets">Pallets</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Mínimo</label>
+          <input type="number" id="dropObjMin" step="0.01" min="0">
+        </div>
+        <div class="filter-field">
+          <label>Ideal</label>
+          <input type="number" id="dropObjIdeal" step="0.01" min="0">
+        </div>
+        <div class="filter-field">
+          <label>Desde</label>
+          <input type="date" id="dropObjDesde">
+        </div>
+        <div class="filter-field">
+          <label>Hasta</label>
+          <input type="date" id="dropObjHasta">
+        </div>
+        <button class="btn primary" onclick="saveDropsizeObjetivo()">Guardar</button>
+      </div>
+      <div id="dropObjMsg" style="font-size:11px;min-height:16px;margin-top:8px"></div>
+      <div id="dropObjetivos" style="margin-top:10px"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+  </div>
+
+  <!-- TAB AYUDA -->
+  <div id="tab-ayuda" style="display:none">
+    <div class="sec">Manual de uso de la app</div>
+    <div class="box">
+      <div class="sec" style="margin-bottom:10px">Flujo recomendado</div>
+      <table class="rtbl">
+        <thead><tr><th>Paso</th><th>Accion</th><th>Resultado esperado</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>Elegir mes, sucursal y metrica desde el panel lateral.</td><td>El dashboard carga KPIs, calendario y detalle diario.</td></tr>
+          <tr><td>2</td><td>Revisar KPIs y dias del mes.</td><td>Se identifican picos, feriados, eventos y volumen operativo.</td></tr>
+          <tr><td>3</td><td>Usar Historico, Rechazos y Dropsize para analizar tendencia.</td><td>Se compara desempeno mensual y calidad de entrega.</td></tr>
+          <tr><td>4</td><td>Entrar a Planificacion Picos y generar el plan del mes.</td><td>Se crea plan mensual, detalle diario, alertas y escenario automatico.</td></tr>
+          <tr><td>5</td><td>Actualizar real cuando ya existan datos cargados del mes.</td><td>Se calcula Plan vigente vs Real con desvios y semaforos.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="chart-grid" style="margin-top:12px">
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Pestanas principales</div>
+        <table class="rtbl">
+          <thead><tr><th>Pestana</th><th>Para que sirve</th></tr></thead>
+          <tbody>
+            <tr><td>KPIs</td><td>Resumen del mes, calendario y detalle por dia.</td></tr>
+            <tr><td>Historico</td><td>Evolucion mensual y tabla comparativa de volumen, PDV, rechazos y salidas.</td></tr>
+            <tr><td>Rechazos</td><td>Analisis de HL entregados, HL rechazados y calidad de entrega.</td></tr>
+            <tr><td>Dropsize</td><td>Seguimiento de volumen promedio por entrega, objetivos y evolucion.</td></tr>
+            <tr><td>Planificacion Picos</td><td>Plan operativo mensual, dias pico, simulador, capacidad y alertas.</td></tr>
+            <tr><td>Cargar datos</td><td>Carga de articulos, feriados y archivos necesarios para alimentar el sistema.</td></tr>
+            <tr><td>Configuracion</td><td>Parametros, objetivos y tablas de soporte operativo.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Planificacion Picos</div>
+        <table class="rtbl">
+          <thead><tr><th>Boton</th><th>Uso</th></tr></thead>
+          <tbody>
+            <tr><td>Generar planificacion</td><td>Crea o actualiza el plan usando el mismo mes del ano base historico.</td></tr>
+            <tr><td>Actualizar real</td><td>Toma los datos reales cargados y calcula desvios contra el plan vigente.</td></tr>
+            <tr><td>Recalcular</td><td>Regenera el plan si cambiaron factores, historico o configuracion.</td></tr>
+            <tr><td>Simular</td><td>Prueba escenarios sin guardar cambios sobre el plan.</td></tr>
+            <tr><td>Excel / CSV</td><td>Exporta el reporte Plan vs Real.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="chart-grid" style="margin-top:12px">
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Escenarios manuales</div>
+        <table class="rtbl">
+          <thead><tr><th>Concepto</th><th>Descripcion</th></tr></thead>
+          <tbody>
+            <tr><td>AUTO calendario operativo</td><td>Escenario generado por el sistema, asignando dias por equivalencia operativa.</td></tr>
+            <tr><td>Ajuste manual</td><td>Permite modificar HL, picos, salidas, PDV, camiones y empleados.</td></tr>
+            <tr><td>Plan vigente</td><td>Escenario activo usado para comparar contra el real.</td></tr>
+            <tr><td>Comparacion sin recalcular</td><td>Activar otro escenario cambia los desvios contra el real guardado sin recalcular el historico.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Datos necesarios</div>
+        <table class="rtbl">
+          <thead><tr><th>Dato</th><th>Estado / uso</th></tr></thead>
+          <tbody>
+            <tr><td>Ventas detalle</td><td>Fuente principal para HL, bultos, pallets, salidas y PDV.</td></tr>
+            <tr><td>Rechazos</td><td>Se usan para calcular porcentaje de rechazo.</td></tr>
+            <tr><td>Feriados</td><td>Mejoran la asignacion de dias equivalentes en planificacion.</td></tr>
+            <tr><td>Capacidad operativa</td><td>Necesaria para comparar demanda contra camiones, personal y capacidad HL.</td></tr>
+            <tr><td>Factor estacionalidad</td><td>Si no esta cargado, el sistema usa 1.00.</td></tr>
+            <tr><td>Personal operativo</td><td>Pendiente de fuente real para choferes, acompanantes y operarios.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="box" style="margin-top:12px">
+      <div class="sec" style="margin-bottom:10px">Lectura de estados</div>
+      <table class="rtbl">
+        <thead><tr><th>Estado</th><th>Criterio general</th><th>Accion sugerida</th></tr></thead>
+        <tbody>
+          <tr><td><span class="tag ok">NORMAL</span></td><td>El real esta dentro del plan o sin exceso relevante.</td><td>Monitorear.</td></tr>
+          <tr><td><span class="tag pico">ALERTA</span></td><td>El real supera el plan dentro del umbral configurado.</td><td>Revisar capacidad y causas del desvio.</td></tr>
+          <tr><td><span class="tag err">CRITICO</span></td><td>El real supera el umbral critico o hay falta de capacidad.</td><td>Tomar accion operativa: camiones, personal, rutas o priorizacion.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB SIMULADOR LOGÍSTICO -->
+  <div id="tab-simulador" style="display:none">
+    <div class="sec">Simulador Logístico Mensual</div>
+
+    <!-- SUB-TABS -->
+    <div class="plan-tabs" style="margin-bottom:14px">
+      <div class="plan-tab active" id="siml-tab-form"     onclick="switchSimlTab('form',this)">Simular</div>
+      <div class="plan-tab"        id="siml-tab-avance"   onclick="switchSimlTab('avance',this)">Avance del mes</div>
+      <div class="plan-tab"        id="siml-tab-cierre"   onclick="switchSimlTab('cierre',this)">Cierre</div>
+      <div class="plan-tab"        id="siml-tab-lista"    onclick="switchSimlTab('lista',this)">Guardadas</div>
+    </div>
+
+    <!-- PANEL: FORMULARIO + RESULTADO -->
+    <div id="siml-panel-form">
+      <div class="chart-grid" style="grid-template-columns:340px 1fr;align-items:start">
+
+        <!-- Formulario -->
+        <div class="box">
+          <div class="sec" style="margin-bottom:12px">Parámetros de simulación</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Sucursal</label>
+              <select id="simlSucursal" style="width:100%;margin-top:4px" onchange="simlSucursalChanged()">
+                <option value="TODAS">Todas</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Año a simular</label>
+                <input type="number" id="simlAnio" min="2020" max="2035" style="width:100%;margin-top:4px">
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Mes a simular</label>
+                <select id="simlMes" style="width:100%;margin-top:4px">
+                  <option value="1">Enero</option><option value="2">Febrero</option>
+                  <option value="3">Marzo</option><option value="4">Abril</option>
+                  <option value="5">Mayo</option><option value="6">Junio</option>
+                  <option value="7">Julio</option><option value="8">Agosto</option>
+                  <option value="9">Septiembre</option><option value="10">Octubre</option>
+                  <option value="11">Noviembre</option><option value="12">Diciembre</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Crecimiento esperado (%)</label>
+              <div class="ctrl-row" style="margin-top:4px">
+                <input type="range" id="simlCrecSlider" min="-20" max="50" step="1" value="0" oninput="document.getElementById('simlCrecVal').value=this.value">
+                <input type="number" id="simlCrecVal" value="0" min="-20" max="50" style="width:60px" oninput="document.getElementById('simlCrecSlider').value=this.value">
+                <span style="font-size:11px;color:var(--muted)">%</span>
+              </div>
+              <span id="simlFuenteCrec" style="font-size:9px;color:var(--blu);display:none"></span>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Ausentismo esperado (%)</label>
+              <div class="ctrl-row" style="margin-top:4px">
+                <input type="range" id="simlAusSlider" min="0" max="30" step="1" value="5" oninput="document.getElementById('simlAusVal').value=this.value">
+                <input type="number" id="simlAusVal" value="5" min="0" max="30" style="width:60px" oninput="document.getElementById('simlAusSlider').value=this.value">
+                <span style="font-size:11px;color:var(--muted)">%</span>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div>
+                <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Camiones disponibles</label>
+                <input type="number" id="simlCamiones" min="0" max="200" value="0" style="width:100%;margin-top:4px" placeholder="0 = ignorar">
+                <span id="simlFuenteCamiones" style="font-size:9px;color:var(--blu);display:none"></span>
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Días trabajados</label>
+                <input type="number" id="simlDias" min="1" max="31" value="22" style="width:100%;margin-top:4px">
+                <span id="simlFuenteDias" style="font-size:9px;color:var(--blu);display:none"></span>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Días pico esperados</label>
+              <input type="number" id="simlDiasPico" min="0" max="31" value="0" style="width:100%;margin-top:4px">
+              <span id="simlFuenteDiasPico" style="font-size:9px;color:var(--blu);display:none"></span>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Observaciones</label>
+              <input type="text" id="simlObs" placeholder="Opcional..." style="width:100%;margin-top:4px">
+            </div>
+            <div style="margin-top:4px">
+              <button class="btn" style="width:100%;border-color:var(--blu);color:var(--blu);font-size:11px" onclick="cargarSugerencias()" id="simlBtnSugerir">↓ Cargar desde el sistema</button>
+              <div id="simlSugerenciasMsg" style="font-size:10px;color:var(--muted);min-height:14px;margin-top:4px;text-align:center"></div>
+              <button class="btn" style="width:100%;border-color:var(--grn);color:var(--grn);font-size:11px;margin-top:4px" onclick="syncPlanillaOperativa()" id="simlBtnSync">↻ Sincronizar planilla operativa</button>
+              <div id="simlSyncMsg" style="font-size:10px;color:var(--muted);min-height:14px;margin-top:2px;text-align:center"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn primary" style="flex:1" onclick="ejecutarSimulacion()">Simular</button>
+              <button class="btn" style="flex:1" id="simlBtnGuardar" onclick="guardarSimulacion()" disabled>Guardar</button>
+            </div>
+            <button class="btn" style="width:100%;margin-top:6px;border-color:var(--pur);color:var(--pur)" onclick="simularTodasYGuardar()" id="simlBtnTodas">⊕ Guardar esta sucursal + General</button>
+            <div id="simlMsg" style="font-size:11px;min-height:16px;text-align:center"></div>
+          </div>
+        </div>
+
+        <!-- Resultado -->
+        <div id="simlResultado" style="display:flex;flex-direction:column;gap:12px">
+          <div style="padding:40px;text-align:center;color:var(--muted);background:var(--surf2);border-radius:8px;font-size:13px">
+            Completá el formulario y hacé clic en <strong style="color:var(--acc)">Simular</strong> para ver la proyección.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL: AVANCE -->
+    <div id="siml-panel-avance" style="display:none">
+      <div class="chart-grid" style="grid-template-columns:340px 1fr;align-items:start">
+        <div class="box">
+          <div class="sec" style="margin-bottom:12px">Avance del mes en curso</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Simulación</label>
+              <select id="simlAvanceId" style="width:100%;margin-top:4px"></select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Días transcurridos</label>
+              <input type="number" id="simlAvanceDias" min="1" max="31" value="10" style="width:100%;margin-top:4px">
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label style="font-size:10px;color:var(--muted)">HL real</label><input type="number" id="simlAvHl" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Bultos real</label><input type="number" id="simlAvBultos" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Pallets real</label><input type="number" id="simlAvPallets" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">PDV real</label><input type="number" id="simlAvPdv" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Salidas real</label><input type="number" id="simlAvSalidas" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Camiones real</label><input type="number" id="simlAvCamiones" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Personas real</label><input type="number" id="simlAvPersonas" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Rechazos real (%)</label><input type="number" id="simlAvRechazos" min="0" step="0.01" style="width:100%;margin-top:3px"></div>
+            </div>
+            <button class="btn primary" onclick="registrarAvance()">Registrar avance</button>
+            <div id="simlAvanceMsg" style="font-size:11px;min-height:16px;text-align:center"></div>
+          </div>
+        </div>
+        <div id="simlAvanceResultado">
+          <div style="padding:30px;text-align:center;color:var(--muted);background:var(--surf2);border-radius:8px;font-size:13px">
+            Seleccioná una simulación e ingresá los datos reales acumulados del mes.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL: CIERRE -->
+    <div id="siml-panel-cierre" style="display:none">
+      <div class="chart-grid" style="grid-template-columns:340px 1fr;align-items:start">
+        <div class="box">
+          <div class="sec" style="margin-bottom:12px">Cierre mensual</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">Simulación a cerrar</label>
+              <select id="simlCierreId" style="width:100%;margin-top:4px"></select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div><label style="font-size:10px;color:var(--muted)">HL real</label><input type="number" id="simlCiHl" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Bultos real</label><input type="number" id="simlCiBultos" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Pallets real</label><input type="number" id="simlCiPallets" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">PDV real</label><input type="number" id="simlCiPdv" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Salidas real</label><input type="number" id="simlCiSalidas" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Camiones real</label><input type="number" id="simlCiCamiones" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Personas real</label><input type="number" id="simlCiPersonas" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Rechazos real (%)</label><input type="number" id="simlCiRechazos" min="0" step="0.01" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Días pico real</label><input type="number" id="simlCiDiasPico" min="0" style="width:100%;margin-top:3px"></div>
+              <div><label style="font-size:10px;color:var(--muted)">Ausentismo real (%)</label><input type="number" id="simlCiAusentismo" min="0" step="0.01" style="width:100%;margin-top:3px"></div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted)">Conclusiones</label>
+              <textarea id="simlCiConclusiones" rows="3" style="width:100%;margin-top:3px;background:var(--surf2);border:1px solid var(--brd);color:var(--txt);border-radius:5px;padding:6px;font-size:12px;resize:vertical"></textarea>
+            </div>
+            <button class="btn primary" onclick="cerrarSimulacion()" style="background:var(--red)">Cerrar mes y guardar aprendizaje</button>
+            <div id="simlCierreMsg" style="font-size:11px;min-height:16px;text-align:center"></div>
+          </div>
+        </div>
+        <div id="simlCierreResultado">
+          <div style="padding:30px;text-align:center;color:var(--muted);background:var(--surf2);border-radius:8px;font-size:13px">
+            Ingresá los datos reales del mes completo para cerrar y registrar el aprendizaje.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PANEL: LISTA -->
+    <div id="siml-panel-lista" style="display:none">
+      <div class="box" style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <div class="sec">Simulaciones guardadas</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select id="simlListaAnio" style="font-size:12px" onchange="cargarListaSimulaciones()">
+              <option value="">Todos los años</option>
+            </select>
+            <select id="simlListaMes" style="font-size:12px" onchange="cargarListaSimulaciones()">
+              <option value="">Todos los meses</option>
+              <option value="1">Enero</option><option value="2">Febrero</option>
+              <option value="3">Marzo</option><option value="4">Abril</option>
+              <option value="5">Mayo</option><option value="6">Junio</option>
+              <option value="7">Julio</option><option value="8">Agosto</option>
+              <option value="9">Septiembre</option><option value="10">Octubre</option>
+              <option value="11">Noviembre</option><option value="12">Diciembre</option>
+            </select>
+            <button class="btn sm" onclick="cargarListaSimulaciones()">↻ Actualizar</button>
+          </div>
+        </div>
+        <div id="simlLista"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+      </div>
+
+      <!-- Bloque de comparación por período -->
+      <div id="simlComparacion" style="display:none">
+        <div class="sec" style="margin-bottom:8px">Comparación por sucursal — mismo período</div>
+        <div class="box">
+          <div id="simlComparacionTabla"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /tab-simulador -->
+
+</div><!-- /main -->
+</div><!-- /layout -->
+
+<!-- DAY DETAIL DRAWER -->
+<div class="drawer" id="drawer">
+  <div class="drawer-hdr">
+    <h2 id="drawerTitle">Detalle del día</h2>
+    <button class="close-btn" onclick="closeDrawer()">✕</button>
+  </div>
+  <div class="drawer-body" id="drawerBody"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="/static/app.js?v=20260524-1"></script>
+<script src="/static/simulador_logistico.js?v=20260524-1"></script>
+
+</body>
+</html>

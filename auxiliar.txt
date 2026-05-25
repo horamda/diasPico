@@ -1,0 +1,10 @@
+DB_CONFIG = {
+    'host':     '190.210.132.63',
+    'user':     'ht627842_pepe',      # ← completar
+    'password':  'Paisaje.2024*',     # ← completar
+    'db':       'ht627842_apichess',
+    'charset':  'utf8mb4',
+    'cursorclass': pymysql.cursors.DictCursor
+
+    
+}
