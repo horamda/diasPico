@@ -1,0 +1,1919 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Segmentacion DPO 2026 | Clientes</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/design-system.css">
+  <style>
+    :root {
+      --panel:     var(--surf);
+      --panel-2:   var(--surf2);
+      --line:      var(--brd);
+      --line-soft: var(--brd);
+      --text:      var(--txt);
+      --muted-2:   var(--muted);
+      --blue:      var(--blu);
+      --teal:      var(--grn);
+      --amber:     var(--ora);
+      --violet:    var(--pur);
+      --green:     var(--grn);
+      --shadow:    var(--shadow);
+      --radius:    var(--r);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background: var(--bg);
+      font-family: var(--sans);
+      letter-spacing: 0;
+    }
+
+    button, input, select {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    .shell {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) auto;
+      gap: 16px;
+      align-items: center;
+      padding: 14px 20px;
+      background: rgba(255, 255, 255, .94);
+      border-bottom: 1px solid var(--line);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: #172033;
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 17px;
+      line-height: 1.2;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .brand p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--text);
+      border-radius: 8px;
+      padding: 7px 11px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      transition: border-color .15s ease, background .15s ease, color .15s ease, box-shadow .15s ease;
+    }
+
+    .btn:hover { border-color: #b8c2d2; box-shadow: 0 2px 8px rgba(15, 23, 42, .06); }
+    .btn.primary { background: #172033; border-color: #172033; color: #fff; }
+    .btn.primary:hover { background: #26344d; }
+    .btn.icon { width: 34px; padding: 0; }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .btn svg { width: 16px; height: 16px; }
+
+    .content {
+      width: min(1500px, 100%);
+      margin: 0 auto;
+      padding: 18px 20px 28px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: end;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 14px;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 10px;
+    }
+
+    .field {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .field label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    .control {
+      min-height: 36px;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 13px;
+      outline: none;
+    }
+
+    .control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+
+    .status-pill {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: var(--muted);
+      background: var(--panel-2);
+      font-family: var(--mono);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tabs {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow-x: auto;
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .tab {
+      min-height: 36px;
+      padding: 8px 12px;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .tab svg { width: 16px; height: 16px; }
+    .tab.active { color: var(--text); background: var(--panel-2); }
+
+    .view { display: none; gap: 16px; }
+    .view.active { display: grid; }
+
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .kpi {
+      min-height: 106px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      padding: 13px;
+      display: grid;
+      align-content: space-between;
+      gap: 10px;
+    }
+
+    .kpi-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .kpi-head svg { width: 17px; height: 17px; }
+    .kpi-value { font-size: 27px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .kpi-sub { color: var(--muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+    }
+
+    .panel-head {
+      min-height: 52px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      font-size: 14px;
+      font-weight: 750;
+    }
+
+    .panel-title svg { width: 17px; height: 17px; color: var(--muted); flex: 0 0 auto; }
+    .panel-meta { color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
+    .panel-body { padding: 14px; min-width: 0; }
+    .chart-box { height: 270px; position: relative; }
+    .chart-box.tall { height: 330px; }
+    .map-toolbar { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
+    .map-canvas { height: 330px; border: 1px solid var(--line-soft); border-radius: 8px; overflow: hidden; }
+    .map-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+    .map-kpi { border: 1px solid var(--line-soft); border-radius: 8px; background: var(--panel-2); padding: 8px; }
+    .map-kpi label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; }
+    .map-kpi strong { font-size: 15px; line-height: 1.2; }
+
+    .table-wrap {
+      width: 100%;
+      overflow: auto;
+      border-radius: 0 0 var(--radius) var(--radius);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 900px;
+    }
+
+    th {
+      height: 38px;
+      padding: 8px 12px;
+      background: var(--panel-2);
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      text-align: left;
+      white-space: nowrap;
+      font-weight: 800;
+    }
+
+    td {
+      height: 44px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13px;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: #f9fbfd; }
+    .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .muted { color: var(--muted); }
+    .client-main { font-weight: 750; }
+    .client-sub { margin-top: 2px; font-size: 12px; color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .b-ganador { color: #087443; background: #e8f7ef; border-color: #bfe8d0; }
+    .b-crecimiento { color: #1d4ed8; background: #eaf1ff; border-color: #c8d8ff; }
+    .b-basico { color: #965f00; background: #fff6df; border-color: #f7dfa0; }
+    .b-bajas { color: #b42318; background: #fff0ee; border-color: #ffc9c2; }
+    .b-inactivo { color: #4b5563; background: #f1f5f9; border-color: #d5dde8; }
+    .b-temp { color: #0f766e; background: #e8fffb; border-color: #b8efe8; }
+    .b-eficiente { color: #087443; background: #e8f7ef; border-color: #bfe8d0; }
+    .b-rentable { color: #1d4ed8; background: #eaf1ff; border-color: #c8d8ff; }
+    .b-potencial { color: #6d28d9; background: #f3e8ff; border-color: #dfc2ff; }
+    .b-caro { color: #965f00; background: #fff6df; border-color: #f7dfa0; }
+    .b-complejo { color: #b42318; background: #fff0ee; border-color: #ffc9c2; }
+    .b-estandar { color: #475467; background: #f2f4f7; border-color: #d0d5dd; }
+
+    .score {
+      display: grid;
+      grid-template-columns: 1fr 42px;
+      align-items: center;
+      gap: 8px;
+      min-width: 118px;
+    }
+
+    .track { height: 7px; border-radius: 999px; background: #e5e9f0; overflow: hidden; }
+    .fill { height: 100%; border-radius: 999px; }
+    .score span { text-align: right; font-family: var(--mono); font-size: 12px; }
+
+    .inline-filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .search {
+      min-width: 260px;
+      padding-left: 34px;
+      background-image: none;
+    }
+
+    .search-wrap { position: relative; }
+    .search-wrap svg {
+      position: absolute;
+      left: 10px;
+      top: 50%;
+      width: 16px;
+      height: 16px;
+      color: var(--muted-2);
+      transform: translateY(-50%);
+      pointer-events: none;
+    }
+
+    .empty, .error, .loading {
+      min-height: 140px;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    .loading span {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--line);
+      border-top-color: var(--blue);
+      border-radius: 999px;
+      animation: spin .7s linear infinite;
+      display: inline-block;
+    }
+
+    .error {
+      color: var(--red);
+      background: #fff4f2;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .drawer-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: none;
+      background: rgba(15, 23, 42, .42);
+    }
+
+    .drawer-overlay.open { display: block; }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: -640px;
+      z-index: 60;
+      width: min(640px, 100%);
+      height: 100vh;
+      background: var(--panel);
+      border-left: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      transition: right .2s ease;
+    }
+
+    .drawer.open { right: 0; }
+    .drawer-head {
+      min-height: 68px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .drawer-title { margin: 0; font-size: 17px; line-height: 1.25; }
+    .drawer-sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .drawer-body { overflow: auto; padding: 16px; display: grid; gap: 14px; align-content: start; }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 10px;
+      min-height: 72px;
+    }
+
+    .metric label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 7px; font-size: 18px; font-family: var(--mono); }
+
+    .dimension { display: grid; gap: 8px; }
+    .dimension-row { display: grid; grid-template-columns: 150px 1fr 48px; gap: 8px; align-items: center; font-size: 12px; }
+
+    .section {
+      display: grid;
+      gap: 12px;
+      padding-top: 14px;
+      margin-top: 14px;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 750;
+      min-width: 0;
+    }
+
+    .section-title svg { width: 16px; height: 16px; color: var(--muted); flex: 0 0 auto; }
+
+    .note {
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      border-radius: 8px;
+      padding: 11px 12px;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .config-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .weights-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 14px;
+    }
+
+    .weight-row {
+      display: grid;
+      grid-template-columns: 1fr 90px;
+      gap: 8px;
+      align-items: center;
+      padding: 8px;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: var(--panel-2);
+    }
+
+    .weight-row span { font-size: 13px; font-weight: 650; }
+    .weight-row small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.3fr) minmax(160px, .7fr) auto auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .check-row {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-size: 13px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
+    .check-row input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--blue);
+    }
+
+    .upload-status {
+      min-height: 22px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    .upload-status.ok { color: var(--green); }
+    .upload-status.err { color: var(--red); }
+
+    .tag-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      min-height: 34px;
+    }
+
+    .tag {
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .tag small {
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    @media (max-width: 1180px) {
+      .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .config-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .upload-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+    }
+
+    @media (max-width: 720px) {
+      .topbar { grid-template-columns: 1fr; padding: 12px; }
+      .top-actions { display: flex; justify-content: flex-start; width: 100%; }
+      .top-actions .btn { flex: 0 0 44px; width: 44px; min-width: 0; padding: 0; }
+      .top-actions .btn span { display: none; }
+      .content { padding: 12px; }
+      .toolbar { grid-template-columns: 1fr; }
+      .filters, .config-grid, .weights-grid, .metric-grid, .upload-grid { grid-template-columns: 1fr; }
+      .map-toolbar, .map-kpis { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .search { min-width: 100%; }
+      .search-wrap { width: 100%; }
+      .inline-filters .control { width: 100%; }
+      .dimension-row { grid-template-columns: 1fr; }
+      .brand h1 { white-space: normal; }
+      .brand p { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><i data-lucide="network"></i></div>
+        <div>
+          <h1>Segmentacion DPO 2026</h1>
+          <p>Clientes, clusters, costo logistico y plan de servicio</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="btn" href="/" title="Volver al panel"><i data-lucide="arrow-left"></i><span>Panel</span></a>
+        <a class="btn" href="/api/segmentacion/sop/pdf" title="Descargar SOP PDF"><i data-lucide="file-down"></i><span>SOP PDF</span></a>
+        <button class="btn" id="reloadBtn" title="Actualizar datos"><i data-lucide="rotate-cw"></i><span>Actualizar</span></button>
+        <button class="btn primary" id="recalcBtn" title="Recalcular clusters"><i data-lucide="calculator"></i><span>Recalcular</span></button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="toolbar">
+        <div class="filters">
+          <div class="field">
+            <label for="branchFilter">Sucursal</label>
+            <select class="control" id="branchFilter"><option value="TODAS">Todas</option></select>
+          </div>
+          <div class="field">
+            <label for="clusterFilter">Cluster</label>
+            <select class="control" id="clusterFilter">
+              <option value="">Todos</option>
+              <option value="Ganador">Ganador</option>
+              <option value="En crecimiento">En crecimiento</option>
+              <option value="Basico">Basico</option>
+              <option value="Ventas bajas">Ventas bajas</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="sortFilter">Orden</label>
+            <select class="control" id="sortFilter">
+              <option value="venta_ytd">Venta YTD</option>
+              <option value="score_total">Score</option>
+              <option value="crecimiento_pct">Crecimiento</option>
+              <option value="ratio_costo_logistico_pct">Costo logistico</option>
+              <option value="pct_rechazo_pedidos">Rechazos</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="searchInput">Busqueda</label>
+            <div class="search-wrap">
+              <i data-lucide="search"></i>
+              <input class="control search" id="searchInput" type="text" placeholder="Cliente, razon social o localidad">
+            </div>
+          </div>
+        </div>
+        <div class="status-pill" id="periodBadge"><i data-lucide="calendar-days"></i><span>Periodo pendiente</span></div>
+      </section>
+
+      <section class="kpi-grid" id="kpiGrid"></section>
+      <section class="tag-row" id="activeBranchTags"></section>
+
+      <nav class="tabs" aria-label="Vistas del panel">
+        <button class="tab active" data-tab="overview"><i data-lucide="layout-dashboard"></i>Resumen</button>
+        <button class="tab" data-tab="clients"><i data-lucide="users"></i>Clientes</button>
+        <button class="tab" data-tab="territory"><i data-lucide="map"></i>Territorio</button>
+        <button class="tab" data-tab="service"><i data-lucide="clipboard-list"></i>Plan</button>
+        <button class="tab" data-tab="evolution"><i data-lucide="activity"></i>Evolucion</button>
+        <button class="tab" data-tab="data"><i data-lucide="upload"></i>Carga</button>
+        <button class="tab" data-tab="settings"><i data-lucide="sliders-horizontal"></i>Parametros</button>
+      </nav>
+
+      <section class="view active" id="view-overview">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="pie-chart"></i>Distribucion por cluster</div><div class="panel-meta" id="clusterTotalMeta"></div></div>
+            <div class="panel-body"><div class="chart-box"><canvas id="clusterChart"></canvas></div></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="bar-chart-3"></i>Venta YTD por cluster</div><div class="panel-meta">ARS</div></div>
+            <div class="panel-body"><div class="chart-box"><canvas id="salesChart"></canvas></div></div>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head"><div class="panel-title"><i data-lucide="building-2"></i>Resumen por sucursal</div><div class="panel-meta" id="branchMeta"></div></div>
+          <div class="table-wrap" id="branchSummary"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-clients">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="users"></i>Cartera de clientes</div>
+            <div class="panel-meta" id="clientsMeta"></div>
+          </div>
+          <div class="table-wrap" id="clientsTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-territory">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="map-pin"></i>Localidades por venta</div><div class="panel-meta" id="localityMeta"></div></div>
+            <div class="table-wrap" id="localityTable"></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="route"></i>Mapa operativo</div><div class="panel-meta" id="mapMeta">HL</div></div>
+            <div class="panel-body">
+              <div class="map-toolbar">
+                <div class="field">
+                  <label for="mapWeight">Peso punto</label>
+                  <select class="control" id="mapWeight">
+                    <option value="hl">HL</option>
+                    <option value="pallets">Pallets</option>
+                    <option value="venta">Venta</option>
+                    <option value="bultos">Bultos</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="mapLayer">Capa</label>
+                  <select class="control" id="mapLayer">
+                    <option value="cluster">Cluster</option>
+                    <option value="sucursal">Sucursal</option>
+                    <option value="localidad">Localidad</option>
+                    <option value="autoelevador">Autoelevador</option>
+                    <option value="rentabilidad">Rentabilidad</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="mapLimit">Max puntos</label>
+                  <select class="control" id="mapLimit">
+                    <option value="5000">5000</option>
+                    <option value="3000">3000</option>
+                    <option value="1000">1000</option>
+                  </select>
+                </div>
+              </div>
+              <div id="territoryMap" class="map-canvas"></div>
+              <div class="map-kpis">
+                <div class="map-kpi"><label>% Autoelevador</label><strong id="mapAutoPct">-</strong></div>
+                <div class="map-kpi"><label>HL Autoelevador</label><strong id="mapAutoHl">-</strong></div>
+                <div class="map-kpi"><label>Costo Autoelevador</label><strong id="mapAutoCost">-</strong></div>
+                <div class="map-kpi"><label>Ahorro Estimado</label><strong id="mapAutoSave">-</strong></div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-service">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="clipboard-list"></i>Plan de servicio sugerido</div>
+            <div class="inline-filters">
+              <select class="control" id="priorityFilter" style="width: 170px;">
+                <option value="">Todas las prioridades</option>
+                <option value="1">Prioridad 1</option>
+                <option value="2">Prioridad 2</option>
+                <option value="3">Prioridad 3</option>
+                <option value="4">Prioridad 4</option>
+              </select>
+              <select class="control" id="alertFilter" style="width: 150px;">
+                <option value="">Todas</option>
+                <option value="alertas">Con alertas</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap" id="serviceTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-evolution">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="activity"></i>Evolucion mensual</div>
+              <select class="control" id="yearFilter" style="width: 120px;">
+                <option value="2026">2026</option>
+                <option value="2025">2025</option>
+              </select>
+            </div>
+            <div class="panel-body"><div class="chart-box tall"><canvas id="evolutionChart"></canvas></div></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="history"></i>Auditoria de calculos</div><div class="panel-meta" id="auditMeta"></div></div>
+            <div class="table-wrap" id="auditTable"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-data">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="forklift"></i>Clientes con autoelevador</div>
+              <div class="panel-meta" id="autoUploadMeta">CSV</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="autoFile">Archivo</label>
+                  <input class="control" id="autoFile" type="file" accept=".csv,text/csv">
+                </div>
+                <div class="field">
+                  <label for="autoSource">Fuente</label>
+                  <input class="control" id="autoSource" type="text" value="dashboard">
+                </div>
+                <label class="check-row" for="autoRecalc">
+                  <input id="autoRecalc" type="checkbox" checked>
+                  <span>Recalcular al finalizar</span>
+                </label>
+                <button class="btn primary" id="autoUploadBtn"><i data-lucide="upload"></i>Subir</button>
+              </div>
+              <div class="upload-status" id="autoUploadStatus">CSV con columna cliente o is_cliente</div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="gauge"></i>Cobertura autoelevador</div>
+              <div class="panel-meta" id="autoSummaryMeta"></div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="autoUploadSummary"></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-settings">
+        <article class="panel">
+          <div class="panel-head"><div class="panel-title"><i data-lucide="sliders-horizontal"></i>Parametros del modelo</div><div class="panel-meta" id="settingsMeta"></div></div>
+          <div class="panel-body" id="settingsPanel"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="drawer-overlay" id="drawerOverlay"></div>
+  <aside class="drawer" id="clientDrawer">
+    <div class="drawer-head">
+      <div>
+        <h2 class="drawer-title" id="drawerTitle">Cliente</h2>
+        <div class="drawer-sub" id="drawerSub"></div>
+      </div>
+      <button class="btn icon" id="closeDrawerBtn" title="Cerrar"><i data-lucide="x"></i></button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const CLUSTERS = ["Ganador", "En crecimiento", "Basico", "Ventas bajas"];
+    const CLUSTER_COLORS = ["#198754", "#2563eb", "#d99106", "#d04444"];
+    const state = {
+      clusters: [],
+      plan: [],
+      branchSummary: [],
+      localitySummary: [],
+      activeLocalitySummary: [],
+      mapRows: [],
+      autoResumen: {},
+      params: {},
+      weights: [],
+      audit: [],
+      evolution: [],
+      charts: {},
+      map: null,
+      mapLayerGroup: null,
+      activeTab: "overview",
+      loading: false
+    };
+
+    function canonicalCluster(value) {
+      const raw = String(value || "");
+      const folded = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      const key = folded.toLowerCase();
+      if (key === "basico" || key.includes("sico")) return "Basico";
+      return raw;
+    }
+
+    function clusterLabel(value) {
+      return canonicalCluster(value) === "Basico" ? "Basico" : canonicalCluster(value);
+    }
+
+    function money(value) {
+      const n = Number(value || 0);
+      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + "M";
+      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toLocaleString("es-AR", { maximumFractionDigits: 0 }) + "K";
+      return "$" + n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+    }
+
+    function num(value, digits = 0) {
+      if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "-";
+      return Number(value).toLocaleString("es-AR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+
+    function pct(value, digits = 1) {
+      if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "-";
+      return num(value, digits) + "%";
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function dateInputValue(value) {
+      if (!value) return "";
+      const str = String(value);
+      if (/^\d{4}-\d{2}-\d{2}/.test(str)) return str.slice(0, 10);
+      const parsed = new Date(str);
+      return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+    }
+
+    function badgeClass(value) {
+      const v = canonicalCluster(value);
+      if (v === "Ganador") return "b-ganador";
+      if (v === "En crecimiento") return "b-crecimiento";
+      if (v === "Basico") return "b-basico";
+      if (v === "Ventas bajas") return "b-bajas";
+      const s = String(value || "").toLowerCase();
+      if (s.includes("eficiente")) return "b-eficiente";
+      if (s.includes("rentable")) return "b-rentable";
+      if (s.includes("potencial")) return "b-potencial";
+      if (s.includes("caro")) return "b-caro";
+      if (s.includes("complejo")) return "b-complejo";
+      return "b-estandar";
+    }
+
+    function scoreColor(value) {
+      const n = Number(value || 0);
+      if (n >= 70) return "var(--green)";
+      if (n >= 45) return "var(--amber)";
+      return "var(--red)";
+    }
+
+    function scoreBar(value) {
+      const n = Math.max(0, Math.min(100, Number(value || 0)));
+      const color = scoreColor(n);
+      return `<div class="score"><div class="track"><div class="fill" style="width:${n}%;background:${color}"></div></div><span style="color:${color}">${num(n, 1)}</span></div>`;
+    }
+
+    async function api(path, options, timeoutMs = 30000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(path, { ...(options || {}), signal: controller.signal });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+        return Object.prototype.hasOwnProperty.call(body, "data") ? body.data : body;
+      } catch (error) {
+        if (error && error.name === "AbortError") throw new Error(`Timeout en ${path}`);
+        throw error;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function setLoading(on) {
+      state.loading = on;
+      $("recalcBtn").disabled = on;
+      $("reloadBtn").disabled = on;
+      if ($("autoUploadBtn")) $("autoUploadBtn").disabled = on;
+    }
+
+    function queryString() {
+      const branch = $("branchFilter").value;
+      const cluster = $("clusterFilter").value;
+      const params = new URLSearchParams();
+      params.set("limit", "5000");
+      if (branch !== "TODAS") params.set("sucursal", branch);
+      if (cluster) params.set("cluster", cluster);
+      return "?" + params.toString();
+    }
+
+    async function loadData() {
+      setLoading(true);
+      try {
+        const qs = queryString();
+        const branch = $("branchFilter").value;
+        const locQs = branch !== "TODAS" ? `?sucursal=${encodeURIComponent(branch)}` : "";
+        const mapWeight = $("mapWeight") ? $("mapWeight").value : "hl";
+        const mapLimit = $("mapLimit") ? Number($("mapLimit").value || 5000) : 5000;
+        const mapParams = new URLSearchParams({ peso: mapWeight, limit: String(mapLimit) });
+        if (branch !== "TODAS") mapParams.set("sucursal", branch);
+        const cluster = $("clusterFilter").value;
+        if (cluster) mapParams.set("cluster", cluster);
+        const results = await Promise.allSettled([
+          api(`/api/segmentacion/plan-servicio${qs}`, undefined, 20000),
+          api("/api/segmentacion/resumen/sucursal", undefined, 20000),
+          api(`/api/segmentacion/resumen/localidad${locQs}`, undefined, 20000),
+          api(`/api/segmentacion/resumen/activos-localidad${locQs}`, undefined, 20000),
+          api("/api/segmentacion/parametros", undefined, 12000),
+          api(`/api/segmentacion/mapa/clientes?${mapParams.toString()}`, undefined, 20000),
+          api(`/api/segmentacion/autoelevador/resumen${locQs}`, undefined, 20000)
+        ]);
+        const [planR, branchR, localityR, activeLocR, paramsR, mapR, autoR] = results;
+        const failed = [];
+        const take = (r, fallback, label) => {
+          if (r.status === "fulfilled") return r.value;
+          failed.push(label);
+          return fallback;
+        };
+        const plan = take(planR, [], "plan");
+        const branchSummary = take(branchR, [], "sucursales");
+        const localitySummary = take(localityR, [], "localidades");
+        const activeLocalitySummary = take(activeLocR, [], "activos/localidad");
+        const params = take(paramsR, {}, "parametros");
+        const mapRows = take(mapR, [], "mapa");
+        const autoResumen = take(autoR, {}, "autoelevador");
+        state.plan = normalizeRows(plan);
+        state.clusters = [...state.plan];
+        state.branchSummary = normalizeRows(branchSummary);
+        state.localitySummary = normalizeRows(localitySummary);
+        state.activeLocalitySummary = activeLocalitySummary || [];
+        state.mapRows = mapRows || [];
+        state.autoResumen = autoResumen || {};
+        state.params = params || {};
+        fillBranches();
+        renderAll();
+        if (failed.length) {
+          $("periodBadge").innerHTML = `<i data-lucide="alert-triangle"></i><span>Carga parcial: ${esc(failed.join(", "))}</span>`;
+          if (window.lucide) lucide.createIcons();
+        }
+      } catch (error) {
+        showGlobalError(error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function normalizeRows(rows) {
+      return (rows || []).map((row) => ({ ...row, cluster_dpo: canonicalCluster(row.cluster_dpo) }));
+    }
+
+    function showGlobalError(message) {
+      ["branchSummary", "clientsTable", "serviceTable", "localityTable", "territoryMap"].forEach((id) => {
+        const el = $(id);
+        if (el) el.innerHTML = `<div class="error">${esc(message)}</div>`;
+      });
+    }
+
+    function fillBranches() {
+      const select = $("branchFilter");
+      const current = select.value;
+      const branches = [...new Set([
+        ...state.branchSummary.map((row) => row.sucursal),
+        ...state.activeLocalitySummary.map((row) => row.sucursal)
+      ].filter(Boolean))].sort();
+      select.innerHTML = `<option value="TODAS">Todas</option>${branches.map((item) => `<option value="${esc(item)}">${esc(branchLabel(item))}</option>`).join("")}`;
+      if (branches.includes(current) || current === "TODAS") select.value = current;
+    }
+
+    function branchLabel(value) {
+      const id = String(value || "");
+      const row = [...state.branchSummary, ...state.activeLocalitySummary, ...state.clusters, ...state.mapRows]
+        .find((item) => String(item.sucursal || "") === id && item.sucursal_nombre);
+      return row ? `${row.sucursal_nombre} (${id})` : id;
+    }
+
+    function filteredClients() {
+      const q = $("searchInput").value.trim().toLowerCase();
+      const sortKey = $("sortFilter").value;
+      let rows = [...state.clusters];
+      if (q) {
+        rows = rows.filter((row) => {
+          const haystack = `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase();
+          return haystack.includes(q);
+        });
+      }
+      rows.sort((a, b) => (Number(b[sortKey]) || 0) - (Number(a[sortKey]) || 0));
+      return rows;
+    }
+
+    function renderAll() {
+      renderPeriodBadge();
+      renderKpis();
+      renderActiveBranchTags();
+      renderOverviewCharts();
+      renderBranchSummary();
+      renderClients();
+      renderTerritory();
+      renderService();
+      renderData();
+      if (state.activeTab === "settings") renderSettings();
+      if (state.activeTab === "evolution") loadEvolution();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderPeriodBadge() {
+      const period = state.params.periodo || {};
+      const start = dateInputValue(period.fecha_desde);
+      const end = dateInputValue(period.fecha_hasta);
+      $("periodBadge").innerHTML = `<i data-lucide="calendar-days"></i><span>${start || "-"} / ${end || "-"}</span>`;
+    }
+
+    function renderKpis() {
+      const agg = aggregateClusters();
+      const total = agg.reduce((sum, row) => sum + row.clientes, 0);
+      const venta = agg.reduce((sum, row) => sum + row.venta, 0);
+      const costo = agg.reduce((sum, row) => sum + row.costo, 0);
+      const scoreWeight = agg.reduce((sum, row) => sum + row.scoreWeighted, 0);
+      const avgScore = total ? scoreWeight / total : 0;
+      const autoPct = Number(state.autoResumen.pct_clientes_autoelevador || 0);
+      const items = [
+        { label: "Clientes", value: num(total), sub: `${money(venta)} venta YTD`, icon: "users", color: "var(--violet)" },
+        { label: "Ganador", value: countCluster("Ganador"), sub: shareCluster("Ganador"), icon: "trophy", color: "var(--green)" },
+        { label: "Autoelevador", value: pct(autoPct, 1), sub: `${num(state.autoResumen.clientes_autoelevador || 0)} clientes`, icon: "forklift", color: "var(--blue)" },
+        { label: "Costo logistico", value: money(costo), sub: `${pct(venta ? costo / venta * 100 : 0)} sobre venta`, icon: "truck", color: "var(--amber)" },
+        { label: "Score prom.", value: num(avgScore, 1), sub: "escala 0-100", icon: "gauge", color: scoreColor(avgScore) }
+      ];
+      $("kpiGrid").innerHTML = items.map((item) => `
+        <article class="kpi">
+          <div class="kpi-head"><span>${esc(item.label)}</span><i data-lucide="${item.icon}" style="color:${item.color}"></i></div>
+          <div class="kpi-value" style="color:${item.color}">${item.value}</div>
+          <div class="kpi-sub">${esc(item.sub)}</div>
+        </article>
+      `).join("");
+    }
+
+    function renderActiveBranchTags() {
+      const el = $("activeBranchTags");
+      if (!el) return;
+      const byBranch = new Map();
+      if (state.activeLocalitySummary.length) {
+        state.activeLocalitySummary.forEach((row) => {
+          const key = String(row.sucursal || "");
+          if (!key) return;
+          byBranch.set(key, Number(row.clientes_activos_sucursal || 0));
+        });
+      } else {
+        state.branchSummary.forEach((row) => {
+          const key = String(row.sucursal || "");
+          if (!key) return;
+          byBranch.set(key, (byBranch.get(key) || 0) + Number(row.cantidad_clientes || 0));
+        });
+      }
+      const rows = [...byBranch.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+      el.innerHTML = rows.map(([branch, count]) => `
+        <span class="tag"><i data-lucide="building-2"></i>${esc(branchLabel(branch))}<small>${num(count)} activos</small></span>
+      `).join("");
+    }
+
+    function countCluster(cluster) {
+      const item = aggregateClusters().find((row) => row.cluster === cluster);
+      return num(item ? item.clientes : 0);
+    }
+
+    function shareCluster(cluster) {
+      const agg = aggregateClusters();
+      const total = agg.reduce((sum, row) => sum + row.clientes, 0);
+      if (!total) return "-";
+      const item = agg.find((row) => row.cluster === cluster);
+      const count = item ? item.clientes : 0;
+      return pct(count / total * 100);
+    }
+
+    function renderOverviewCharts() {
+      const agg = aggregateClusters();
+      const counts = agg.map((row) => row.clientes);
+      const sales = agg.map((row) => row.venta);
+      $("clusterTotalMeta").textContent = `${num(agg.reduce((sum, row) => sum + row.clientes, 0))} clientes`;
+      renderChart("clusterChart", "doughnut", {
+        labels: CLUSTERS,
+        datasets: [{ data: counts, backgroundColor: CLUSTER_COLORS.map((c) => c + "cc"), borderColor: "#fff", borderWidth: 2 }]
+      }, { cutout: "62%" });
+      renderChart("salesChart", "bar", {
+        labels: CLUSTERS,
+        datasets: [{ label: "Venta YTD", data: sales.map((v) => v / 1000000), backgroundColor: CLUSTER_COLORS.map((c) => c + "66"), borderColor: CLUSTER_COLORS, borderWidth: 2, borderRadius: 6 }]
+      }, { scales: moneyAxis("M") });
+    }
+
+    function aggregateClusters() {
+      const map = Object.fromEntries(CLUSTERS.map((cluster) => [cluster, {
+        cluster,
+        clientes: 0,
+        venta: 0,
+        costo: 0,
+        scoreWeighted: 0
+      }]));
+      if (state.branchSummary.length) {
+        const branch = $("branchFilter").value;
+        const selectedCluster = canonicalCluster($("clusterFilter").value);
+        state.branchSummary
+          .filter((row) => branch === "TODAS" || row.sucursal === branch)
+          .filter((row) => !selectedCluster || canonicalCluster(row.cluster_dpo) === selectedCluster)
+          .forEach((row) => {
+            const cluster = canonicalCluster(row.cluster_dpo);
+            if (!map[cluster]) return;
+            const clientes = Number(row.cantidad_clientes || 0);
+            map[cluster].clientes += clientes;
+            map[cluster].venta += Number(row.venta_total_ytd || 0);
+            map[cluster].costo += Number(row.costo_logistico_total || 0);
+            map[cluster].scoreWeighted += Number(row.score_prom || 0) * clientes;
+          });
+      } else {
+        state.clusters.forEach((row) => {
+          const cluster = canonicalCluster(row.cluster_dpo);
+          if (!map[cluster]) return;
+          map[cluster].clientes += 1;
+          map[cluster].venta += Number(row.venta_ytd || 0);
+          map[cluster].costo += Number(row.costo_logistico_total || 0);
+          map[cluster].scoreWeighted += Number(row.score_total || 0);
+        });
+      }
+      return CLUSTERS.map((cluster) => map[cluster]);
+    }
+
+    function renderChart(canvasId, type, data, extraOptions = {}) {
+      if (state.charts[canvasId]) state.charts[canvasId].destroy();
+      const baseOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, color: "#667085", font: { size: 12 } } },
+          tooltip: { callbacks: {} }
+        },
+        scales: type === "doughnut" ? undefined : defaultScales()
+      };
+      state.charts[canvasId] = new Chart($(canvasId), { type, data, options: { ...baseOptions, ...extraOptions } });
+    }
+
+    function defaultScales() {
+      return {
+        x: { grid: { color: "#eef2f6" }, ticks: { color: "#667085" } },
+        y: { grid: { color: "#eef2f6" }, ticks: { color: "#667085" } }
+      };
+    }
+
+    function moneyAxis(unit) {
+      const scales = defaultScales();
+      scales.y.ticks.callback = (value) => "$" + value + unit;
+      return scales;
+    }
+
+    function renderBranchSummary() {
+      const branch = $("branchFilter").value;
+      const selectedCluster = canonicalCluster($("clusterFilter").value);
+      const rows = state.branchSummary
+        .filter((row) => branch === "TODAS" || row.sucursal === branch)
+        .filter((row) => !selectedCluster || canonicalCluster(row.cluster_dpo) === selectedCluster);
+      $("branchMeta").textContent = `${num(rows.length)} filas`;
+      if (!rows.length) {
+        $("branchSummary").innerHTML = `<div class="empty">Sin datos por sucursal</div>`;
+        return;
+      }
+      $("branchSummary").innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Sucursal</th><th>Cluster</th><th class="num">Clientes</th><th class="num">Venta</th><th class="num">HL</th><th class="num">Costo</th><th class="num">Rechazo</th><th>Score</th>
+          </tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td class="num">${num(row.cantidad_clientes)}</td>
+              <td class="num">${money(row.venta_total_ytd)}</td>
+              <td class="num">${num(row.hl_total_ytd, 1)}</td>
+              <td class="num">${money(row.costo_logistico_total)}</td>
+              <td class="num">${pct(row.pct_rechazo_prom)}</td>
+              <td>${scoreBar(row.score_prom)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    function renderClients() {
+      const rows = filteredClients();
+      const total = aggregateClusters().reduce((sum, row) => sum + row.clientes, 0);
+      $("clientsMeta").textContent = total ? `${num(rows.length)} cargados de ${num(total)}` : `${num(rows.length)} clientes`;
+      if (!rows.length) {
+        $("clientsTable").innerHTML = `<div class="empty">Sin clientes para los filtros actuales</div>`;
+        return;
+      }
+      $("clientsTable").innerHTML = `
+        <table>
+          <thead><tr>
+            <th>Cliente</th><th>Sucursal</th><th>Cluster</th><th>Subcluster</th><th>Score</th><th class="num">Venta</th><th class="num">Crec.</th><th class="num">HL</th><th class="num">Drop size</th><th class="num">Costo %</th><th class="num">Rechazo</th>
+          </tr></thead>
+          <tbody>${rows.slice(0, 500).map((row) => `
+            <tr class="clickable" data-client="${esc(row.cliente)}">
+              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+              <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td><span class="badge ${badgeClass(row.subcluster_logistico)}">${esc(row.subcluster_logistico || "Estandar")}</span></td>
+              <td>${scoreBar(row.score_total)}</td>
+              <td class="num">${money(row.venta_ytd)}</td>
+              <td class="num" style="color:${Number(row.crecimiento_pct || 0) >= 0 ? "var(--green)" : "var(--red)"}">${pct(row.crecimiento_pct)}</td>
+              <td class="num">${num(row.hl_ytd, 1)}</td>
+              <td class="num">${num(row.dropsize_bultos_ytd, 1)}</td>
+              <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
+              <td class="num">${pct(row.pct_rechazo_pedidos)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+      $("clientsTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+    }
+
+    function renderTerritory() {
+      const selectedCluster = canonicalCluster($("clusterFilter").value);
+      const rows = selectedCluster ? aggregateClusterLocalities(selectedCluster) : aggregateActiveLocalities();
+      $("localityMeta").textContent = `${num(rows.length)} localidades`;
+      if (!rows.length) {
+        $("localityTable").innerHTML = `<div class="empty">Sin resumen por localidad</div>`;
+      } else {
+        $("localityTable").innerHTML = `
+          <table>
+            <thead><tr><th>Sucursal</th><th>Localidad</th><th class="num">Clientes activos</th><th class="num">% sucursal</th><th>Cluster</th><th class="num">Venta</th><th class="num">HL</th><th>Score</th></tr></thead>
+            <tbody>${rows.slice(0, 160).map((row) => `
+              <tr>
+                <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+                <td>${esc(row.localidad || "Sin localidad")}</td>
+                <td class="num">${num(row.clientes_activos_localidad ?? row.cantidad_clientes)}</td>
+                <td class="num">${pct(row.pct_localidad_sucursal || 0)}</td>
+                <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "Todos")}</span></td>
+                <td class="num">${money(row.venta_total_ytd)}</td>
+                <td class="num">${num(row.hl_total_ytd, 1)}</td>
+                <td>${scoreBar(row.score_prom)}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table>
+        `;
+      }
+      renderMap();
+    }
+
+    function aggregateActiveLocalities() {
+      if (state.activeLocalitySummary.length) {
+        const metrics = new Map();
+        state.localitySummary.forEach((row) => {
+          const key = `${row.sucursal || ""}|${row.localidad || "Sin localidad"}`;
+          const current = metrics.get(key) || { venta: 0, hl: 0, scoreWeighted: 0, clientes: 0, clusters: {} };
+          const clientes = Number(row.cantidad_clientes || 0);
+          current.venta += Number(row.venta_total_ytd || 0);
+          current.hl += Number(row.hl_total_ytd || 0);
+          current.scoreWeighted += Number(row.score_prom || 0) * clientes;
+          current.clientes += clientes;
+          const cluster = canonicalCluster(row.cluster_dpo || "");
+          current.clusters[cluster] = (current.clusters[cluster] || 0) + clientes;
+          metrics.set(key, current);
+        });
+        return state.activeLocalitySummary.map((row) => {
+          const key = `${row.sucursal || ""}|${row.localidad || "Sin localidad"}`;
+          const m = metrics.get(key) || { venta: 0, hl: 0, scoreWeighted: 0, clientes: 0, clusters: {} };
+          const dominant = Object.entries(m.clusters).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+          return {
+            ...row,
+            cluster_dpo: dominant,
+            venta_total_ytd: m.venta,
+            hl_total_ytd: m.hl,
+            score_prom: m.clientes ? m.scoreWeighted / m.clientes : 0
+          };
+        }).sort((a, b) => String(a.sucursal || "").localeCompare(String(b.sucursal || "")) || Number(b.clientes_activos_localidad || 0) - Number(a.clientes_activos_localidad || 0));
+      }
+      return aggregateClusterLocalities("");
+    }
+
+    function aggregateClusterLocalities(selectedCluster) {
+      const byKey = new Map();
+      state.localitySummary
+        .filter((row) => !selectedCluster || canonicalCluster(row.cluster_dpo) === selectedCluster)
+        .forEach((row) => {
+          const key = `${row.sucursal || ""}|${row.localidad || "Sin localidad"}`;
+          const current = byKey.get(key) || {
+            sucursal: row.sucursal,
+            sucursal_nombre: row.sucursal_nombre,
+            localidad: row.localidad || "Sin localidad",
+            cantidad_clientes: 0,
+            venta_total_ytd: 0,
+            hl_total_ytd: 0,
+            scoreWeighted: 0,
+            clusters: {}
+          };
+          const clientes = Number(row.cantidad_clientes || 0);
+          current.cantidad_clientes += clientes;
+          current.venta_total_ytd += Number(row.venta_total_ytd || 0);
+          current.hl_total_ytd += Number(row.hl_total_ytd || 0);
+          current.scoreWeighted += Number(row.score_prom || 0) * clientes;
+          const cluster = canonicalCluster(row.cluster_dpo || "");
+          current.clusters[cluster] = (current.clusters[cluster] || 0) + clientes;
+          byKey.set(key, current);
+        });
+      const byBranch = {};
+      byKey.forEach((row) => { byBranch[row.sucursal] = (byBranch[row.sucursal] || 0) + row.cantidad_clientes; });
+      return [...byKey.values()].map((row) => {
+        const dominant = selectedCluster || Object.entries(row.clusters).sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+        return {
+          ...row,
+          clientes_activos_localidad: row.cantidad_clientes,
+          pct_localidad_sucursal: byBranch[row.sucursal] ? row.cantidad_clientes / byBranch[row.sucursal] * 100 : 0,
+          cluster_dpo: dominant,
+          score_prom: row.cantidad_clientes ? row.scoreWeighted / row.cantidad_clientes : 0
+        };
+      }).sort((a, b) => Number(b.clientes_activos_localidad || 0) - Number(a.clientes_activos_localidad || 0));
+    }
+
+    function initMap() {
+      if (state.map || !window.L || !$("territoryMap")) return;
+      state.map = L.map("territoryMap", { zoomControl: true }).setView([-34.6037, -58.3816], 6);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(state.map);
+      state.mapLayerGroup = L.layerGroup().addTo(state.map);
+    }
+
+    function layerColor(row, mode) {
+      if (mode === "autoelevador") return row.tiene_autoelevador ? "#198754" : "#d04444";
+      if (mode === "sucursal") {
+        const key = String(row.sucursal || "");
+        let hash = 0;
+        for (let i = 0; i < key.length; i += 1) hash = ((hash << 5) - hash) + key.charCodeAt(i);
+        const hue = Math.abs(hash) % 360;
+        return `hsl(${hue} 65% 45%)`;
+      }
+      if (mode === "rentabilidad") return Number(row.margen_logistico_proxy || 0) >= 0 ? "#198754" : "#d04444";
+      if (mode === "localidad") return "#0f9f8f";
+      const idx = Math.max(0, CLUSTERS.indexOf(canonicalCluster(row.cluster_dpo)));
+      return CLUSTER_COLORS[idx] || "#6b7280";
+    }
+
+    function renderMap() {
+      initMap();
+      if (!state.map || !state.mapLayerGroup) return;
+      state.mapLayerGroup.clearLayers();
+      const rows = (state.mapRows || []).filter((row) => Number(row.latitud) && Number(row.longitud));
+      if (!rows.length) {
+        $("mapMeta").textContent = "Sin coordenadas";
+        $("mapAutoPct").textContent = "-";
+        $("mapAutoHl").textContent = "-";
+        $("mapAutoCost").textContent = "-";
+        $("mapAutoSave").textContent = "-";
+        return;
+      }
+      const weightMax = Math.max(...rows.map((r) => Number(r.peso_mapa || 0)), 1);
+      const layerMode = $("mapLayer").value;
+      const bounds = [];
+      rows.forEach((row) => {
+        const weight = Math.max(0, Number(row.peso_mapa || 0));
+        const radius = 4 + (Math.sqrt(weight / weightMax) * 18);
+        const lat = Number(row.latitud);
+        const lon = Number(row.longitud);
+        bounds.push([lat, lon]);
+        const marker = L.circleMarker([lat, lon], {
+          radius,
+          color: layerColor(row, layerMode),
+          fillColor: layerColor(row, layerMode),
+          fillOpacity: 0.36,
+          weight: 1.2
+        });
+        marker.bindPopup(`
+          <strong>${esc(row.cliente_nombre || row.cliente_id || "-")}</strong><br>
+          Cluster: ${esc(clusterLabel(row.cluster_dpo) || "-")}<br>
+          Sucursal: ${esc(branchLabel(row.sucursal) || "-")}<br>
+          Localidad: ${esc(row.localidad || "-")}<br>
+          HL: ${num(row.hl, 1)} | Pallets: ${num(row.pallets, 1)}<br>
+          Venta: ${money(row.venta)} | Bultos: ${num(row.bultos, 1)}<br>
+          Autoelevador: ${row.tiene_autoelevador ? "Si" : "No"}
+        `);
+        marker.addTo(state.mapLayerGroup);
+      });
+      if (bounds.length) state.map.fitBounds(bounds, { padding: [24, 24], maxZoom: 11 });
+      $("mapMeta").textContent = `${num(rows.length)} puntos | peso ${$("mapWeight").value.toUpperCase()}`;
+      $("mapAutoPct").textContent = pct(state.autoResumen.pct_clientes_autoelevador || 0, 1);
+      $("mapAutoHl").textContent = num(state.autoResumen.hl_autoelevador || 0, 1);
+      $("mapAutoCost").textContent = money(state.autoResumen.costo_autoelevador || 0);
+      $("mapAutoSave").textContent = money(state.autoResumen.ahorro_estimado || 0);
+      setTimeout(() => state.map && state.map.invalidateSize(), 40);
+    }
+
+    function renderService() {
+      const priority = $("priorityFilter").value;
+      const onlyAlerts = $("alertFilter").value === "alertas";
+      let rows = [...state.plan];
+      if (priority) rows = rows.filter((row) => String(row.prioridad_gestion || "") === priority);
+      if (onlyAlerts) rows = rows.filter((row) => row.alerta_operativa);
+      rows.sort((a, b) => Number(a.prioridad_gestion || 9) - Number(b.prioridad_gestion || 9) || Number(b.score_total || 0) - Number(a.score_total || 0));
+      if (!rows.length) {
+        $("serviceTable").innerHTML = `<div class="empty">Sin acciones para los filtros actuales</div>`;
+        return;
+      }
+      $("serviceTable").innerHTML = `
+        <table>
+          <thead><tr><th>Cliente</th><th>Cluster</th><th>Prioridad</th><th>Plan de servicio</th><th>Accion prioritaria</th><th>Alerta</th><th>Score</th></tr></thead>
+          <tbody>${rows.slice(0, 500).map((row) => `
+            <tr class="clickable" data-client="${esc(row.cliente)}">
+              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td class="num">${num(row.prioridad_gestion)}</td>
+              <td style="white-space:normal;min-width:260px;">${esc(row.plan_servicio || "-")}</td>
+              <td style="white-space:normal;min-width:260px;">${esc(row.accion_prioritaria || "-")}</td>
+              <td style="white-space:normal;min-width:180px;">${esc(row.alerta_operativa || "-")}</td>
+              <td>${scoreBar(row.score_total)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+      $("serviceTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+    }
+
+    async function loadEvolution() {
+      try {
+        const year = $("yearFilter").value;
+        const branch = $("branchFilter").value;
+        const qs = new URLSearchParams({ anio: year });
+        if (branch !== "TODAS") qs.set("sucursal", branch);
+        const [evolution, audit] = await Promise.all([
+          api(`/api/segmentacion/evolucion-mensual?${qs.toString()}`),
+          api("/api/segmentacion/auditoria?limit=30")
+        ]);
+        state.evolution = normalizeRows(evolution);
+        state.audit = audit || [];
+        renderEvolution();
+        renderAudit();
+      } catch (error) {
+        $("auditTable").innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+    }
+
+    function renderEvolution() {
+      const rows = state.evolution;
+      const months = [...new Set(rows.map((row) => Number(row.periodo_mes || 0)))].filter(Boolean).sort((a, b) => a - b);
+      const labels = months.map((month) => ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][month - 1] || `M${month}`);
+      const datasets = CLUSTERS.map((cluster, idx) => ({
+        label: cluster,
+        data: months.map((month) => {
+          const row = rows.find((item) => Number(item.periodo_mes || 0) === month && item.cluster_dpo === cluster);
+          return row ? Number(row.clientes || 0) : 0;
+        }),
+        borderColor: CLUSTER_COLORS[idx],
+        backgroundColor: CLUSTER_COLORS[idx] + "22",
+        tension: .25,
+        fill: false
+      }));
+      renderChart("evolutionChart", "line", { labels, datasets });
+    }
+
+    function renderAudit() {
+      const rows = state.audit;
+      $("auditMeta").textContent = `${num(rows.length)} eventos`;
+      if (!rows.length) {
+        $("auditTable").innerHTML = `<div class="empty">Sin auditoria registrada</div>`;
+        return;
+      }
+      $("auditTable").innerHTML = `
+        <table>
+          <thead><tr><th>Fecha</th><th>Usuario</th><th>Periodo</th><th class="num">Procesados</th><th class="num">Ganador</th><th class="num">Crec.</th><th class="num">Basico</th><th class="num">Bajas</th><th class="num">ms</th></tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td>${esc(String(row.ejecutado_at || "").slice(0, 19).replace("T", " "))}</td>
+              <td>${esc(row.ejecutado_por || "-")}</td>
+              <td>${num(row.periodo_anio)}/${Number(row.periodo_mes || 0) || "YTD"}</td>
+              <td class="num">${num(row.clientes_procesados)}</td>
+              <td class="num">${num(row.clientes_ganador)}</td>
+              <td class="num">${num(row.clientes_en_crecimiento)}</td>
+              <td class="num">${num(row.clientes_basico)}</td>
+              <td class="num">${num(row.clientes_ventas_bajas)}</td>
+              <td class="num">${num(row.duracion_ms)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    async function renderSettings() {
+      if (!state.weights.length) {
+        try { state.weights = await api("/api/segmentacion/score-pesos"); } catch (_) { state.weights = []; }
+      }
+      const p = state.params || {};
+      const period = p.periodo || {};
+      $("settingsMeta").textContent = `Regla v${p.version_regla || 1}`;
+      $("settingsPanel").innerHTML = `
+        <div class="config-grid">
+          ${inputField("pAlta", "Percentil venta alta", p.percentil_alta ?? .7, "number", "0.01")}
+          ${inputField("pBaja", "Percentil venta baja", p.percentil_baja ?? .3, "number", "0.01")}
+          ${inputField("anioBase", "Anio base", p.anio_base ?? 2025, "number", "1")}
+          ${inputField("anioYtd", "Anio analisis", p.anio_ytd ?? 2026, "number", "1")}
+          ${inputField("periodYear", "Periodo snapshot", period.periodo_anio ?? p.anio_ytd ?? new Date().getFullYear(), "number", "1")}
+          ${inputField("periodMonth", "Mes snapshot", period.periodo_mes ?? 0, "number", "1")}
+          ${inputField("fromDate", "Desde actual", dateInputValue(period.fecha_desde), "date")}
+          ${inputField("toDate", "Hasta actual", dateInputValue(period.fecha_hasta), "date")}
+          ${inputField("baseFromDate", "Desde base", dateInputValue(period.fecha_base_desde), "date")}
+          ${inputField("baseToDate", "Hasta base", dateInputValue(period.fecha_base_hasta), "date")}
+          ${inputField("costDelivery", "Costo entrega / HL", p.costo_entrega_hl ?? 0, "number", "0.01")}
+          ${inputField("costWarehouse", "Costo almacen / HL", p.costo_almacen_hl ?? 0, "number", "0.01")}
+        </div>
+        <div class="section">
+          <div class="section-head">
+            <div class="section-title"><i data-lucide="gauge"></i>Pesos del score</div>
+            <div class="panel-meta">${num(weightTotal(), 1)} puntos</div>
+          </div>
+          <div class="weights-grid">${renderWeights()}</div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;flex-wrap:wrap;">
+          <button class="btn" id="saveOnlyBtn"><i data-lucide="save"></i>Guardar</button>
+          <button class="btn primary" id="saveRecalcBtn"><i data-lucide="calculator"></i>Guardar y recalcular</button>
+        </div>
+      `;
+      $("saveOnlyBtn").addEventListener("click", () => saveSettings(false));
+      $("saveRecalcBtn").addEventListener("click", () => saveSettings(true));
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function inputField(id, label, value, type = "text", step = "") {
+      return `<div class="field"><label for="${id}">${esc(label)}</label><input class="control" id="${id}" type="${type}" ${step ? `step="${step}"` : ""} value="${esc(value)}"></div>`;
+    }
+
+    function renderWeights() {
+      if (!state.weights.length) return `<div class="muted">No se pudieron cargar los pesos del score.</div>`;
+      return state.weights.map((row) => `
+        <div class="weight-row">
+          <div><span>${esc(row.variable)}</span><small>${esc(row.dimension)} | ${row.mayor_es_mejor ? "mayor suma" : "menor suma"}</small></div>
+          <input class="control weight-input" data-variable="${esc(row.variable)}" data-dimension="${esc(row.dimension)}" data-better="${row.mayor_es_mejor ? "1" : "0"}" type="number" step="0.1" value="${esc(row.peso)}">
+        </div>
+      `).join("");
+    }
+
+    function weightTotal() {
+      return state.weights.reduce((sum, row) => sum + Number(row.peso || 0), 0);
+    }
+
+    function settingsPayload() {
+      return {
+        percentil_alta: Number($("pAlta").value || .7),
+        percentil_baja: Number($("pBaja").value || .3),
+        anio_base: Number($("anioBase").value || 2025),
+        anio_ytd: Number($("anioYtd").value || new Date().getFullYear()),
+        periodo_anio: Number($("periodYear").value || new Date().getFullYear()),
+        periodo_mes: Number($("periodMonth").value || 0),
+        fecha_desde: $("fromDate").value,
+        fecha_hasta: $("toDate").value,
+        fecha_base_desde: $("baseFromDate").value,
+        fecha_base_hasta: $("baseToDate").value,
+        costo_entrega_hl: Number($("costDelivery").value || 0),
+        costo_almacen_hl: Number($("costWarehouse").value || 0)
+      };
+    }
+
+    function weightsPayload() {
+      return [...document.querySelectorAll(".weight-input")].map((input) => ({
+        variable: input.dataset.variable,
+        dimension: input.dataset.dimension,
+        mayor_es_mejor: input.dataset.better === "1",
+        activo: true,
+        peso: Number(input.value || 0)
+      }));
+    }
+
+    async function saveSettings(recalculate) {
+      setLoading(true);
+      try {
+        state.params = await api("/api/segmentacion/parametros", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(settingsPayload())
+        });
+        const weights = weightsPayload();
+        if (weights.length) {
+          await api("/api/segmentacion/score-pesos", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(weights)
+          });
+          state.weights = weights;
+        }
+        if (recalculate) await recalculateClusters();
+        await loadData();
+        if (state.activeTab === "settings") renderSettings();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function currentPeriodPayload() {
+      const p = state.params.periodo || {};
+      const settingsVisible = state.activeTab === "settings" && $("periodYear");
+      if (settingsVisible) return settingsPayload();
+      return {
+        periodo_anio: p.periodo_anio || state.params.anio_ytd || new Date().getFullYear(),
+        periodo_mes: p.periodo_mes || 0,
+        fecha_desde: dateInputValue(p.fecha_desde),
+        fecha_hasta: dateInputValue(p.fecha_hasta),
+        fecha_base_desde: dateInputValue(p.fecha_base_desde),
+        fecha_base_hasta: dateInputValue(p.fecha_base_hasta)
+      };
+    }
+
+    async function recalculateClusters() {
+      await api("/api/segmentacion/recalcular", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...currentPeriodPayload(), ejecutado_por: "dashboard" })
+      });
+    }
+
+    async function handleRecalculate() {
+      setLoading(true);
+      try {
+        await recalculateClusters();
+        state.activeTab === "evolution" && await loadEvolution();
+        await loadData();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setUploadStatus(message, tone = "") {
+      const el = $("autoUploadStatus");
+      if (!el) return;
+      el.className = `upload-status ${tone}`.trim();
+      el.textContent = message;
+    }
+
+    function renderData() {
+      if (!$("autoUploadSummary")) return;
+      const total = Number(state.autoResumen.clientes_total || state.autoResumen.clientes_totales || 0);
+      const auto = Number(state.autoResumen.clientes_autoelevador || 0);
+      $("autoSummaryMeta").textContent = total ? `${pct(auto / total * 100, 1)} cobertura` : "Sin datos";
+      $("autoUploadSummary").innerHTML = `
+        ${metric("Clientes", num(total))}
+        ${metric("Con autoelevador", num(auto))}
+        ${metric("HL autoelevador", num(state.autoResumen.hl_autoelevador || 0, 1))}
+        ${metric("Ahorro estimado", money(state.autoResumen.ahorro_estimado || 0), "var(--green)")}
+        ${metric("Costo autoelevador", money(state.autoResumen.costo_autoelevador || 0))}
+        ${metric("Acompanantes estimados", num(state.autoResumen.acompanantes_estimados || 0))}
+      `;
+    }
+
+    async function uploadAutoelevador() {
+      const file = $("autoFile").files[0];
+      if (!file) {
+        setUploadStatus("Selecciona un CSV para subir", "err");
+        return;
+      }
+      const form = new FormData();
+      form.append("file", file);
+      form.append("fuente", $("autoSource").value || "dashboard");
+      setLoading(true);
+      setUploadStatus("Subiendo autoelevador...");
+      try {
+        const result = await api("/api/segmentacion/autoelevador/import", {
+          method: "POST",
+          body: form
+        }, 60000);
+        if ($("autoRecalc").checked) {
+          setUploadStatus(`${num(result.actualizados || 0)} clientes cargados. Recalculando...`);
+          await recalculateClusters();
+        }
+        await loadData();
+        setUploadStatus(`${num(result.actualizados || 0)} clientes actualizados`, "ok");
+      } catch (error) {
+        setUploadStatus(error.message, "err");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function openClient(clientId) {
+      $("drawerTitle").textContent = clientId;
+      $("drawerSub").textContent = "";
+      $("drawerBody").innerHTML = `<div class="loading"><span></span></div>`;
+      $("drawerOverlay").classList.add("open");
+      $("clientDrawer").classList.add("open");
+      try {
+        const data = await api(`/api/segmentacion/cliente/${encodeURIComponent(clientId)}`);
+        renderDrawer(data);
+      } catch (error) {
+        $("drawerBody").innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+    }
+
+    function renderDrawer(data) {
+      $("drawerTitle").textContent = data.cliente || "Cliente";
+      $("drawerSub").textContent = data.descripcion_cliente || "";
+      const dims = [
+        ["Negocio", data.dim_negocio, 35],
+        ["Productividad", data.dim_productividad, 20],
+        ["Servicio", data.dim_servicio, 20],
+        ["Rentabilidad", data.dim_rentabilidad, 15],
+        ["Geo / frecuencia", data.dim_geo, 10]
+      ];
+      $("drawerBody").innerHTML = `
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="badge ${badgeClass(data.cluster_dpo)}">${esc(clusterLabel(data.cluster_dpo) || "-")}</span>
+          <span class="badge ${badgeClass(data.subcluster_logistico)}">${esc(data.subcluster_logistico || "Estandar")}</span>
+          <div style="margin-left:auto;min-width:160px;">${scoreBar(data.score_total)}</div>
+        </div>
+        ${data.alerta_operativa ? `<div class="note" style="border-color:#ffc9c2;background:#fff4f2;color:var(--red);">${esc(data.alerta_operativa)}</div>` : ""}
+        <div class="section">
+          <div class="section-head"><div class="section-title"><i data-lucide="gauge"></i>Score</div></div>
+          <div class="dimension">
+            ${dims.map(([label, value, max]) => {
+              const val = Number(value || 0);
+              const width = Math.max(0, Math.min(100, val / max * 100));
+              return `<div class="dimension-row"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%;background:${scoreColor(width)}"></div></div><strong class="num">${num(val, 1)}</strong></div>`;
+            }).join("")}
+          </div>
+        </div>
+        <div class="metric-grid">
+          ${metric("Venta YTD", money(data.venta_ytd))}
+          ${metric("Crecimiento", pct(data.crecimiento_pct), Number(data.crecimiento_pct || 0) >= 0 ? "var(--green)" : "var(--red)")}
+          ${metric("HL", num(data.hl_ytd, 1))}
+          ${metric("Bultos", num(data.bultos_ytd, 1))}
+          ${metric("Pedidos", num(data.pedidos_ytd))}
+          ${metric("Drop size", num(data.dropsize_bultos_ytd, 1))}
+          ${metric("Costo logistico", money(data.costo_logistico_total))}
+          ${metric("Costo / venta", pct(data.ratio_costo_logistico_pct))}
+          ${metric("Rechazo", pct(data.pct_rechazo_pedidos))}
+          ${metric("Margen proxy", money(data.margen_logistico_proxy), Number(data.margen_logistico_proxy || 0) >= 0 ? "var(--green)" : "var(--red)")}
+        </div>
+        <div class="note"><strong>Plan de servicio</strong><br>${esc(data.plan_servicio || "-")}</div>
+        <div class="note"><strong>Accion prioritaria</strong><br>${esc(data.accion_prioritaria || "-")}</div>
+      `;
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function metric(label, value, color = "var(--text)") {
+      return `<div class="metric"><label>${esc(label)}</label><strong style="color:${color}">${value}</strong></div>`;
+    }
+
+    function closeDrawer() {
+      $("drawerOverlay").classList.remove("open");
+      $("clientDrawer").classList.remove("open");
+    }
+
+    function setTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
+      document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${tab}`));
+      if (tab === "settings") renderSettings();
+      if (tab === "data") renderData();
+      if (tab === "evolution") loadEvolution();
+      if (tab === "territory") setTimeout(() => state.map && state.map.invalidateSize(), 40);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function bindEvents() {
+      document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
+      ["branchFilter", "clusterFilter"].forEach((id) => $(id).addEventListener("change", loadData));
+      ["sortFilter", "searchInput"].forEach((id) => $(id).addEventListener("input", () => renderClients()));
+      ["mapWeight", "mapLimit"].forEach((id) => $(id).addEventListener("change", loadData));
+      $("mapLayer").addEventListener("change", renderMap);
+      $("priorityFilter").addEventListener("change", renderService);
+      $("alertFilter").addEventListener("change", renderService);
+      $("yearFilter").addEventListener("change", loadEvolution);
+      $("reloadBtn").addEventListener("click", loadData);
+      $("recalcBtn").addEventListener("click", handleRecalculate);
+      $("autoUploadBtn").addEventListener("click", uploadAutoelevador);
+      $("drawerOverlay").addEventListener("click", closeDrawer);
+      $("closeDrawerBtn").addEventListener("click", closeDrawer);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.lucide) lucide.createIcons();
+      bindEvents();
+      loadData();
+    });
+  </script>
+</body>
+</html>

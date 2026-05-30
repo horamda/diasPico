@@ -5,9 +5,13 @@ Endpoints para el módulo de segmentación logística-comercial DPO 2026.
 
 from __future__ import annotations
 
+import csv
+import io
+import unicodedata
 from datetime import datetime
+from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request, send_file
 
 from app.services import segmentacion_svc as svc
 
@@ -20,6 +24,88 @@ def _ok(data, **extra):
 
 def _err(msg: str, code: int = 400):
     return jsonify({'ok': False, 'error': str(msg)}), code
+
+
+_AUTO_CLIENT_KEYS = (
+    'iscliente',
+    'cliente',
+    'clienteid',
+    'idcliente',
+    'codcliente',
+    'codigocliente',
+    'codigo',
+)
+
+_AUTO_FLAG_KEYS = (
+    'autoelevador',
+    'autoelevadores',
+    'tieneautoelevador',
+    'auto',
+    'forklift',
+)
+
+
+def _norm_csv_key(value: str | None) -> str:
+    raw = unicodedata.normalize('NFD', str(value or ''))
+    raw = ''.join(ch for ch in raw if unicodedata.category(ch) != 'Mn')
+    return ''.join(ch for ch in raw.lower() if ch.isalnum())
+
+
+def _decode_csv_upload(raw: bytes) -> str:
+    for encoding in ('utf-8-sig', 'cp1252', 'latin-1'):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('utf-8-sig', errors='replace')
+
+
+def _parse_autoelevador_csv(raw: str) -> list[dict]:
+    try:
+        dialect = csv.Sniffer().sniff(raw[:4096], delimiters=',;\t|')
+    except csv.Error:
+        dialect = csv.excel
+
+    reader = csv.DictReader(io.StringIO(raw), dialect=dialect)
+    fieldnames = [f for f in (reader.fieldnames or []) if f]
+    if not fieldnames:
+        return []
+
+    by_key = {_norm_csv_key(name): name for name in fieldnames}
+    cliente_col = next((by_key[k] for k in _AUTO_CLIENT_KEYS if k in by_key), None)
+    auto_col = next((by_key[k] for k in _AUTO_FLAG_KEYS if k in by_key), None)
+    if not cliente_col and len(fieldnames) == 1:
+        cliente_col = fieldnames[0]
+    if not cliente_col:
+        return []
+
+    rows = []
+    for row in reader:
+        cliente = str(row.get(cliente_col) or '').strip()
+        if not cliente:
+            continue
+        item = {'is_cliente': cliente, 'autoelevador': True}
+        if auto_col:
+            item['autoelevador'] = row.get(auto_col)
+        rows.append(item)
+    return rows
+
+
+@bp.get('/sop/pdf')
+def descargar_sop_pdf():
+    try:
+        pdf_path = Path(current_app.root_path).parent / 'docs' / 'SOP_Segmentacion_Clientes_DPO.pdf'
+        if not pdf_path.exists():
+            return _err('No existe SOP PDF generado', 404)
+        return send_file(
+            str(pdf_path),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name='SOP_Segmentacion_Clientes_DPO.pdf',
+            max_age=0,
+        )
+    except Exception as e:
+        return _err(e, 500)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -49,6 +135,65 @@ def update_parametros():
 # ─────────────────────────────────────────────────────────────
 # Atributos de clientes
 # ─────────────────────────────────────────────────────────────
+
+@bp.get('/periodo')
+def get_periodo():
+    try:
+        return _ok(svc.get_periodo_activo(request.args.get('empresa_id', '1')))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.put('/periodo')
+def set_periodo():
+    try:
+        data = request.get_json(force=True) or {}
+        return _ok(svc.set_periodo_calculo(data))
+    except ValueError as e:
+        return _err(e)
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/score-pesos')
+def get_score_pesos():
+    try:
+        return _ok(svc.list_score_pesos())
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.put('/score-pesos')
+def update_score_pesos():
+    try:
+        data = request.get_json(force=True) or []
+        if not isinstance(data, list):
+            return _err('Se esperaba una lista JSON')
+        return _ok({'actualizados': svc.update_score_pesos(data)})
+    except ValueError as e:
+        return _err(e)
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/cache')
+@bp.get('/cache/status')
+def cache_status():
+    try:
+        return _ok(svc.get_cache_status())
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.post('/cache/refresh')
+def refresh_cache():
+    try:
+        body = request.get_json(silent=True) or {}
+        user = str(body.get('ejecutado_por', 'api'))
+        return _ok(svc.refresh_segmentacion_cache(user))
+    except Exception as e:
+        return _err(e, 500)
+
 
 @bp.post('/clientes/atributos')
 def upsert_atributos():
@@ -81,6 +226,55 @@ def bulk_atributos():
 # Métricas y clasificación (vistas en vivo)
 # ─────────────────────────────────────────────────────────────
 
+@bp.post('/autoelevador/import')
+def import_autoelevador():
+    """Carga masiva de clientes autoelevador (JSON o CSV)."""
+    try:
+        registros: list[dict | str]
+        fuente = 'api'
+        if request.files.get('file'):
+            raw = _decode_csv_upload(request.files['file'].read())
+            registros = _parse_autoelevador_csv(raw)
+            fuente = str(request.form.get('fuente') or 'csv_upload')
+        else:
+            payload = request.get_json(force=True, silent=True)
+            if isinstance(payload, dict) and isinstance(payload.get('clientes'), list):
+                registros = payload['clientes']
+                fuente = str(payload.get('fuente') or 'json')
+            elif isinstance(payload, list):
+                registros = payload
+                fuente = 'json'
+            else:
+                return _err('Se esperaba CSV (file) o JSON lista de clientes')
+        if not registros:
+            return _err('No se encontraron clientes validos para importar')
+        actualizados = svc.bulk_upsert_autoelevador(registros, fuente=fuente)
+        payload = {
+            'leidos': len(registros),
+            'actualizados': actualizados,
+            'fuente': fuente,
+        }
+        try:
+            payload['segmentacion_cache'] = svc.refresh_segmentacion_cache('upload_autoelevador')
+        except Exception as cache_error:
+            payload['segmentacion_cache_error'] = str(cache_error)
+        return _ok(payload)
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.post('/geografia/bulk')
+def bulk_geografia():
+    try:
+        rows = request.get_json(force=True) or []
+        if not isinstance(rows, list):
+            return _err('Se esperaba una lista JSON')
+        actualizados = svc.bulk_upsert_cliente_geografia(rows)
+        return _ok({'actualizados': actualizados})
+    except Exception as e:
+        return _err(e, 500)
+
+
 @bp.get('/metricas')
 def metricas():
     """
@@ -92,6 +286,18 @@ def metricas():
             sucursal=request.args.get('sucursal'),
             limit=int(request.args.get('limit', 500)),
             offset=int(request.args.get('offset', 0)),
+        )
+        return _ok(rows, total=len(rows))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/clientes-activos')
+def clientes_activos():
+    try:
+        rows = svc.get_clientes_activos_dpo(
+            sucursal=request.args.get('sucursal'),
+            limit=int(request.args.get('limit', 1000)),
         )
         return _ok(rows, total=len(rows))
     except Exception as e:
@@ -111,6 +317,43 @@ def clusters():
             cluster=request.args.get('cluster'),
             limit=int(request.args.get('limit', 500)),
             offset=int(request.args.get('offset', 0)),
+        )
+        return _ok(rows, total=len(rows))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/mapa/clientes')
+def mapa_clientes():
+    try:
+        rows = svc.get_clientes_mapa(
+            sucursal=request.args.get('sucursal'),
+            cluster=request.args.get('cluster'),
+            peso=request.args.get('peso', 'hl'),
+            limit=int(request.args.get('limit', 5000)),
+        )
+        return _ok(rows, total=len(rows))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/autoelevador/resumen')
+def autoelevador_resumen():
+    try:
+        return _ok(svc.get_autoelevador_resumen(
+            sucursal=request.args.get('sucursal'),
+        ))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/cluster-logistico')
+def cluster_logistico():
+    try:
+        rows = svc.get_cliente_cluster_logistico(
+            sucursal=request.args.get('sucursal'),
+            cluster=request.args.get('cluster'),
+            limit=int(request.args.get('limit', 500)),
         )
         return _ok(rows, total=len(rows))
     except Exception as e:
@@ -179,6 +422,16 @@ def resumen_localidad():
         return _err(e, 500)
 
 
+@bp.get('/resumen/activos-localidad')
+def resumen_activos_localidad():
+    try:
+        return _ok(svc.get_resumen_activos_localidad(
+            sucursal=request.args.get('sucursal')
+        ))
+    except Exception as e:
+        return _err(e, 500)
+
+
 @bp.get('/evolucion-mensual')
 def evolucion_mensual():
     """
@@ -228,9 +481,9 @@ def recalcular():
     try:
         body = request.get_json(force=True) or {}
         anio = int(body.get('periodo_anio', datetime.now().year))
-        mes  = int(body.get('periodo_mes', 0))
+        mes = int(body.get('periodo_mes', 0))
         user = str(body.get('ejecutado_por', 'api'))
-        resultado = svc.recalcular_clusters(anio, mes, user)
+        resultado = svc.recalcular_clusters(anio, mes, user, periodo_data=body)
         return _ok(resultado)
     except Exception as e:
         return _err(e, 500)

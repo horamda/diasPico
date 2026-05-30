@@ -62,6 +62,23 @@ CREATE INDEX IF NOT EXISTS idx_seg_cli_activo    ON seg_clientes_atributos(activ
 
 -- ------------------------------------------------------------
 
+CREATE TABLE IF NOT EXISTS cliente_autoelevador (
+    id                BIGSERIAL PRIMARY KEY,
+    is_cliente        VARCHAR(100) NOT NULL,
+    autoelevador      BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_importacion TIMESTAMP NOT NULL DEFAULT NOW(),
+    fuente            VARCHAR(100) NOT NULL DEFAULT 'manual',
+    updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_cliente_autoelevador_cliente UNIQUE (is_cliente),
+    CONSTRAINT chk_cliente_autoelevador_cliente
+        CHECK (NULLIF(BTRIM(is_cliente), '') IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_cli_auto_cliente ON cliente_autoelevador(is_cliente);
+CREATE INDEX IF NOT EXISTS idx_cli_auto_flag    ON cliente_autoelevador(autoelevador);
+
+-- ------------------------------------------------------------
+
 CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     id                      BIGSERIAL PRIMARY KEY,
     cliente                 VARCHAR(50)   NOT NULL,
@@ -264,7 +281,7 @@ SELECT
     END                                AS pct_rechazo_pedidos,
     -- Atributos de cliente
     COALESCE(ca.localidad, '')         AS localidad,
-    COALESCE(ca.autoelevador, FALSE)   AS autoelevador,
+    COALESCE(cae.autoelevador, ca.autoelevador, FALSE) AS autoelevador,
     ca.nps_valor,
     ca.rmd_valor,
     -- Costos logísticos (calculados sobre YTD)
@@ -288,6 +305,8 @@ LEFT JOIN base_mismoper bm
    AND bm.sucursal = COALESCE(y.sucursal, ab.sucursal)
 LEFT JOIN seg_clientes_atributos ca
     ON ca.cliente = COALESCE(y.cliente, ab.cliente)
+LEFT JOIN cliente_autoelevador cae
+    ON cae.is_cliente = COALESCE(y.cliente, ab.cliente)
 CROSS JOIN params p;
 
 

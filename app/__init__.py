@@ -1,15 +1,44 @@
+import importlib
 import os
-from pathlib import Path
-from flask import Flask, send_from_directory
+from flask import Flask, redirect, render_template, request, session, url_for
 from flask_cors import CORS
-from app.config import configs
 from app.extensions import db, migrate
+
+
+BLUEPRINT_MODULES = (
+    'app.routes.portal',
+    'app.routes.upload',
+    'app.routes.picos',
+    'app.routes.recursos',
+    'app.routes.feriados',
+    'app.routes.parametros',
+    'app.routes.articulos',
+    'app.routes.ausentismo',
+    'app.routes.rechazos',
+    'app.routes.eventos',
+    'app.routes.dropsize',
+    'app.routes.kpi_objetivos',
+    'app.routes.planificacion_picos',
+    'app.routes.catalogo',
+    'app.routes.flota',
+    'app.routes.simulacion_logistica',
+    'app.routes.sync_sheets',
+    'app.routes.segmentacion',
+    'app.routes.admin_proyecto',
+)
+
+
+def register_blueprints(app: Flask) -> None:
+    for module_name in BLUEPRINT_MODULES:
+        module = importlib.import_module(module_name)
+        app.register_blueprint(module.bp)
 
 
 def create_app(env: str | None = None) -> Flask:
     app = Flask(__name__, instance_relative_config=False)
 
     # Load config
+    from app.config import configs
     env = env or os.getenv('FLASK_ENV', 'development')
     app.config.from_object(configs.get(env, configs['default']))
 
@@ -20,35 +49,49 @@ def create_app(env: str | None = None) -> Flask:
     # Las tablas se crean lazy en el primer uso de cada repository.
     # No bloqueamos el arranque con conexiones a Railway.
 
-    # Register blueprints
-    from app.routes import upload, picos, recursos, feriados, parametros, articulos, ausentismo, rechazos, eventos, dropsize, kpi_objetivos, planificacion_picos, catalogo, flota, simulacion_logistica, sync_sheets, segmentacion
-    app.register_blueprint(upload.bp)
-    app.register_blueprint(picos.bp)
-    app.register_blueprint(recursos.bp)
-    app.register_blueprint(feriados.bp)
-    app.register_blueprint(parametros.bp)
-    app.register_blueprint(articulos.bp)
-    app.register_blueprint(ausentismo.bp)
-    app.register_blueprint(rechazos.bp)
-    app.register_blueprint(eventos.bp)
-    app.register_blueprint(dropsize.bp)
-    app.register_blueprint(kpi_objetivos.bp)
-    app.register_blueprint(planificacion_picos.bp)
-    app.register_blueprint(catalogo.bp)
-    app.register_blueprint(flota.bp)
-    app.register_blueprint(simulacion_logistica.bp)
-    app.register_blueprint(sync_sheets.bp)
-    app.register_blueprint(segmentacion.bp)
+    register_blueprints(app)
+
+    def _guard():
+        if session.get('portal_user_id'):
+            return None
+        return redirect(url_for('portal.login', next=request.path))
 
     @app.get('/')
     def panel():
-        project_root = Path(__file__).resolve().parent.parent
-        return send_from_directory(project_root, 'panel_dias_pico_v3.html')
+        if not session.get('portal_user_id'):
+            return redirect(url_for('portal.login'))
+        return redirect(url_for('portal.portal_home'))
+
+    @app.get('/dias-pico')
+    def dias_pico():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('panel_dias_pico_v3.html')
 
     @app.get('/reporte-picos')
     def reporte_picos():
-        project_root = Path(__file__).resolve().parent.parent
-        return send_from_directory(project_root, 'reporte_picos.html')
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('reporte_picos.html')
+
+    @app.get('/segmentacion-clientes')
+    @app.get('/admin/segmentacion')
+    def segmentacion_clientes():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('segmentacion_clientes.html')
+
+    @app.get('/admin')
+    @app.get('/admin/proyecto')
+    @app.get('/dashboard')
+    def admin_proyecto():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('admin_proyecto.html')
 
     @app.get('/api/health')
     def health():

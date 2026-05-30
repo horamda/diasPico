@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup inicial | Portal</title>
+  <link rel="stylesheet" href="/static/design-system.css">
+  <style>
+    :root {
+      --panel:   var(--surf);
+      --line:    var(--brd);
+      --text:    var(--txt);
+      --primary: var(--acc);
+    }
+    body {
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: var(--bg);
+    }
+    .card {
+      width: min(480px, 100%);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+    }
+    h1 { margin: 0; font-size: 22px; }
+    p { margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+    form { margin-top: 18px; display: grid; gap: 12px; }
+    label { font-size: 13px; color: var(--muted); font-weight: 600; }
+    input {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      outline: none;
+    }
+    input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+    button {
+      min-height: 42px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--primary);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .error {
+      margin-top: 12px;
+      border: 1px solid #ffc9c2;
+      background: #fff0ed;
+      color: #9b1c1c;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    .foot { margin-top: 14px; font-size: 12px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <h1>Setup inicial</h1>
+    <p>Crear el primer usuario administrador.</p>
+    <form method="post" action="/setup-inicial">
+      <div>
+        <label for="nombre">Nombre</label>
+        <input id="nombre" name="nombre" required>
+      </div>
+      <div>
+        <label for="username">Usuario</label>
+        <input id="username" name="username" autocomplete="username" required>
+      </div>
+      <div>
+        <label for="password">Password (minimo 6)</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required>
+      </div>
+      <button type="submit">Crear administrador</button>
+    </form>
+    {% if error %}
+      <div class="error">{{ error }}</div>
+    {% endif %}
+    <div class="foot">Esta pantalla se bloquea automaticamente cuando ya existe un usuario.</div>
+  </section>
+</body>
+</html>

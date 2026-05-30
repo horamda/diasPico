@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 from io import BytesIO
-from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_file, send_from_directory
+from flask import Blueprint, jsonify, render_template, request, send_file
 
 from app.services import cache_svc, planificacion_picos_service as svc
 
@@ -12,8 +11,7 @@ bp = Blueprint("planificacion_picos", __name__)
 
 
 def _panel():
-    project_root = Path(__file__).resolve().parent.parent.parent
-    return send_from_directory(project_root, "panel_dias_pico_v3.html")
+    return render_template("panel_dias_pico_v3.html")
 
 
 def _filters() -> dict:

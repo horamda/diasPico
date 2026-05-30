@@ -13,6 +13,7 @@ import csv
 import io
 import re
 import time
+from collections import Counter
 from datetime import date, datetime
 import calendar as cal_mod
 from dataclasses import dataclass, field
@@ -43,18 +44,24 @@ BATCH_SIZE = 1000   # rows per execute_values call
 class UploadResult:
     inserted:        int        = 0
     errors:          int        = 0
+    deactivated:     int        = 0
     months_in_file:  list[str]  = field(default_factory=list)
     months_replaced: list[str]  = field(default_factory=list)
+    metadata:        dict       = field(default_factory=dict)
     elapsed_s:       float      = 0.0
 
     def to_dict(self) -> dict:
-        return {
+        payload = {
             'inserted':        self.inserted,
             'errors':          self.errors,
+            'deactivated':     self.deactivated,
             'months_in_file':  self.months_in_file,
             'months_replaced': self.months_replaced,
             'elapsed_s':       round(self.elapsed_s, 2),
         }
+        if self.metadata:
+            payload['metadata'] = self.metadata
+        return payload
 
 
 # ── Bulk insert helper ────────────────────────────────────────
@@ -801,6 +808,8 @@ _CLI_COLS = [
     'fecha_vencimiento', 'exento_ib', 'inscripto_ib', 'convenio_mut',
     'agente_de_pe', 'documento', 'licencia_alco', 'vencimiento', 'alta_fecha',
     'anulado', 'anulado_fecha', 'modificacion', 'cliente_asoc', 'cta_y_ord',
+    'fuerza_venta_1_dias_visita',
+    'activo_maestro', 'ultima_importacion_clientes', 'desactivado_en',
 ]
 
 _CLI_CONFLICT = """
@@ -862,11 +871,119 @@ ON CONFLICT (cliente) DO UPDATE SET
     anulado_fecha = EXCLUDED.anulado_fecha,
     modificacion = EXCLUDED.modificacion,
     cliente_asoc = EXCLUDED.cliente_asoc,
-    cta_y_ord = EXCLUDED.cta_y_ord
+    cta_y_ord = EXCLUDED.cta_y_ord,
+    fuerza_venta_1_dias_visita = EXCLUDED.fuerza_venta_1_dias_visita,
+    activo_maestro = TRUE,
+    ultima_importacion_clientes = EXCLUDED.ultima_importacion_clientes,
+    desactivado_en = NULL
 """
 
 
-def _cli_row(r: dict) -> tuple:
+def _coord_to_float(value) -> float | None:
+    parsed = to_dec(value)
+    if parsed is None:
+        return None
+    return float(parsed)
+
+
+def _coord_pair(row: dict) -> tuple[float, float] | None:
+    # GIS convention: X = longitude, Y = latitude.
+    lon = _coord_to_float(row.get('coord_x') or row.get('coord_x_entrega'))
+    lat = _coord_to_float(row.get('coord_y') or row.get('coord_y_entrega'))
+    if lat is None or lon is None:
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None
+    if lat == 0 and lon == 0:
+        return None
+    return lat, lon
+
+
+def _is_cliente_activo_row(row: dict) -> bool:
+    anulado = str(row.get('anulado') or '').strip().lower()
+    dias = str(row.get('fuerza_venta_1_dias_visita') or '').strip().lower()
+    return (
+        anulado in {'no', 'n', '0', 'false', 'f'}
+        and bool(dias)
+        and dias != 'dom'
+        and 'oficina' not in dias
+    )
+
+
+def _analyze_clientes_rows(rows: list[dict]) -> dict:
+    clientes = [str(r.get('cliente') or '').strip() for r in rows]
+    clientes_validos = [c for c in clientes if c]
+    dup_clientes = sum(n - 1 for n in Counter(clientes_validos).values() if n > 1)
+    sucursales = Counter(str(r.get('sucursal') or '').strip() or 'Sin sucursal' for r in rows)
+    anulado = Counter(str(r.get('anulado') or '').strip().upper() or 'VACIO' for r in rows)
+    dias_visita = [str(r.get('fuerza_venta_1_dias_visita') or '').strip() for r in rows]
+    coords_validas = sum(1 for r in rows if _coord_pair(r) is not None)
+    return {
+        'filas_leidas': len(rows),
+        'clientes_validos': len(clientes_validos),
+        'clientes_unicos': len(set(clientes_validos)),
+        'clientes_duplicados': dup_clientes,
+        'sucursales': dict(sorted(sucursales.items())),
+        'anulado': dict(sorted(anulado.items())),
+        'dias_visita_vacios': sum(1 for v in dias_visita if not v),
+        'dias_visita_dom': sum(1 for v in dias_visita if v.lower() == 'dom'),
+        'dias_visita_oficina': sum(1 for v in dias_visita if 'oficina' in v.lower()),
+        'clientes_activos_regla': sum(1 for r in rows if _is_cliente_activo_row(r)),
+        'coordenadas_validas_no_cero': coords_validas,
+        'coordenadas_sin_uso': len(rows) - coords_validas,
+    }
+
+
+def _sync_cliente_geografia_from_rows(cur, rows: list[dict]) -> int:
+    geo_rows = []
+    seen: set[str] = set()
+    for row in rows:
+        cliente = str(row.get('cliente') or '').strip()
+        if not cliente or cliente in seen:
+            continue
+        pair = _coord_pair(row)
+        if not pair:
+            continue
+        seen.add(cliente)
+        lat, lon = pair
+        geo_rows.append((
+            cliente[:100],
+            lat,
+            lon,
+            str(row.get('localidad') or '')[:255],
+            str(row.get('sucursal') or '')[:255],
+            datetime.now(),
+        ))
+    if not geo_rows:
+        return 0
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS cliente_geografia (
+            cliente_id   VARCHAR(100) PRIMARY KEY,
+            latitud      NUMERIC(12,8),
+            longitud     NUMERIC(12,8),
+            localidad    TEXT,
+            sucursal     TEXT,
+            updated_at   TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+    """)
+    execute_values(
+        cur,
+        """INSERT INTO cliente_geografia
+           (cliente_id, latitud, longitud, localidad, sucursal, updated_at)
+           VALUES %s
+           ON CONFLICT (cliente_id) DO UPDATE SET
+               latitud = EXCLUDED.latitud,
+               longitud = EXCLUDED.longitud,
+               localidad = EXCLUDED.localidad,
+               sucursal = EXCLUDED.sucursal,
+               updated_at = NOW()""",
+        geo_rows,
+        page_size=BATCH_SIZE,
+    )
+    return len(geo_rows)
+
+
+def _cli_row(r: dict, imported_at: datetime) -> tuple:
     return (
         str(r.get('cliente') or '')[:50],
         str(r.get('sucursal') or '')[:50],
@@ -927,12 +1044,17 @@ def _cli_row(r: dict) -> tuple:
         str(r.get('modificacion') or '')[:100],
         str(r.get('cliente_asoc') or '')[:100],
         str(r.get('cta_y_ord') or '')[:100],
+        str(r.get('fuerza_venta_1_dias_visita') or '')[:50],
+        True,
+        imported_at,
+        None,
     )
 
 
 def load_clientes(file_bytes: bytes) -> UploadResult:
     t0 = time.perf_counter()
     rows = _parse_csv(file_bytes, CLIENTES_MAP)
+    imported_at = datetime.now()
 
     typed: list[tuple] = []
     parse_errors = 0
@@ -941,14 +1063,14 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
             parse_errors += 1
             continue
         try:
-            typed.append(_cli_row(r))
+            typed.append(_cli_row(r, imported_at))
         except Exception:
             parse_errors += 1
 
     if not typed:
         raise ValueError('Sin filas validas: se espera la columna cliente')
 
-    result = UploadResult(errors=parse_errors)
+    result = UploadResult(errors=parse_errors, metadata=_analyze_clientes_rows(rows))
     with pg_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS clientes (cliente VARCHAR(50) PRIMARY KEY)")
@@ -1010,10 +1132,54 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS modificacion VARCHAR(100)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cliente_asoc VARCHAR(100)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cta_y_ord VARCHAR(100)")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS fuerza_venta_1_dias_visita VARCHAR(50)")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS activo_maestro BOOLEAN NOT NULL DEFAULT TRUE")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ultima_importacion_clientes TIMESTAMP")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS desactivado_en TIMESTAMP")
             ins, err = _bulk_insert(cur, 'clientes', _CLI_COLS, typed, _CLI_CONFLICT)
+            cliente_ids = [row[0] for row in typed]
+            cur.execute(
+                """UPDATE clientes
+                   SET activo_maestro = FALSE,
+                       desactivado_en = COALESCE(desactivado_en, NOW()),
+                       ultima_importacion_clientes = %s
+                   WHERE NOT (cliente = ANY(%s))
+                     AND COALESCE(activo_maestro, TRUE) = TRUE""",
+                (imported_at, cliente_ids),
+            )
+            deactivated = cur.rowcount
+            geo_synced = _sync_cliente_geografia_from_rows(cur, rows)
             result.inserted = ins
             result.errors += err
+            result.deactivated = deactivated
+            result.metadata['geografia_sincronizada'] = geo_synced
 
+    result.elapsed_s = time.perf_counter() - t0
+    return result
+
+
+def analyze_clientes(file_bytes: bytes) -> UploadResult:
+    t0 = time.perf_counter()
+    rows = _parse_csv(file_bytes, CLIENTES_MAP)
+    imported_at = datetime.now()
+
+    valid_rows = 0
+    parse_errors = 0
+    for r in rows:
+        if not r.get('cliente'):
+            parse_errors += 1
+            continue
+        try:
+            _cli_row(r, imported_at)
+            valid_rows += 1
+        except Exception:
+            parse_errors += 1
+
+    result = UploadResult(
+        inserted=valid_rows,
+        errors=parse_errors,
+        metadata=_analyze_clientes_rows(rows),
+    )
     result.elapsed_s = time.perf_counter() - t0
     return result
 

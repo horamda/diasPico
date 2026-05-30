@@ -4,31 +4,24 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=1280">
 <title>Reporte Días Pico</title>
+<link rel="stylesheet" href="/static/design-system.css">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  /* Accent — dark mode (vibrant) */
-  --acc: #f5a623; --blu: #4a9eff; --grn: #3ecf8e; --red: #e05c5c;
-  --pur: #a78bfa; --evr: #f87171;
-  /* Surfaces */
-  --bg:  #0d0d0d; --surf: #161616; --surf2: #1e1e1e; --brd: #2c2c2c;
-  --txt: #e8e8e8; --muted: #777; --mono: 'Courier New', monospace;
-  /* Hardcoded-color replacements */
-  --ctrl-bg:       #111;
-  --ctrl-brd:      #222;
-  --ctrl-input-bg: #1e1e1e;
-  --ctrl-input-brd:#333;
-  --ctrl-btn-bg:   #333;
-  --ctrl-tip:      #555;
-  --res-bg:        #111;
-  --res-div:       #222;
-  --cal-cell-brd:  #222;
-  --cal-dn:        #aaa;
-  --cal-dname:     #555;
-  --row-div:       #1e1e1e;
-  --ftr-c:         #555;
+  --evr:           var(--red);
+  --ctrl-bg:       var(--surf);
+  --ctrl-brd:      var(--brd);
+  --ctrl-input-bg: var(--surf2);
+  --ctrl-input-brd:var(--brd2);
+  --ctrl-btn-bg:   var(--surf3);
+  --ctrl-tip:      var(--muted);
+  --res-bg:        var(--surf);
+  --res-div:       var(--brd);
+  --cal-cell-brd:  var(--brd);
+  --cal-dn:        var(--txt2);
+  --cal-dname:     var(--muted);
+  --row-div:       var(--surf2);
+  --ftr-c:         var(--muted);
 }
-html, body { background: var(--bg); color: var(--txt); font-family: system-ui, -apple-system, sans-serif; }
 
 /* ── CONTROL BAR ── */
 #ctrl-bar {

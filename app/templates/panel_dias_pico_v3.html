@@ -4,26 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Días Pico — Operaciones</title>
+<link rel="stylesheet" href="/static/design-system.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
-:root{
-  --bg:#0d0f14;--surf:#15171e;--surf2:#1c1f28;--surf3:#22262f;
-  --brd:#2a2e3a;--acc:#f5a623;--red:#e05c5c;--grn:#4caf82;--blu:#5b8dee;--pur:#a78bfa;
-  --txt:#e8eaf0;--muted:#6b7080;
-  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
-}
-*{margin:0;padding:0;box-sizing:border-box;}
-body{background:var(--bg);color:var(--txt);font-family:var(--sans);min-height:100vh;display:flex;flex-direction:column;}
+/* layout overrides — design-system.css handles reset, typography, base components */
+body{display:flex;flex-direction:column;}
 /* ── TOP BAR ── */
-.topbar{background:var(--surf);border-bottom:1px solid var(--brd);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-shrink:0;}
-.badge{background:var(--acc);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 7px;border-radius:3px;letter-spacing:1px;}
 .topbar h1{font-size:14px;font-weight:600;}
 .topbar .right{margin-left:auto;display:flex;align-items:center;gap:10px;}
-select,input[type=text],input[type=number],input[type=date],input[type=month]{
-  background:var(--surf2);border:1px solid var(--brd);color:var(--txt);
-  padding:5px 9px;border-radius:5px;font-size:12px;font-family:var(--sans);outline:none;
-}
-select:focus,input:focus{border-color:var(--acc);}
+.badge{background:var(--acc);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 7px;border-radius:var(--r-xs);letter-spacing:1px;}
 /* ── LAYOUT ── */
 .layout{display:grid;grid-template-columns:280px 1fr;flex:1;min-height:0;overflow:hidden;}
 /* ── SIDEBAR ── */
@@ -46,6 +34,39 @@ select:focus,input:focus{border-color:var(--acc);}
 .cal-day.selected{background:var(--acc)!important;color:#000!important;font-weight:700;border-color:var(--acc)!important;}
 .cal-day.has-data::after{content:'';position:absolute;bottom:2px;left:50%;transform:translateX(-50%);width:3px;height:3px;border-radius:50%;background:currentColor;opacity:.5;}
 .cal-day.selected::after{display:none;}
+.cal-day.nds-problema{border-bottom:2px solid var(--red);}
+.cal-day.pico.nds-problema{border-color:var(--red);}
+/* ── COMPARATIVO REDESIGN ── */
+.cmp-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-items:start;}
+.cmp-card{background:var(--surf);border:1px solid var(--brd);border-radius:7px;overflow:hidden;}
+.cmp-card-title{padding:8px 12px;font-size:11px;font-weight:600;background:var(--surf2);border-bottom:1px solid var(--brd);display:flex;align-items:center;gap:6px;}
+.cmp-card-scroll{overflow-x:auto;max-height:540px;overflow-y:auto;}
+.cmp-tbl2{width:100%;border-collapse:collapse;font-size:10.5px;}
+.cmp-tbl2 th{background:var(--surf2);color:var(--muted);font-weight:500;padding:4px 6px;text-align:center;border-bottom:1px solid var(--brd);white-space:nowrap;position:sticky;top:0;z-index:2;}
+.cmp-tbl2 th.mes-sticky{text-align:left;position:sticky;top:0;left:0;z-index:3;background:var(--surf2);min-width:70px;border-right:1px solid var(--brd);}
+.cmp-tbl2 th.sec-hdr{background:var(--surf3);font-size:9px;letter-spacing:.5px;text-transform:uppercase;}
+.cmp-tbl2 td{padding:4px 6px;border-bottom:1px solid rgba(42,46,58,.35);text-align:center;font-family:var(--mono);font-size:10px;}
+.cmp-tbl2 td.mes-lbl{text-align:left;font-family:var(--sans);font-size:11px;font-weight:500;color:var(--txt);position:sticky;left:0;background:var(--surf);z-index:1;white-space:nowrap;border-right:1px solid var(--brd);padding:4px 8px;}
+.cmp-tbl2 tr:hover td{background:rgba(255,255,255,.03);}
+.cmp-tbl2 tr:hover td.mes-lbl{background:var(--surf2);}
+.cmp-tbl2 tr.futuro td{opacity:.6;font-style:italic;}
+.cmp-tbl2 tr.futuro td.mes-lbl{background:var(--surf2);}
+.cmp-tbl2 tr.futuro:hover td.mes-lbl{background:var(--surf3);}
+.cmp-tbl2 tr.summary td{background:var(--surf3);font-weight:600;border-top:2px solid var(--brd);font-size:10px;}
+.cmp-tbl2 tr.summary td.mes-lbl{background:var(--surf3);font-size:9px;color:var(--muted);}
+.cmp-d{font-weight:700;font-size:9px;white-space:nowrap;}
+.cmp-d.up{color:var(--grn);}
+.cmp-d.dn{color:var(--red);}
+.cmp-d.eq{color:var(--muted);}
+@media(max-width:1200px){.cmp-grid{grid-template-columns:1fr 1fr;}}
+@media(max-width:780px){.cmp-grid{grid-template-columns:1fr;}}
+/* ── DOTACIÓN ── */
+.dot-tbl{width:100%;border-collapse:collapse;font-size:11px;}
+.dot-tbl th{background:var(--surf2);color:var(--muted);font-weight:500;padding:5px 8px;border-bottom:1px solid var(--brd);text-align:left;}
+.dot-tbl td{padding:4px 8px;border-bottom:1px solid rgba(42,46,58,.4);font-family:var(--mono);font-size:10px;}
+.dot-tbl tr.day-header td{background:var(--surf2);font-family:var(--sans);font-size:11px;font-weight:600;color:var(--acc);}
+.dot-tbl tr.day-total td{background:var(--surf3);font-size:10px;color:var(--muted);}
+@media(max-width:900px){ #dotacionPaneles { grid-template-columns:1fr; } }
 /* ── LEGEND ── */
 .legend{display:flex;flex-wrap:wrap;gap:8px;}
 .leg{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted);}
@@ -272,6 +293,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="leg"><div class="dot" style="border:1px solid var(--blu);background:transparent"></div>Hoy</div>
     <div class="leg"><div class="dot" style="background:var(--acc)"></div>Seleccionado</div>
     <div class="leg"><div class="dot" style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.5)"></div>Evento</div>
+    <div class="leg"><div class="dot" style="border-bottom:2px solid var(--red);border-radius:0"></div>NDS &lt;85%</div>
   </div>
 
   <!-- MINI STATS -->
@@ -313,6 +335,8 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="tabs">
       <div class="tab active" onclick="switchTab('kpis',this)">KPIs</div>
       <div class="tab" onclick="switchTab('historico',this)">Histórico</div>
+      <div class="tab" onclick="switchTab('comparativo',this)">Comparativo</div>
+      <div class="tab" onclick="switchTab('dotacion',this)">Dotación</div>
       <div class="tab" onclick="switchTab('analisis',this)">Rechazos</div>
       <div class="tab" onclick="switchTab('dropsize',this)">Dropsize</div>
       <div class="tab" onclick="switchTab('planificacion',this)">Plan Mensual</div>
@@ -341,6 +365,8 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="kpi-grid" id="kpiGrid"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
     <div class="sec" style="margin-top:8px">Días del mes — detalle</div>
     <div class="box"><div id="tablaDias"><div class="loading"><div class="spinner"></div></div></div></div>
+    <div class="sec" style="margin-top:16px">Periodos críticos — R3.4.1</div>
+    <div class="box" id="periodosCriticos"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
   <!-- TAB HISTÓRICO -->
@@ -349,6 +375,54 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box"><div class="chart-wrap" id="barHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
     <div class="sec" style="margin-top:8px">Tabla resumen</div>
     <div class="box"><div id="tablaHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB COMPARATIVO ANUAL -->
+  <div id="tab-comparativo" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+      <div class="plan-tabs">
+        <div class="plan-tab active" onclick="switchCmpSuc('TODAS',this)">General</div>
+        <div class="plan-tab" onclick="switchCmpSuc('1',this)">Casa Central</div>
+        <div class="plan-tab" onclick="switchCmpSuc('2',this)">Dolores</div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px">
+        <label style="color:var(--muted)">Año</label>
+        <input type="number" id="cmpAnio" style="width:70px" min="2020" max="2030">
+        <label style="color:var(--muted)">vs base</label>
+        <input type="number" id="cmpAnioBase" style="width:70px" min="2020" max="2030">
+        <button class="btn primary" style="font-size:11px;padding:4px 12px" onclick="loadComparativo()">Actualizar</button>
+      </div>
+    </div>
+    <div id="cmpSucLabel" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
+    <div id="tablaComparativo"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- TAB DOTACIÓN OPERATIVA -->
+  <div id="tab-dotacion" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+      <div class="sec" style="margin-bottom:0;flex:1">Dotación logística diaria</div>
+      <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+        <label style="color:var(--muted)">Desde</label>
+        <input type="date" id="dotFechaIni" style="width:130px">
+        <label style="color:var(--muted)">Hasta</label>
+        <input type="date" id="dotFechaFin" style="width:130px">
+        <button class="btn primary" style="font-size:11px;padding:4px 12px" onclick="loadDotacion()">Actualizar</button>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px" id="dotacionPaneles">
+      <div>
+        <div class="sec" style="margin-bottom:8px">Casa Central</div>
+        <div id="dotCasaCentral"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div>
+        <div class="sec" style="margin-bottom:8px">Dolores</div>
+        <div id="dotDolores"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+      <div>
+        <div class="sec" style="margin-bottom:8px">Total empresa</div>
+        <div id="dotTotal"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
   </div>
 
   <!-- TAB ANALISIS RECHAZOS -->

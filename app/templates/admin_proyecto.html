@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panel Proyecto | Operaciones</title>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="/static/design-system.css">
+  <style>
+    /* map legacy variable names to design system tokens */
+    :root {
+      --panel:     var(--surf);
+      --panel-2:   var(--surf2);
+      --line:      var(--brd);
+      --line-soft: var(--brd);
+      --text:      var(--txt);
+      --blue:      var(--blu);
+      --green:     var(--grn);
+      --amber:     var(--ora);
+      --violet:    var(--pur);
+      --radius:    var(--r);
+    }
+    body { letter-spacing: 0; }
+    button, input, select { font: inherit; letter-spacing: 0; }
+    .shell { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; }
+    .topbar {
+      position: sticky; top: 0; z-index: 20;
+      display: grid; grid-template-columns: minmax(220px, 1fr) auto; gap: 16px; align-items: center;
+      padding: 14px 20px; background: rgba(255,255,255,.94); border-bottom: 1px solid var(--line); backdrop-filter: blur(12px);
+    }
+    .brand { display: flex; gap: 12px; align-items: center; min-width: 0; }
+    .brand-mark { width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: #172033; flex: 0 0 auto; }
+    .brand h1 { margin: 0; font-size: 17px; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .brand p { margin: 2px 0 0; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn {
+      min-height: 34px; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+      border-radius: 8px; padding: 7px 11px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      cursor: pointer; text-decoration: none; font-size: 13px; font-weight: 650;
+    }
+    .btn.primary { background: #172033; border-color: #172033; color: #fff; }
+    .btn svg { width: 16px; height: 16px; }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .content { width: min(1500px, 100%); margin: 0 auto; padding: 18px 20px 28px; display: grid; align-content: start; gap: 16px; }
+    .kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+    .kpi { min-height: 106px; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); padding: 13px; display: grid; align-content: space-between; }
+    .kpi-head { display: flex; justify-content: space-between; gap: 8px; align-items: center; color: var(--muted); font-size: 12px; font-weight: 750; }
+    .kpi-head svg { width: 17px; height: 17px; }
+    .kpi-value { font-size: 27px; line-height: 1; font-weight: 780; font-variant-numeric: tabular-nums; }
+    .kpi-sub { color: var(--muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .tabs { min-height: 46px; display: flex; align-items: center; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+    .tab { flex: 0 0 auto; min-height: 36px; padding: 8px 12px; border: 0; border-radius: 7px; background: transparent; color: var(--muted); display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 750; cursor: pointer; white-space: nowrap; }
+    .tab.active { background: var(--panel-2); color: var(--text); }
+    .tab svg { width: 16px; height: 16px; }
+    .view { display: none; gap: 16px; }
+    .view.active { display: grid; align-content: start; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .panel { min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: var(--radius); }
+    .panel-head { min-height: 52px; padding: 13px 14px; border-bottom: 1px solid var(--line-soft); display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 780; min-width: 0; }
+    .panel-title svg { width: 17px; height: 17px; color: var(--muted); flex: 0 0 auto; }
+    .panel-meta { color: var(--muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; }
+    .panel-body { padding: 14px; }
+    .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+    .module {
+      border: 1px solid var(--line); border-radius: 8px; background: var(--panel); padding: 12px; min-height: 112px;
+      display: grid; align-content: space-between; text-decoration: none; color: var(--text);
+    }
+    .module:hover { border-color: #b8c2d2; }
+    .module-top { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+    .module-name { font-weight: 780; font-size: 14px; }
+    .module small { color: var(--muted); font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .badge { display: inline-flex; min-height: 24px; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 12px; font-weight: 780; border: 1px solid transparent; white-space: nowrap; }
+    .b-activa, .b-activo, .b-protegida, .b-primario, .b-ok { background: #eaf7ef; color: var(--green); border-color: #bfe8ce; }
+    .b-pendiente { background: #eef2ff; color: #46507a; border-color: #cfd9ff; }
+    .b-lento { background: #fff4df; color: var(--amber); border-color: #f3d8a4; }
+    .b-error { background: #fff0ed; color: var(--red); border-color: #ffc9c2; }
+    .b-vacia, .b-sin_uso_estadistico { background: #fff4df; color: var(--amber); border-color: #f3d8a4; }
+    .b-requiere_mantenimiento { background: #fff0ed; color: var(--red); border-color: #ffc9c2; }
+    .toolbar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .control { min-height: 36px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--text); padding: 7px 10px; font-size: 13px; outline: none; }
+    .control:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+    .table-wrap { width: 100%; overflow: auto; border-radius: 0 0 var(--radius) var(--radius); }
+    table { width: 100%; border-collapse: collapse; min-width: 900px; }
+    th { height: 38px; padding: 8px 12px; background: var(--panel-2); border-bottom: 1px solid var(--line); color: var(--muted); font-size: 11px; text-transform: uppercase; text-align: left; white-space: nowrap; font-weight: 800; }
+    td { height: 44px; padding: 8px 12px; border-bottom: 1px solid var(--line-soft); font-size: 13px; vertical-align: middle; white-space: nowrap; }
+    .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .sql { max-width: 360px; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); color: var(--muted); font-size: 12px; }
+    .empty, .error { padding: 18px; color: var(--muted); font-size: 13px; }
+    .error { color: var(--red); }
+    @media (max-width: 1180px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } .grid-2, .module-grid { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) {
+      .topbar { grid-template-columns: 1fr; padding: 12px; }
+      .actions { justify-content: flex-start; }
+      .content { padding: 12px; }
+      .kpi-grid { grid-template-columns: 1fr; }
+      .brand h1, .brand p { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"><i data-lucide="blocks"></i></div>
+        <div>
+          <h1>Panel Proyecto</h1>
+          <p>Operacion, base de datos, modulos y mantenimiento</p>
+        </div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/"><i data-lucide="calendar-days"></i><span>Dias pico</span></a>
+        <a class="btn" href="/segmentacion-clientes"><i data-lucide="network"></i><span>DPO</span></a>
+        <button class="btn primary" id="reloadBtn"><i data-lucide="rotate-cw"></i><span>Actualizar</span></button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="kpi-grid" id="kpiGrid"></section>
+
+      <nav class="tabs" aria-label="Vistas del proyecto">
+        <button class="tab active" data-tab="modules"><i data-lucide="layout-dashboard"></i>Modulos</button>
+        <button class="tab" data-tab="database"><i data-lucide="database"></i>Base</button>
+        <button class="tab" data-tab="indexes"><i data-lucide="list-tree"></i>Indices</button>
+        <button class="tab" data-tab="cleanup"><i data-lucide="trash-2"></i>Limpieza</button>
+      </nav>
+
+      <section class="view active" id="view-modules">
+        <div class="module-grid" id="modulesGrid"></div>
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="network"></i>Cache DPO</div><div class="panel-meta" id="cacheMeta"></div></div>
+            <div class="panel-body">
+              <div class="toolbar">
+                <button class="btn primary" id="refreshCacheBtn"><i data-lucide="refresh-cw"></i>Refrescar cache</button>
+                <span class="panel-meta" id="cacheStatus"></span>
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="server"></i>PostgreSQL</div><div class="panel-meta" id="dbMeta"></div></div>
+            <div class="panel-body" id="dbBody"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="view" id="view-database">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="database"></i>Tablas</div>
+            <div class="toolbar">
+              <input class="control" id="tableSearch" placeholder="Buscar tabla">
+              <select class="control" id="tableStatusFilter">
+                <option value="">Todos</option>
+                <option value="activa">Activa</option>
+                <option value="protegida">Protegida</option>
+                <option value="vacia">Vacia</option>
+                <option value="sin_uso_estadistico">Sin uso</option>
+                <option value="requiere_mantenimiento">Mantenimiento</option>
+              </select>
+            </div>
+          </div>
+          <div class="table-wrap" id="tablesTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-indexes">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="list-tree"></i>Indices</div>
+            <div class="toolbar"><input class="control" id="indexSearch" placeholder="Buscar indice o tabla"></div>
+          </div>
+          <div class="table-wrap" id="indexesTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-cleanup">
+        <article class="panel">
+          <div class="panel-head"><div class="panel-title"><i data-lucide="trash-2"></i>Candidatas a limpieza</div><div class="panel-meta" id="cleanupMeta"></div></div>
+          <div class="table-wrap" id="cleanupTable"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const MODULE_TIMEOUT_MS = 7000;
+    const state = {
+      overview: null,
+      tables: [],
+      indexes: [],
+      cleanup: [],
+      moduleHealth: {},
+      activeTab: "modules",
+      loaded: { tables: false, indexes: false, cleanup: false }
+    };
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+      return body.data;
+    }
+
+    function num(value) {
+      return Number(value || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+    }
+
+    function bytes(value) {
+      const n = Number(value || 0);
+      if (n >= 1024 ** 3) return (n / 1024 ** 3).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " GB";
+      if (n >= 1024 ** 2) return (n / 1024 ** 2).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " MB";
+      if (n >= 1024) return (n / 1024).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + " KB";
+      return n + " B";
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function badge(value) {
+      const v = String(value || "activa");
+      return `<span class="badge b-${esc(v)}">${esc(v.replaceAll("_", " "))}</span>`;
+    }
+
+    function currentYearMonth() {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, "0");
+      return `${year}-${month}`;
+    }
+
+    function resolveHealthPath(path) {
+      return String(path || "").replaceAll("{YYYY-MM}", currentYearMonth());
+    }
+
+    function moduleHealthInfo(moduleId) {
+      const health = state.moduleHealth[moduleId];
+      if (!health || health.status === "pending") return { badge: "pendiente", text: "checando..." };
+      if (health.status === "ok") {
+        if ((health.ms || 0) > 2500) return { badge: "lento", text: `${num(health.ms)} ms` };
+        return { badge: "ok", text: `${num(health.ms)} ms` };
+      }
+      if (health.status === "timeout") return { badge: "error", text: `timeout ${MODULE_TIMEOUT_MS} ms` };
+      return { badge: "error", text: health.http ? `HTTP ${health.http}` : "sin respuesta" };
+    }
+
+    async function checkModule(mod) {
+      const target = resolveHealthPath(mod.health_api || mod.api);
+      if (!target) return { status: "error" };
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), MODULE_TIMEOUT_MS);
+      const started = performance.now();
+      try {
+        const res = await fetch(target, { signal: controller.signal });
+        const elapsed = Math.round(performance.now() - started);
+        clearTimeout(timer);
+        return res.ok ? { status: "ok", ms: elapsed, http: res.status } : { status: "error", ms: elapsed, http: res.status };
+      } catch (error) {
+        clearTimeout(timer);
+        if (error?.name === "AbortError") return { status: "timeout" };
+        return { status: "error" };
+      }
+    }
+
+    async function runModuleChecks() {
+      const modules = state.overview?.modulos || [];
+      if (!modules.length) return;
+      state.moduleHealth = Object.fromEntries(modules.map((mod) => [mod.id, { status: "pending" }]));
+      renderModules();
+      const checks = await Promise.all(modules.map((mod) => checkModule(mod)));
+      modules.forEach((mod, index) => {
+        state.moduleHealth[mod.id] = checks[index];
+      });
+      renderModules();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function loadAll() {
+      $("reloadBtn").disabled = true;
+      try {
+        state.overview = await api("/api/admin-proyecto/dashboard");
+        state.tables = state.loaded.tables ? state.tables : (state.overview.tablas_top || []);
+        state.cleanup = state.loaded.cleanup ? state.cleanup : (state.overview.candidatas_limpieza || []);
+        renderAll();
+        runModuleChecks();
+      } catch (error) {
+        $("kpiGrid").innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      } finally {
+        $("reloadBtn").disabled = false;
+      }
+    }
+
+    async function loadTables() {
+      if (state.loaded.tables) return;
+      $("tablesTable").innerHTML = `<div class="empty">Cargando tablas...</div>`;
+      state.tables = await api("/api/admin-proyecto/tablas");
+      state.loaded.tables = true;
+      renderTables();
+    }
+
+    async function loadIndexes() {
+      if (state.loaded.indexes) return;
+      $("indexesTable").innerHTML = `<div class="empty">Cargando indices...</div>`;
+      state.indexes = await api("/api/admin-proyecto/indices");
+      state.loaded.indexes = true;
+      renderIndexes();
+    }
+
+    async function loadCleanup() {
+      if (state.loaded.cleanup) return;
+      $("cleanupTable").innerHTML = `<div class="empty">Cargando candidatas...</div>`;
+      state.cleanup = await api("/api/admin-proyecto/candidatas-limpieza");
+      state.loaded.cleanup = true;
+      renderCleanup();
+    }
+
+    function renderAll() {
+      renderKpis();
+      renderModules();
+      renderDb();
+      renderTables();
+      renderIndexes();
+      renderCleanup();
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderKpis() {
+      const t = state.overview?.totales || {};
+      const db = state.overview?.database || {};
+      const cache = state.overview?.segmentacion_cache || {};
+      const items = [
+        ["Base", db.database_size || "-", "PostgreSQL", "database", "var(--blue)"],
+        ["Tablas", num(t.tablas), `${num(t.filas_estimadas)} filas`, "table", "var(--violet)"],
+        ["Indices", num(t.indices), bytes(t.bytes_indices), "list-tree", "var(--green)"],
+        ["Limpieza", num(t.candidatas_limpieza), "candidatas", "trash-2", "var(--amber)"],
+        ["Cache DPO", num(cache.rows), cache.populated ? "activa" : "pendiente", "network", cache.populated ? "var(--green)" : "var(--red)"]
+      ];
+      $("kpiGrid").innerHTML = items.map(([label, value, sub, icon, color]) => `
+        <article class="kpi">
+          <div class="kpi-head"><span>${esc(label)}</span><i data-lucide="${icon}" style="color:${color}"></i></div>
+          <div class="kpi-value" style="color:${color}">${esc(value)}</div>
+          <div class="kpi-sub">${esc(sub)}</div>
+        </article>
+      `).join("");
+    }
+
+    function renderModules() {
+      const modules = state.overview?.modulos || [];
+      $("modulesGrid").innerHTML = modules.map((mod) => `
+        <a class="module" href="${esc(mod.url)}">
+          <div class="module-top">
+            <div class="module-name">${esc(mod.nombre)}</div>
+            ${badge(moduleHealthInfo(mod.id).badge)}
+          </div>
+          <small>${esc(mod.api)} | ${esc(moduleHealthInfo(mod.id).text)}</small>
+        </a>
+      `).join("");
+    }
+
+    function renderDb() {
+      const db = state.overview?.database || {};
+      const cache = state.overview?.segmentacion_cache || {};
+      $("dbMeta").textContent = db.database_name || "";
+      $("dbBody").innerHTML = `
+        <div class="toolbar">
+          ${badge(cache.populated ? "activa" : "requiere_mantenimiento")}
+          <span class="panel-meta">${esc(String(db.postgres_version || "").split(" on ")[0])}</span>
+        </div>
+      `;
+      $("cacheMeta").textContent = cache.total_size || "-";
+      $("cacheStatus").textContent = `${num(cache.rows)} filas | ${cache.last_refresh_at ? String(cache.last_refresh_at).slice(0, 19).replace("T", " ") : "sin refresh"}`;
+    }
+
+    function renderTables() {
+      const q = $("tableSearch").value.trim().toLowerCase();
+      const status = $("tableStatusFilter").value;
+      const rows = state.tables
+        .filter((row) => !q || row.table_name.toLowerCase().includes(q))
+        .filter((row) => !status || row.status === status);
+      if (!rows.length) {
+        $("tablesTable").innerHTML = `<div class="empty">Sin tablas para los filtros actuales</div>`;
+        return;
+      }
+      $("tablesTable").innerHTML = `
+        <table>
+          <thead><tr><th>Tabla</th><th>Estado</th><th class="num">Filas</th><th class="num">Muertas</th><th class="num">Total</th><th class="num">Datos</th><th class="num">Indices</th><th class="num">Seq</th><th class="num">Idx</th><th>Analyze</th></tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td><strong>${esc(row.table_name)}</strong></td>
+              <td>${badge(row.status)}</td>
+              <td class="num">${num(row.estimated_rows)}</td>
+              <td class="num">${num(row.dead_rows)}</td>
+              <td class="num">${esc(row.total_size)}</td>
+              <td class="num">${esc(row.table_size)}</td>
+              <td class="num">${esc(row.index_size)}</td>
+              <td class="num">${num(row.seq_scan)}</td>
+              <td class="num">${num(row.idx_scan)}</td>
+              <td>${esc(String(row.last_analyze || row.last_autoanalyze || "-").slice(0, 19).replace("T", " "))}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    function renderIndexes() {
+      if (!state.loaded.indexes) {
+        $("indexesTable").innerHTML = `<div class="empty">Los indices completos se cargan al abrir esta pestaña</div>`;
+        return;
+      }
+      const q = $("indexSearch").value.trim().toLowerCase();
+      const rows = state.indexes.filter((row) => !q || `${row.table_name} ${row.index_name}`.toLowerCase().includes(q));
+      if (!rows.length) {
+        $("indexesTable").innerHTML = `<div class="empty">Sin indices para los filtros actuales</div>`;
+        return;
+      }
+      $("indexesTable").innerHTML = `
+        <table>
+          <thead><tr><th>Tabla</th><th>Indice</th><th>Estado</th><th class="num">Scans</th><th class="num">Leidas</th><th class="num">Fetch</th><th class="num">Tamano</th><th>Definicion</th></tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td>${esc(row.table_name)}</td>
+              <td><strong>${esc(row.index_name)}</strong></td>
+              <td>${badge(row.status)}</td>
+              <td class="num">${num(row.idx_scan)}</td>
+              <td class="num">${num(row.idx_tup_read)}</td>
+              <td class="num">${num(row.idx_tup_fetch)}</td>
+              <td class="num">${esc(row.index_size)}</td>
+              <td><div class="sql">${esc(row.indexdef)}</div></td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    function renderCleanup() {
+      $("cleanupMeta").textContent = `${num(state.cleanup.length)} candidatas`;
+      if (!state.cleanup.length) {
+        $("cleanupTable").innerHTML = `<div class="empty">No hay candidatas marcadas por la auditoria</div>`;
+        return;
+      }
+      $("cleanupTable").innerHTML = `
+        <table>
+          <thead><tr><th>Tabla</th><th>Motivo</th><th class="num">Filas</th><th class="num">Tamano</th><th class="num">Scans</th><th>SQL revision</th></tr></thead>
+          <tbody>${state.cleanup.map((row) => `
+            <tr>
+              <td><strong>${esc(row.table_name)}</strong></td>
+              <td>${badge(row.status)}</td>
+              <td class="num">${num(row.estimated_rows)}</td>
+              <td class="num">${esc(row.total_size)}</td>
+              <td class="num">${num(Number(row.seq_scan || 0) + Number(row.idx_scan || 0))}</td>
+              <td><div class="sql">${esc(row.review_sql)}</div></td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    async function refreshCache() {
+      $("refreshCacheBtn").disabled = true;
+      try {
+        await api("/api/segmentacion/cache/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ejecutado_por: "admin_proyecto" })
+        });
+        await loadAll();
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        $("refreshCacheBtn").disabled = false;
+      }
+    }
+
+    async function setTab(tab) {
+      state.activeTab = tab;
+      document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
+      document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${tab}`));
+      try {
+        if (tab === "database") await loadTables();
+        if (tab === "indexes") await loadIndexes();
+        if (tab === "cleanup") await loadCleanup();
+      } catch (error) {
+        const target = tab === "indexes" ? "indexesTable" : tab === "cleanup" ? "cleanupTable" : "tablesTable";
+        $(target).innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function bindEvents() {
+      document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
+      $("reloadBtn").addEventListener("click", loadAll);
+      $("refreshCacheBtn").addEventListener("click", refreshCache);
+      $("tableSearch").addEventListener("input", renderTables);
+      $("tableStatusFilter").addEventListener("change", renderTables);
+      $("indexSearch").addEventListener("input", renderIndexes);
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      if (window.lucide) lucide.createIcons();
+      bindEvents();
+      loadAll();
+    });
+  </script>
+</body>
+</html>

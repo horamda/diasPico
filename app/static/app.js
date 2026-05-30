@@ -101,6 +101,7 @@ window.onload = async () => {
   await loadMes();
   loadHistorico();
   loadArticulosCount();
+  loadPeriodosCriticos();
 };
 
 function restoreConfig() {
@@ -255,10 +256,13 @@ function renderCal() {
     if (dd?.es_evento)      cls += ' evento';
     if (isToday)            cls += ' today';
     if (dd)                 cls += ' has-data';
+    if (dd?.es_problema_nds) cls += ' nds-problema';
     e.className  = cls;
     e.textContent = d;
     e.title = dd
       ? `${dd.bultos} bultos — ${dd.hectolitros} hl` +
+        ` — NDS: ${dd.nds ?? 100}%` +
+        (dd.ausentismo > 0 ? ` — Ausentismo: ${dd.ausentismo}` : '') +
         ` — Rec: ${dd.pct_rechazo_pedidos ?? 0}% PDV / ${dd.pct_rechazo_bultos ?? 0}% blt / ${dd.pct_rechazo_hl ?? 0}% hl` +
         (dd.es_feriado ? ` — ${dd.feriado_tipo || 'Feriado'}: ${dd.feriado_desc}` : '') +
         (dd.es_evento  ? ` — Evento: ${dd.evento_desc}` : '')
@@ -276,6 +280,7 @@ async function changeMonth(dir) {
   renderCal();
   await loadMes();
   loadArticulosCount();
+  loadPeriodosCriticos();
   if (document.getElementById('tab-dropsize')?.style.display !== 'none') {
     document.getElementById('dropMes').value = mesPad();
     setDropsizeDatesFromMes(false);
@@ -417,6 +422,7 @@ function renderTablaDias() {
   }
   let html = `<table class="rtbl"><thead><tr>
     <th>Fecha</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
+    <th>NDS</th><th>Ausentismo</th>
     <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th>
     <th>Pico</th><th>Feriado</th><th>Evento</th>
   </tr></thead><tbody>`;
@@ -446,6 +452,8 @@ function renderTablaDias() {
       <td style="font-family:var(--mono)">${fmtN(Math.round(d.up || 0))}</td>
       <td style="font-family:var(--mono)">${fmtN(d.pedidos)}</td>
       <td style="font-family:var(--mono)">${fmtN(d.clientes_unicos || 0)}</td>
+      <td style="font-family:var(--mono);font-weight:${(d.nds ?? 100) < 85 ? '700' : '400'};color:${(d.nds ?? 100) < 85 ? 'var(--red)' : (d.nds ?? 100) < 95 ? 'var(--acc)' : 'var(--grn)'}">${d.nds ?? 100}%</td>
+      <td style="font-family:var(--mono);color:${(d.ausentismo || 0) >= 3 ? 'var(--red)' : (d.ausentismo || 0) > 0 ? 'var(--acc)' : 'var(--muted)'}">${d.ausentismo || 0}</td>
       <td style="font-family:var(--mono);color:${(d.pct_rechazo_pedidos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_pedidos ?? 0}%</td>
       <td style="font-family:var(--mono);color:${(d.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_bultos ?? 0}%</td>
       <td><span class="pct-pill ${(d.pct_rechazo_hl ?? 0) > 5 ? 'bad' : 'ok'}">${fmtPct1(d.pct_rechazo_hl ?? 0)}</span></td>
@@ -2603,12 +2611,14 @@ async function guardarVariablePlanificacion() {
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
-  ['kpis', 'historico', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'upload', 'config', 'ayuda'].forEach(x => {
+  ['kpis', 'historico', 'comparativo', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'upload', 'config', 'ayuda'].forEach(x => {
     const el2 = document.getElementById('tab-' + x);
     if (el2) el2.style.display = x === t ? '' : 'none';
   });
-  if (t === 'historico') loadHistorico();
-  if (t === 'analisis')  loadAnalisisHl();
+  if (t === 'historico')   loadHistorico();
+  if (t === 'comparativo') loadComparativo();
+  if (t === 'dotacion')    loadDotacion();
+  if (t === 'analisis')    loadAnalisisHl();
   if (t === 'dropsize')  {
     if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();
     if (document.getElementById('dropMes')) {
@@ -3307,6 +3317,498 @@ function _renderPlanilla(filas, anio, mes) {
   for (const sid of sucIds) {
     html += buildTable(bySuc[sid], SUC_LABELS[sid] || ('Sucursal ' + sid));
   }
+  cont.innerHTML = html;
+}
+
+// ─── PERIODOS CRÍTICOS ────────────────────────────────────────
+let _pcAbort = null;
+
+async function loadPeriodosCriticos() {
+  const cont = document.getElementById('periodosCriticos');
+  if (!cont) return;
+  if (_pcAbort) _pcAbort.abort();
+  _pcAbort = new AbortController();
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const anio = vY;
+  const suc  = getSuc();
+  try {
+    const data = await api(
+      `/api/picos/periodos-criticos?sucursal_id=${suc}&anio=${anio}`,
+      { signal: _pcAbort.signal }
+    );
+    renderPeriodosCriticos(data, anio, suc);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    cont.innerHTML = `<div style="color:var(--red);font-size:12px">Error al cargar periodos: ${e.message}</div>`;
+  }
+}
+
+function renderPeriodosCriticos(data, anio, suc) {
+  const cont = document.getElementById('periodosCriticos');
+  if (!cont) return;
+  const periodos    = data.periodos  || [];
+  const sugeridos   = data.sugeridos || [];
+  const ausMensual  = data.ausentismo_mensual || [];
+  const cumple      = data.cumple_minimo;
+
+  // ── Ausentismo histórico (B) ──────────────────────────────
+  let ausHtml = '';
+  if (ausMensual.length) {
+    const maxPct = Math.max(...ausMensual.map(m => m.pct_ausentismo || 0), 1);
+    ausHtml = `<div style="margin-bottom:16px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ausentismo histórico mensual</div>
+      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;align-items:end">`;
+    ausMensual.forEach(m => {
+      const pct = m.pct_ausentismo ?? null;
+      const color = pct === null ? 'var(--brd)' : pct >= 10 ? 'var(--red)' : pct >= 5 ? 'var(--acc)' : 'var(--grn)';
+      const h = pct !== null ? Math.max(4, Math.round(pct / maxPct * 60)) : 4;
+      const label = pct !== null ? `${pct}%` : '—';
+      ausHtml += `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+        <div style="font-family:var(--mono);font-size:9px;color:${color}">${label}</div>
+        <div style="width:100%;height:${h}px;background:${color};border-radius:2px;opacity:${pct !== null ? '.8' : '.2'}" title="${m.nombre}: ${label}"></div>
+        <div style="font-size:8px;color:var(--muted)">${m.nombre}</div>
+      </div>`;
+    });
+    ausHtml += `</div>
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--muted)">
+        <span><span style="color:var(--red)">■</span> ≥10% alto</span>
+        <span><span style="color:var(--acc)">■</span> 5-10% medio</span>
+        <span><span style="color:var(--grn)">■</span> &lt;5% normal</span>
+      </div>
+    </div>`;
+  }
+
+  let html = ausHtml + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div style="display:flex;align-items:center;gap:8px">
+      <span style="font-size:13px;font-weight:600">Periodos críticos ${anio}</span>
+      <span style="font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:12px;${cumple ? 'background:rgba(76,175,130,.2);color:var(--grn)' : 'background:rgba(224,92,92,.2);color:var(--red)'}">${periodos.length} definido${periodos.length !== 1 ? 's' : ''} ${cumple ? '✓' : '— mínimo 3'}</span>
+    </div>
+    <button class="btn primary" style="font-size:11px;padding:5px 12px" onclick="abrirFormPeriodo()">+ Agregar periodo</button>
+  </div>`;
+
+  if (periodos.length > 0) {
+    html += `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">`;
+    periodos.forEach(p => {
+      const dur = p.fecha_fin === p.fecha_inicio ? '1 día' : `${calcDuracion(p.fecha_inicio, p.fecha_fin)} días`;
+      html += `<div style="background:var(--surf2);border:1px solid var(--brd);border-left:3px solid var(--acc);border-radius:5px;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <div>
+          <span style="font-weight:600;font-size:12px">${escHtml(p.nombre)}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:8px">${p.fecha_inicio} → ${p.fecha_fin} (${dur})</span>
+          ${p.motivo ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${escHtml(p.motivo)}</div>` : ''}
+        </div>
+        <button onclick="eliminarPeriodoCritico(${p.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0 4px" title="Eliminar">×</button>
+      </div>`;
+    });
+    html += `</div>`;
+  } else {
+    html += `<div style="color:var(--muted);font-size:12px;margin-bottom:14px">Sin periodos definidos para ${anio}.</div>`;
+  }
+
+  if (sugeridos.length > 0) {
+    html += `<div class="sec" style="margin-bottom:10px">Sugerencias basadas en análisis histórico</div>
+    <div style="display:flex;flex-direction:column;gap:5px">`;
+    sugeridos.slice(0, 6).forEach(s => {
+      const dur = s.duracion_dias === 1 ? '1 día' : `${s.duracion_dias} días`;
+      const ndsColor = s.nds_promedio < 85 ? 'var(--red)' : s.nds_promedio < 95 ? 'var(--acc)' : 'var(--grn)';
+      html += `<div style="background:var(--surf2);border:1px solid var(--brd);border-radius:5px;padding:7px 12px;display:flex;justify-content:space-between;align-items:center;gap:8px;opacity:.85">
+        <div style="flex:1">
+          <span style="font-size:11px;font-weight:600">${escHtml(s.nombre_sugerido)}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:8px">${s.fecha_inicio} → ${s.fecha_fin} (${dur})</span>
+          <span style="font-size:10px;color:var(--muted);margin-left:6px">· NDS ${s.nds_promedio}%</span>
+          ${s.pct_ausentismo_historico > 0 ? `<span style="font-size:10px;color:${s.pct_ausentismo_historico >= 10 ? 'var(--red)' : 'var(--acc)'};margin-left:6px">· Aus. ${s.pct_ausentismo_historico}%</span>` : ''}
+          <div style="font-size:10px;color:var(--muted);margin-top:1px">${escHtml(s.motivo_sugerido)}</div>
+        </div>
+        <button onclick="usarSugerencia(${JSON.stringify(s).split('"').join('&quot;')})" style="font-size:10px;padding:3px 8px;background:var(--surf3);border:1px solid var(--brd);border-radius:4px;color:var(--txt);cursor:pointer">Usar</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `<div id="formPeriodo" style="display:none;margin-top:14px;background:var(--surf2);border:1px solid var(--brd);border-radius:6px;padding:14px">
+    <div style="font-size:12px;font-weight:600;margin-bottom:10px">Nuevo periodo crítico</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+      <div><label style="font-size:10px;color:var(--muted)">Nombre</label>
+        <input id="pcNombre" type="text" placeholder="Ej: Semana Santa" style="width:100%;margin-top:3px"></div>
+      <div><label style="font-size:10px;color:var(--muted)">Motivo</label>
+        <input id="pcMotivo" type="text" placeholder="Ej: alto volumen + ausentismo" style="width:100%;margin-top:3px"></div>
+      <div><label style="font-size:10px;color:var(--muted)">Fecha inicio</label>
+        <input id="pcFechaIni" type="date" style="width:100%;margin-top:3px"></div>
+      <div><label style="font-size:10px;color:var(--muted)">Fecha fin (máx +6 días)</label>
+        <input id="pcFechaFin" type="date" style="width:100%;margin-top:3px"></div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="cerrarFormPeriodo()">Cancelar</button>
+      <button class="btn primary" onclick="guardarPeriodoCritico()">Guardar</button>
+    </div>
+    <div id="pcError" style="color:var(--red);font-size:11px;margin-top:6px;min-height:16px"></div>
+  </div>`;
+
+  cont.innerHTML = html;
+}
+
+function calcDuracion(fi, ff) {
+  const a = new Date(fi), b = new Date(ff);
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+function escHtml(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function abrirFormPeriodo() {
+  const f = document.getElementById('formPeriodo');
+  if (f) { f.style.display = 'block'; document.getElementById('pcNombre')?.focus(); }
+}
+
+function cerrarFormPeriodo() {
+  const f = document.getElementById('formPeriodo');
+  if (f) f.style.display = 'none';
+}
+
+function usarSugerencia(s) {
+  abrirFormPeriodo();
+  const n = document.getElementById('pcNombre');
+  const m = document.getElementById('pcMotivo');
+  const fi = document.getElementById('pcFechaIni');
+  const ff = document.getElementById('pcFechaFin');
+  if (n) n.value = s.nombre_sugerido || '';
+  if (m) m.value = s.motivo_sugerido || '';
+  if (fi) fi.value = s.fecha_inicio || '';
+  if (ff) ff.value = s.fecha_fin || '';
+}
+
+async function guardarPeriodoCritico() {
+  const nombre = document.getElementById('pcNombre')?.value?.trim();
+  const motivo = document.getElementById('pcMotivo')?.value?.trim();
+  const fi = document.getElementById('pcFechaIni')?.value;
+  const ff = document.getElementById('pcFechaFin')?.value;
+  const errEl = document.getElementById('pcError');
+
+  if (!nombre) { if (errEl) errEl.textContent = 'Nombre requerido'; return; }
+  if (!fi)     { if (errEl) errEl.textContent = 'Fecha inicio requerida'; return; }
+  if (errEl) errEl.textContent = '';
+
+  try {
+    await api('/api/picos/periodos-criticos', {
+      method: 'POST',
+      body: JSON.stringify({
+        nombre, motivo: motivo || null,
+        fecha_inicio: fi, fecha_fin: ff || fi,
+        anio: vY, sucursal_id: getSuc(),
+      }),
+    });
+    await loadPeriodosCriticos();
+  } catch (e) {
+    if (errEl) errEl.textContent = e.message || 'Error al guardar';
+  }
+}
+
+async function eliminarPeriodoCritico(id) {
+  if (!confirm('¿Eliminar este periodo crítico?')) return;
+  try {
+    await fetch(API + `/api/picos/periodos-criticos/${id}`, { method: 'DELETE' });
+    await loadPeriodosCriticos();
+  } catch (e) {
+    alert('Error al eliminar: ' + e.message);
+  }
+}
+
+// ─── COMPARATIVO ANUAL ────────────────────────────────────────
+let _cmpAbort = null;
+let _cmpSuc   = 'TODAS';
+const CMP_SUC_LABELS = { 'TODAS': 'General — ambas sucursales', '1': 'Casa Central', '2': 'Dolores' };
+
+function switchCmpSuc(suc, el) {
+  _cmpSuc = suc;
+  document.querySelectorAll('.plan-tabs .plan-tab').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  const lbl = document.getElementById('cmpSucLabel');
+  if (lbl) lbl.textContent = CMP_SUC_LABELS[suc] || suc;
+  loadComparativo();
+}
+
+function _initCmpSelectors() {
+  const anioEl = document.getElementById('cmpAnio');
+  const baseEl = document.getElementById('cmpAnioBase');
+  if (anioEl && !anioEl.value) anioEl.value = vY;
+  if (baseEl && !baseEl.value) baseEl.value = vY - 1;
+}
+
+async function loadComparativo() {
+  _initCmpSelectors();
+  const lbl = document.getElementById('cmpSucLabel');
+  if (lbl) lbl.textContent = CMP_SUC_LABELS[_cmpSuc] || _cmpSuc;
+  const cont = document.getElementById('tablaComparativo');
+  if (!cont) return;
+  if (_cmpAbort) _cmpAbort.abort();
+  _cmpAbort = new AbortController();
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const anio     = parseInt(document.getElementById('cmpAnio')?.value     || vY);
+  const anioBase = parseInt(document.getElementById('cmpAnioBase')?.value || vY - 1);
+  try {
+    const data = await api(
+      `/api/picos/comparativo-anual?sucursal=${_cmpSuc}&anio=${anio}&anio_base=${anioBase}`,
+      { signal: _cmpAbort.signal, timeout: 90000 }
+    );
+    renderComparativo(data);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    cont.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderComparativo(data) {
+  const cont = document.getElementById('tablaComparativo');
+  if (!cont) return;
+  const { anio, anio_base, meses } = data;
+
+  const fHL  = v => v == null ? '—' : fmtN(Math.round(v));
+  const fBlt = v => v == null ? '—' : fmtN(Math.round(v));
+  const fInt = v => v == null ? '—' : String(Math.round(v));
+  const fP1  = v => v == null ? '—' : v.toFixed(1)+'%';
+  const fP2  = v => v == null ? '—' : v.toFixed(2)+'%';
+  const fF1  = v => v == null ? '—' : v.toFixed(1);
+
+  const pct  = (a,b) => (a==null||b==null||b===0)?null:Math.round((a-b)/b*1000)/10;
+  const pp   = (a,b) => (a==null||b==null)?null:Math.round((a-b)*100)/100;
+  const _avg = arr => arr.length ? arr.reduce((s,v)=>s+(v||0),0)/arr.length : null;
+  const _sum = arr => arr.reduce((s,v)=>s+(v||0),0);
+
+  const dCell = (v, inv=false) => {
+    if (v==null) return '<td class="cmp-d eq">—</td>';
+    const good = inv ? v<0 : v>0;
+    const cls  = Math.abs(v)<0.5 ? 'eq' : good ? 'up' : 'dn';
+    const icon = v>0.1 ? '▲' : v<-0.1 ? '▼' : '→';
+    return '<td class="cmp-d '+cls+'">'+icon+Math.abs(v).toFixed(1)+'%</td>';
+  };
+
+  const sem = (m) => {
+    const a=m.actual, b=m.base; let r=0;
+    const nds=a?.nds??b?.nds;
+    if (nds!=null) r += nds<90?2:nds<95?1:0;
+    const rec=a?.pct_rec_hl??b?.pct_rec_hl??0;
+    r += rec>3?2:rec>1?1:0;
+    const aus=b?.ausentismo;
+    if (aus!=null) r += aus>=10?2:aus>=5?1:0;
+    return r>=4 ? '<span class="sem crit" title="Riesgo alto"></span>'
+         : r>=2 ? '<span class="sem warn" title="Riesgo moderado"></span>'
+                : '<span class="sem ok" title="Sin riesgo"></span>';
+  };
+
+  const buildCard = (title, accent, defs) => {
+    let h1 = '<tr><th class="mes-sticky" rowspan="2">Mes</th>';
+    let h2 = '<tr>';
+    defs.forEach(d => {
+      const sp = d.deltaFn ? 3 : 2;
+      h1 += '<th colspan="'+sp+'" class="sec-hdr" style="border-top:2px solid '+accent+'">'+d.label+'</th>';
+      h2 += '<th class="yr" style="font-size:9px">'+anio_base+'</th>'
+          + '<th class="yr" style="font-size:9px;color:var(--acc)">'+anio+'</th>';
+      if (d.deltaFn) h2 += '<th class="yr">Δ</th>';
+    });
+    h1 += '</tr>'; h2 += '</tr>';
+
+    let body = '';
+    meses.forEach(m => {
+      const a=m.actual, b=m.base;
+      const fcls = m.es_futuro ? ' class="futuro"' : '';
+      const ftip = m.es_futuro ? ' title="🔮 Proyección de '+m.nombre+' '+anio_base+'"' : '';
+      let tds = '<td class="mes-lbl">'+m.nombre+(m.es_futuro?' 🔮':' '+sem(m))+'</td>';
+      defs.forEach(d => {
+        const vb=d.get(b), va=d.get(a);
+        const fb = vb!=null ? d.fmt(vb) : '—';
+        let fa;
+        if (va!=null) {
+          const col = d.color ? d.color(va) : 'inherit';
+          fa = '<span style="color:'+col+'">'+d.fmt(va)+'</span>';
+        } else if (m.es_futuro && vb!=null) {
+          fa = '<span style="color:var(--muted);font-style:italic">'+fb+'</span>';
+        } else {
+          fa = '—';
+        }
+        const cbStyle = (vb!=null && d.color) ? ' style="color:'+d.color(vb)+'"' : '';
+        tds += '<td'+cbStyle+'>'+fb+'</td><td>'+fa+'</td>';
+        if (d.deltaFn) tds += dCell(va!=null&&vb!=null ? d.deltaFn(va,vb) : null, d.inv);
+      });
+      body += '<tr'+fcls+ftip+'>'+tds+'</tr>';
+    });
+
+    const mRealB = meses.filter(m=>!m.es_futuro&&m.base).map(m=>m.base);
+    const mRealA = meses.filter(m=>!m.es_futuro&&m.actual).map(m=>m.actual);
+    let stds = '<td class="mes-lbl" style="font-size:9px">TOTAL / PROM</td>';
+    defs.forEach(d => {
+      const sb = d.sumFn ? d.sumFn(mRealB) : null;
+      const sa = d.sumFn ? d.sumFn(mRealA) : null;
+      stds += '<td>'+(sb!=null?d.fmt(sb):'—')+'</td>'
+            + '<td style="color:var(--acc)">'+(sa!=null?d.fmt(sa):'—')+'</td>';
+      if (d.deltaFn) stds += dCell(sb!=null&&sa!=null?d.deltaFn(sa,sb):null, d.inv);
+    });
+    body += '<tr class="summary">'+stds+'</tr>';
+
+    return '<div class="cmp-card">'
+      + '<div class="cmp-card-title">'
+      + '<span style="display:inline-block;width:3px;height:14px;background:'+accent+';border-radius:2px;margin-right:6px"></span>'
+      + title+'</div>'
+      + '<div class="cmp-card-scroll">'
+      + '<table class="cmp-tbl2"><thead>'+h1+h2+'</thead><tbody>'+body+'</tbody></table>'
+      + '</div></div>';
+  };
+
+  const ndsColor = v => v<90?'var(--red)':v<95?'var(--acc)':'var(--grn)';
+  const recColor = v => v>3?'var(--red)':v>1?'var(--acc)':'var(--grn)';
+  const ausColor = v => v>=10?'var(--red)':v>=5?'var(--acc)':'inherit';
+
+  const volCard = buildCard('📦 Volumen', 'var(--blu)', [
+    {label:'HL',get:d=>d?.hl,fmt:fHL,deltaFn:pct,inv:false,
+      sumFn:arr=>_sum(arr.map(d=>d?.hl||0))},
+    {label:'Bultos',get:d=>d?.bultos,fmt:fBlt,deltaFn:pct,inv:false,
+      sumFn:arr=>_sum(arr.map(d=>d?.bultos||0))},
+    {label:'PDV únicos',get:d=>d?.pdv_unicos,fmt:fInt,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>d?.pdv_unicos);return v.length?Math.round(_avg(v.map(d=>d.pdv_unicos))):null;}},
+    {label:'Salidas',get:d=>d?.salidas,fmt:fInt,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>d?.salidas);return v.length?Math.round(_avg(v.map(d=>d.salidas))):null;}},
+    {label:'HL/Salida',get:d=>(d?.hl&&d?.salidas)?Math.round(d.hl/d.salidas*10)/10:null,
+      fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
+  ]);
+
+  const calCard = buildCard('📊 Calidad NDS', 'var(--grn)', [
+    {label:'NDS %',get:d=>d?.nds,fmt:fP1,deltaFn:pp,inv:false,color:ndsColor,
+      sumFn:arr=>{const v=arr.filter(d=>d?.nds!=null);return v.length?Math.round(_avg(v.map(d=>d.nds))*10)/10:null;}},
+    {label:'% Rec. HL',get:d=>d?.pct_rec_hl,fmt:fP2,deltaFn:pp,inv:true,color:recColor,
+      sumFn:arr=>{const v=arr.filter(d=>d?.pct_rec_hl!=null);return v.length?Math.round(_avg(v.map(d=>d.pct_rec_hl))*100)/100:null;}},
+    {label:'% Rec. PDV',get:d=>d?.pct_rec_pdv,fmt:fP1,deltaFn:pp,inv:true,color:recColor,
+      sumFn:arr=>{const v=arr.filter(d=>d?.pct_rec_pdv!=null);return v.length?Math.round(_avg(v.map(d=>d.pct_rec_pdv))*10)/10:null;}},
+    {label:'Días pico',get:d=>d?.dias_pico,fmt:fInt,deltaFn:null,
+      sumFn:arr=>_sum(arr.map(d=>d?.dias_pico||0))},
+    {label:'Ausent. %',get:d=>d?.ausentismo,fmt:fP1,deltaFn:pp,inv:true,color:ausColor,
+      sumFn:arr=>{const v=arr.filter(d=>d?.ausentismo!=null);return v.length?Math.round(_avg(v.map(d=>d.ausentismo))*10)/10:null;}},
+  ]);
+
+  const dotCard = buildCard('👷 Dotación', 'var(--pur)', [
+    {label:'Chof/día',get:d=>d?.dotacion?.total?.avg_choferes||null,fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>d?.dotacion?.total?.avg_choferes);return v.length?Math.round(_avg(v.map(d=>d.dotacion.total.avg_choferes))*10)/10:null;}},
+    {label:'Ayu/día',
+      get:d=>{const t=d?.dotacion?.total;return t?.tiene_datos?Math.round(((t.avg_ayu1||0)+(t.avg_ayu2||0))*10)/10:null;},
+      fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
+    {label:'Total pers.',get:d=>d?.dotacion?.total?.avg_personas||null,fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>d?.dotacion?.total?.avg_personas);return v.length?Math.round(_avg(v.map(d=>d.dotacion.total.avg_personas))*10)/10:null;}},
+    {label:'HL/Persona',
+      get:d=>{const hl=d?.hl,p=d?.dotacion?.total?.avg_personas,di=d?.dias;return(hl&&p&&di&&di>0)?Math.round(hl/di/p*10)/10:null;},
+      fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
+    {label:'CC Ch/Ayu',
+      get:d=>{const c=d?.dotacion?.cc;return c?.tiene_datos?(c.avg_choferes+'/'+((c.avg_ayu1||0)+(c.avg_ayu2||0)).toFixed(1)):null;},
+      fmt:v=>v,deltaFn:null,sumFn:null},
+    {label:'DL Ch/Ayu',
+      get:d=>{const c=d?.dotacion?.dl;return c?.tiene_datos?(c.avg_choferes+'/'+((c.avg_ayu1||0)+(c.avg_ayu2||0)).toFixed(1)):null;},
+      fmt:v=>v,deltaFn:null,sumFn:null},
+  ]);
+
+  cont.innerHTML = '<div class="cmp-grid">'+volCard+calCard+dotCard+'</div>'
+    + '<div style="margin-top:8px;font-size:10px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center">'
+    + '<span>🔮 Meses futuros = proyección basada en '+anio_base+'</span>'
+    + '<span><span class="sem ok"></span> Sin riesgo</span>'
+    + '<span><span class="sem warn"></span> Moderado</span>'
+    + '<span><span class="sem crit"></span> Riesgo alto</span>'
+    + '<span>HL/Salida = eficiencia por viaje &nbsp;·&nbsp; HL/Persona = productividad operativa</span>'
+    + '</div>';
+}
+
+
+// ─── DOTACIÓN OPERATIVA ───────────────────────────────────────
+let _dotAbort = null;
+
+function _initDotFechas() {
+  const fi = document.getElementById('dotFechaIni');
+  const ff = document.getElementById('dotFechaFin');
+  if (fi && !fi.value) {
+    const hoy = new Date();
+    fi.value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}-01`;
+  }
+  if (ff && !ff.value) {
+    const hoy = new Date();
+    ff.value = hoy.toISOString().slice(0,10);
+  }
+}
+
+async function loadDotacion() {
+  _initDotFechas();
+  const ids = ['dotCasaCentral', 'dotDolores', 'dotTotal'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  });
+  if (_dotAbort) _dotAbort.abort();
+  _dotAbort = new AbortController();
+  const fi = document.getElementById('dotFechaIni')?.value;
+  const ff = document.getElementById('dotFechaFin')?.value;
+  try {
+    const data = await api(
+      `/api/picos/dotacion-diaria?sucursal_id=TODAS&fecha_ini=${fi}&fecha_fin=${ff}`,
+      { signal: _dotAbort.signal, timeout: 60000 }
+    );
+    renderDotacionPanel('dotCasaCentral', data.casa_central || [], 'Casa Central');
+    renderDotacionPanel('dotDolores',     data.dolores      || [], 'Dolores');
+    renderDotacionPanel('dotTotal',       data.total        || [], 'Total empresa', true);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = `<div style="color:var(--red);font-size:11px">${e.message}</div>`;
+    });
+  }
+}
+
+function renderDotacionPanel(contId, dias, titulo, esTotal = false) {
+  const cont = document.getElementById(contId);
+  if (!cont) return;
+  if (!dias.length) {
+    cont.innerHTML = '<div style="color:var(--muted);font-size:11px">Sin datos para el período.</div>';
+    return;
+  }
+
+  let html = '<div style="max-height:520px;overflow-y:auto">';
+  html += `<table class="dot-tbl"><thead><tr>
+    <th>Fecha</th>
+    ${esTotal ? '' : '<th>#</th><th>Chofer</th><th>Ayudante 1</th><th>Ayudante 2</th>'}
+    <th>Salidas</th><th>Choferes</th><th>Ayu.1</th><th>Ayu.2</th><th>Total</th>
+  </tr></thead><tbody>`;
+
+  dias.forEach(d => {
+    const fecha = d.fecha?.slice(5);  // MM-DD
+    if (esTotal) {
+      html += `<tr>
+        <td style="font-weight:600;color:var(--acc)">${fecha}</td>
+        <td>${d.n_salidas}</td><td>${d.n_choferes}</td>
+        <td>${d.n_ayudante1}</td><td>${d.n_ayudante2}</td>
+        <td style="font-weight:600;color:var(--grn)">${d.total_personas}</td>
+      </tr>`;
+    } else {
+      // Fila cabecera del día
+      html += `<tr class="day-header">
+        <td colspan="7" style="padding-left:6px">${fecha} — ${d.n_salidas} salidas · ${d.total_personas} personas</td>
+      </tr>`;
+      // Detalle por salida
+      (d.detalle || []).forEach(s => {
+        html += `<tr>
+          <td></td>
+          <td style="color:var(--muted)">${s.nro_salida}</td>
+          <td>${escHtml(s.chofer)}</td>
+          <td style="color:var(--muted)">${escHtml(s.ayudante_1)}</td>
+          <td style="color:var(--muted)">${escHtml(s.ayudante_2)}</td>
+          <td></td><td></td><td></td><td></td>
+          <td style="color:var(--grn);font-weight:600">${s.personas}</td>
+        </tr>`;
+      });
+      // Fila resumen del día
+      html += `<tr class="day-total">
+        <td colspan="5" style="text-align:right;padding-right:8px">Totales día:</td>
+        <td>${d.n_salidas}</td><td>${d.n_choferes}</td>
+        <td>${d.n_ayudante1}</td><td>${d.n_ayudante2}</td>
+        <td style="font-weight:700;color:var(--grn)">${d.total_personas}</td>
+      </tr>`;
+    }
+  });
+
+  html += '</tbody></table></div>';
   cont.innerHTML = html;
 }
 

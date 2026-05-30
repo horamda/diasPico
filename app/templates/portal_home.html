@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Portal — Logística Distribuidores</title>
+<link rel="stylesheet" href="/static/design-system.css">
+<style>
+:root { --sidebar-w: 240px; }
+body { display: flex; }
+
+/* ── SIDEBAR ───────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w);
+  background: var(--surf);
+  border-right: 1px solid var(--brd);
+  display: flex; flex-direction: column;
+  position: fixed; top: 0; left: 0; height: 100vh; z-index: 20;
+}
+
+.sidebar-logo {
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid var(--brd);
+  display: flex; align-items: center; gap: 12px;
+}
+.logo-badge {
+  background: var(--acc); color: #000;
+  font-family: var(--mono); font-size: 10px; font-weight: 700;
+  padding: 5px 9px; border-radius: var(--r-sm); letter-spacing: 1px;
+  flex-shrink: 0;
+}
+.logo-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.logo-sub  { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 10px 0; }
+.nav-label {
+  font-size: 9px; font-family: var(--mono); color: var(--muted);
+  letter-spacing: 1.8px; text-transform: uppercase;
+  padding: 12px 18px 5px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 18px; font-size: 13px; color: var(--txt2);
+  text-decoration: none; transition: all var(--t);
+  cursor: pointer; border: none; background: none;
+  width: 100%; text-align: left; position: relative;
+}
+.nav-item:hover { background: var(--surf2); color: var(--txt); }
+.nav-item.active {
+  background: var(--acc-bg); color: var(--acc);
+  font-weight: 500;
+}
+.nav-item.active::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+  width: 3px; background: var(--acc); border-radius: 0 2px 2px 0;
+}
+.nav-item.danger:hover { color: var(--red); background: var(--red-bg); }
+.nav-icon { font-size: 14px; width: 22px; text-align: center; flex-shrink: 0; opacity: .8; }
+.nav-item.active .nav-icon, .nav-item:hover .nav-icon { opacity: 1; }
+
+.sidebar-footer {
+  border-top: 1px solid var(--brd);
+  padding: 10px 0 6px;
+}
+.user-chip {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 18px 10px;
+}
+.user-avatar {
+  width: 32px; height: 32px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--acc), var(--acc-dk));
+  color: #000; font-weight: 700; font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; box-shadow: 0 2px 8px var(--acc-bg);
+}
+.user-name { font-size: 12px; font-weight: 600; }
+.user-role { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+/* ── MAIN ──────────────────────────────────────────────── */
+.main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+.topbar {
+  background: var(--surf); border-bottom: 1px solid var(--brd);
+  padding: 0 24px; display: flex; align-items: center;
+  justify-content: space-between; height: 60px;
+  position: sticky; top: 0; z-index: 10;
+}
+.greeting { display: flex; flex-direction: column; gap: 2px; }
+.greeting-title { font-size: 16px; font-weight: 600; }
+.greeting-sub   { font-size: 11px; color: var(--muted); }
+.topbar-actions { display: flex; align-items: center; gap: 8px; }
+.suc-sel {
+  background: var(--surf2); border: 1px solid var(--brd);
+  color: var(--txt); padding: 6px 10px; border-radius: var(--r-sm);
+  font-size: 12px; font-family: var(--sans); cursor: pointer;
+}
+.refresh-btn {
+  width: 32px; height: 32px; border-radius: var(--r-sm);
+  background: var(--surf2); border: 1px solid var(--brd);
+  color: var(--muted); font-size: 13px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all var(--t);
+}
+.refresh-btn:hover { color: var(--acc); border-color: var(--acc-bd); }
+.refresh-btn.spin-anim svg { animation: spin .8s linear infinite; }
+.last-updated { font-size: 10px; color: var(--muted); white-space: nowrap; }
+
+.content { padding: 22px 24px 40px; }
+
+/* ── ALERTS ────────────────────────────────────────────── */
+.alerts-area { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+.alert-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 14px; border-radius: var(--r);
+  font-size: 12px; line-height: 1.4;
+  border-left: 3px solid;
+  animation: slideIn .2s ease;
+}
+.alert-item.err  { background: var(--red-bg); border-color: var(--red); color: var(--txt); }
+.alert-item.warn { background: var(--ora-bg); border-color: var(--ora); color: var(--txt); }
+.alert-icon { font-size: 14px; flex-shrink: 0; }
+.alert-text { flex: 1; }
+.alert-link { color: var(--acc); font-weight: 600; text-decoration: none; margin-left: 6px; }
+.alert-link:hover { text-decoration: underline; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; } }
+
+/* ── KPI SECTION ───────────────────────────────────────── */
+.kpi-section {
+  margin-bottom: 22px;
+}
+.section-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 12px;
+}
+.section-label {
+  font-size: 9.5px; font-family: var(--mono); color: var(--muted);
+  letter-spacing: 2px; text-transform: uppercase;
+}
+.section-line { flex: 1; height: 1px; background: var(--brd); }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+
+.kpi-card {
+  background: var(--surf);
+  border: 1px solid var(--brd);
+  border-radius: var(--r-lg);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color var(--t), transform var(--t), box-shadow var(--t);
+  animation: fadeUp .3s ease both;
+}
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--brd2);
+}
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.kpi-card:nth-child(1) { animation-delay: .05s; }
+.kpi-card:nth-child(2) { animation-delay: .10s; }
+.kpi-card:nth-child(3) { animation-delay: .15s; }
+.kpi-card:nth-child(4) { animation-delay: .20s; }
+.kpi-card:nth-child(5) { animation-delay: .25s; }
+.kpi-card:nth-child(6) { animation-delay: .30s; }
+
+/* top accent bar */
+.kpi-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  border-radius: var(--r-lg) var(--r-lg) 0 0;
+}
+.kpi-card.grn::before { background: var(--grn); }
+.kpi-card.red::before { background: var(--red); }
+.kpi-card.ora::before { background: var(--ora); }
+.kpi-card.blu::before { background: var(--blu); }
+.kpi-card.pur::before { background: var(--pur); }
+
+.kpi-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 10px; }
+.kpi-lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; line-height: 1; }
+.kpi-icon {
+  font-size: 16px; opacity: .4;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: var(--r-sm);
+  background: var(--surf2);
+  flex-shrink: 0;
+}
+.kpi-val {
+  font-family: var(--mono); font-size: 26px; font-weight: 600;
+  line-height: 1; letter-spacing: -1px; margin-bottom: 6px;
+}
+.kpi-val.grn { color: var(--grn); }
+.kpi-val.red { color: var(--red); }
+.kpi-val.ora { color: var(--ora); }
+.kpi-val.blu { color: var(--blu); }
+.kpi-val.pur { color: var(--pur); }
+
+.kpi-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; }
+.kpi-delta {
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 1px 5px; border-radius: 3px;
+}
+.kpi-delta.up  { background: var(--grn-bg); color: var(--grn); }
+.kpi-delta.dn  { background: var(--red-bg); color: var(--red); }
+.kpi-delta.eq  { background: var(--surf3);  color: var(--muted); }
+.kpi-sub { font-size: 10px; color: var(--muted); }
+
+/* progress bar */
+.kpi-progress {
+  height: 3px; background: var(--surf3); border-radius: 2px;
+  overflow: hidden; margin-top: 2px;
+}
+.kpi-progress-fill {
+  height: 100%; border-radius: 2px;
+  transition: width .6s ease;
+}
+.kpi-card.grn .kpi-progress-fill { background: var(--grn); }
+.kpi-card.red .kpi-progress-fill { background: var(--red); }
+.kpi-card.ora .kpi-progress-fill { background: var(--ora); }
+.kpi-card.blu .kpi-progress-fill { background: var(--blu); }
+
+/* periodos dots */
+.pc-dots { display: flex; gap: 5px; margin-top: 8px; }
+.pc-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  border: 1.5px solid var(--brd2);
+  transition: background var(--t), border-color var(--t);
+}
+.pc-dot.filled.grn  { background: var(--grn);  border-color: var(--grn); }
+.pc-dot.filled.ora  { background: var(--ora);  border-color: var(--ora); }
+.pc-dot.filled.red  { background: var(--red);  border-color: var(--red); }
+
+/* ── MODULE CARDS ──────────────────────────────────────── */
+.modules-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.module-card {
+  background: var(--surf);
+  border: 1px solid var(--brd);
+  border-radius: var(--r-lg);
+  text-decoration: none; color: var(--txt);
+  display: flex; flex-direction: column;
+  transition: border-color var(--t), transform var(--t), box-shadow var(--t);
+  overflow: hidden;
+  animation: fadeUp .4s ease both;
+}
+.module-card:hover {
+  border-color: var(--acc-bd);
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,.35), 0 0 0 1px var(--acc-bd);
+  text-decoration: none;
+}
+.module-hero {
+  height: 110px;
+  display: flex; align-items: center; justify-content: center;
+  position: relative; overflow: hidden;
+  border-bottom: 1px solid var(--brd);
+}
+.module-hero-icon {
+  font-size: 42px; z-index: 1; position: relative;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,.4));
+}
+.module-hero::before {
+  content: ''; position: absolute; inset: 0;
+  opacity: .12;
+}
+.module-hero.picos::before     { background: radial-gradient(ellipse at 50% 0%, var(--blu), transparent 70%); }
+.module-hero.cluster::before   { background: radial-gradient(ellipse at 50% 0%, var(--grn), transparent 70%); }
+.module-hero.proyecto::before  { background: radial-gradient(ellipse at 50% 0%, var(--acc), transparent 70%); }
+.module-hero.default::before   { background: radial-gradient(ellipse at 50% 0%, var(--pur), transparent 70%); }
+/* subtle grid pattern */
+.module-hero::after {
+  content: ''; position: absolute; inset: 0;
+  background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--brd) 19px, var(--brd) 20px),
+                    repeating-linear-gradient(90deg, transparent, transparent 19px, var(--brd) 19px, var(--brd) 20px);
+  opacity: .3;
+}
+
+.module-body { padding: 14px 16px; flex: 1; }
+.module-title { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.module-desc  { font-size: 11px; color: var(--muted); line-height: 1.55; }
+
+.module-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--brd);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.module-code {
+  font-size: 9px; font-family: var(--mono); color: var(--muted);
+  letter-spacing: 1px; text-transform: uppercase;
+}
+.module-cta {
+  font-size: 11px; color: var(--acc); font-weight: 600;
+  display: flex; align-items: center; gap: 4px;
+  transition: gap var(--t);
+}
+.module-card:hover .module-cta { gap: 7px; }
+
+/* ── MOBILE ────────────────────────────────────────────── */
+.hamburger {
+  display: none; width: 36px; height: 36px; border-radius: var(--r-sm);
+  background: var(--surf2); border: 1px solid var(--brd);
+  align-items: center; justify-content: center;
+  cursor: pointer; font-size: 16px; flex-shrink: 0;
+}
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 15; }
+
+@media (max-width: 860px) {
+  .sidebar { transform: translateX(-100%); transition: transform var(--t-slow); }
+  .sidebar.open { transform: translateX(0); }
+  .main { margin-left: 0; }
+  .hamburger { display: flex; }
+  .overlay.show { display: block; }
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .last-updated { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── SIDEBAR ─────────────────────────────────────────── -->
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-badge">DPO</span>
+    <div>
+      <div class="logo-name">Logística Dist.</div>
+      <div class="logo-sub">Portal operativo</div>
+    </div>
+  </div>
+
+  <nav class="sidebar-nav">
+    <div class="nav-label">General</div>
+    <a href="/portal" class="nav-item active">
+      <span class="nav-icon">⊞</span> Inicio
+    </a>
+
+    <div class="nav-label">Módulos</div>
+    {% for m in modules %}
+    <a href="{{ m.ruta }}" class="nav-item">
+      <span class="nav-icon">
+        {%- if 'pico' in m.codigo -%}◈
+        {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo -%}◎
+        {%- elif 'proyecto' in m.codigo or 'admin' in m.codigo -%}◧
+        {%- else -%}◻{%- endif -%}
+      </span>
+      {{ m.titulo }}
+    </a>
+    {% endfor %}
+
+    {% if user.es_admin %}
+    <div class="nav-label">Administración</div>
+    <a href="/portal/admin" class="nav-item">
+      <span class="nav-icon">◈</span> Usuarios y accesos
+    </a>
+    {% endif %}
+  </nav>
+
+  <div class="sidebar-footer">
+    <div class="user-chip">
+      <div class="user-avatar">{{ (user.nombre or user.username or '?')[0]|upper }}</div>
+      <div>
+        <div class="user-name">{{ user.nombre or user.username }}</div>
+        <div class="user-role">{{ 'Administrador' if user.es_admin else 'Usuario' }}</div>
+      </div>
+    </div>
+    <a href="/logout" class="nav-item danger">
+      <span class="nav-icon">↩</span> Cerrar sesión
+    </a>
+  </div>
+</aside>
+
+<!-- ── MAIN ────────────────────────────────────────────── -->
+<main class="main">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="hamburger" onclick="openSidebar()">☰</button>
+    <div class="greeting">
+      <div class="greeting-title" id="greetingTitle">Bienvenido</div>
+      <div class="greeting-sub"  id="greetingSub">Cargando indicadores…</div>
+    </div>
+    <div class="topbar-actions">
+      <span class="last-updated" id="lastUpdated"></span>
+      <select class="suc-sel" id="sucSelect" onchange="reloadKpis()">
+        <option value="TODAS">Todas las sucursales</option>
+        <option value="1">Casa Central</option>
+        <option value="2">Dolores</option>
+      </select>
+      <button class="refresh-btn" id="refreshBtn" onclick="reloadKpis()" title="Actualizar">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+          <path d="M3 3v5h5"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- Alertas -->
+    <div class="alerts-area" id="alertsArea"></div>
+
+    <!-- Sección Volumen -->
+    <div class="kpi-section">
+      <div class="section-header">
+        <span class="section-label">Volumen del mes</span>
+        <div class="section-line"></div>
+      </div>
+      <div class="kpi-grid" id="kpiVol">
+        <div class="loading" style="grid-column:1/-1"><div class="spinner"></div> Cargando…</div>
+      </div>
+    </div>
+
+    <!-- Sección Calidad -->
+    <div class="kpi-section">
+      <div class="section-header">
+        <span class="section-label">Calidad operativa</span>
+        <div class="section-line"></div>
+      </div>
+      <div class="kpi-grid" id="kpiCal">
+        <div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>
+      </div>
+    </div>
+
+    <!-- Módulos -->
+    <div class="section-header" style="margin-bottom:14px">
+      <span class="section-label">Acceso a módulos</span>
+      <div class="section-line"></div>
+    </div>
+    <div class="modules-grid">
+      {% for m in modules %}
+      <a href="{{ m.ruta }}" class="module-card" style="animation-delay:{{ loop.index * 0.08 }}s">
+        <div class="module-hero
+          {%- if 'pico' in m.codigo %} picos
+          {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo %} cluster
+          {%- elif 'proyecto' in m.codigo %} proyecto
+          {%- else %} default{% endif %}">
+          <span class="module-hero-icon">
+            {%- if 'pico' in m.codigo -%}📊
+            {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo -%}👥
+            {%- elif 'proyecto' in m.codigo -%}⚙️
+            {%- else -%}📁{%- endif -%}
+          </span>
+        </div>
+        <div class="module-body">
+          <div class="module-title">{{ m.titulo }}</div>
+          <div class="module-desc">{{ m.descripcion }}</div>
+        </div>
+        <div class="module-footer">
+          <span class="module-code">{{ m.codigo }}</span>
+          <span class="module-cta">Abrir <span>→</span></span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+
+  </div><!-- /content -->
+</main>
+
+<script>
+const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
+               'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+// ── Sidebar mobile ──────────────────────────────────────
+function openSidebar()  { document.getElementById('sidebar').classList.add('open'); document.getElementById('overlay').classList.add('show'); }
+function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); document.getElementById('overlay').classList.remove('show'); }
+
+// ── Greeting ────────────────────────────────────────────
+(function() {
+  const h = new Date().getHours();
+  const sal = h < 12 ? 'Buenos días' : h < 19 ? 'Buenas tardes' : 'Buenas noches';
+  document.getElementById('greetingTitle').textContent = sal + ', {{ user.nombre or user.username }}';
+})();
+
+// ── Formatters ──────────────────────────────────────────
+const fmtN = v => v == null ? '—' : new Intl.NumberFormat('es-AR').format(Math.round(v));
+const fmtP = (v, d=1) => v == null ? '—' : v.toFixed(d) + '%';
+
+function deltaChip(v, invert = false) {
+  if (v == null) return '<span class="kpi-delta eq">—</span>';
+  const good = invert ? v <= 0 : v >= 0;
+  const cls  = Math.abs(v) < 0.5 ? 'eq' : good ? 'up' : 'dn';
+  const icon = v > 0.1 ? '▲' : v < -0.1 ? '▼' : '—';
+  return `<span class="kpi-delta ${cls}">${icon} ${Math.abs(v).toFixed(1)}%</span>`;
+}
+
+function progressBar(pct) {
+  const w = Math.min(100, Math.max(0, pct || 0));
+  return `<div class="kpi-progress"><div class="kpi-progress-fill" style="width:${w}%"></div></div>`;
+}
+
+// ── Load & render ───────────────────────────────────────
+async function reloadKpis() {
+  const btn = document.getElementById('refreshBtn');
+  btn.classList.add('spin-anim');
+  document.getElementById('kpiVol').innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>';
+  document.getElementById('kpiCal').innerHTML = '<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>';
+  document.getElementById('alertsArea').innerHTML = '';
+
+  const suc = document.getElementById('sucSelect').value;
+  try {
+    const res  = await fetch('/api/portal/dashboard-kpis?sucursal=' + suc);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || 'Error');
+    renderDashboard(json.data);
+  } catch(e) {
+    const msg = `<div class="loading" style="grid-column:1/-1;color:var(--red)">Error: ${e.message}</div>`;
+    document.getElementById('kpiVol').innerHTML = msg;
+    document.getElementById('kpiCal').innerHTML = '';
+  } finally {
+    btn.classList.remove('spin-anim');
+    const now = new Date();
+    document.getElementById('lastUpdated').textContent =
+      'Act. ' + now.toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
+  }
+}
+
+function renderDashboard(d) {
+  // Subtitle
+  const [y, m] = (d.mes || '').split('-');
+  if (y && m) {
+    const sucNom = d.sucursal === 'TODAS' ? 'Todas las sucursales'
+                 : d.sucursal === '1'     ? 'Casa Central' : 'Dolores';
+    document.getElementById('greetingSub').textContent =
+      MESES[parseInt(m) - 1] + ' ' + y + ' · ' + sucNom;
+  }
+
+  // ── Semáforos ─────────────────────────────────────────
+  const dv     = d.hl_delta_pct;
+  const hlCls  = dv == null ? 'blu' : dv >= -5 ? 'grn' : dv >= -15 ? 'ora' : 'red';
+  const bltCls = d.salidas > 0 ? 'grn' : 'blu';
+  const ndsCls = d.nds == null ? 'blu' : d.nds >= 95 ? 'grn' : d.nds >= 90 ? 'ora' : 'red';
+  const dpCls  = d.dias_pico <= 3 ? 'grn' : d.dias_pico <= 6 ? 'ora' : 'red';
+  const ausCls = d.pct_ausentismo == null ? 'blu' : d.pct_ausentismo < 5 ? 'grn' : d.pct_ausentismo < 10 ? 'ora' : 'red';
+  const pcCls  = d.periodos_criticos >= d.periodos_objetivo ? 'grn' : d.periodos_criticos > 0 ? 'ora' : 'red';
+
+  // ── VOLUMEN ───────────────────────────────────────────
+  const hlPct  = dv == null ? 50 : Math.min(100, Math.max(0, 50 + dv / 2));
+  const bltPct = Math.min(100, d.salidas > 0 ? 80 : 40);
+
+  document.getElementById('kpiVol').innerHTML = `
+    <div class="kpi-card ${hlCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">HL despachados</div>
+        <div class="kpi-icon">📦</div>
+      </div>
+      <div class="kpi-val ${hlCls}">${fmtN(d.hl)}</div>
+      <div class="kpi-meta">
+        ${deltaChip(dv)}
+        <span class="kpi-sub">vs mes anterior</span>
+      </div>
+      ${progressBar(hlPct)}
+    </div>
+
+    <div class="kpi-card ${bltCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">Bultos</div>
+        <div class="kpi-icon">🗃️</div>
+      </div>
+      <div class="kpi-val ${bltCls}">${fmtN(d.bultos)}</div>
+      <div class="kpi-meta">
+        <span class="kpi-sub">${fmtN(d.salidas)} salidas</span>
+      </div>
+      ${progressBar(bltPct)}
+    </div>`;
+
+  // ── CALIDAD ───────────────────────────────────────────
+  const ndsPct = d.nds != null ? d.nds : 0;
+  const dpPct  = Math.max(0, 100 - (d.dias_pico / 8) * 100);
+  const ausPct = d.pct_ausentismo != null ? Math.max(0, 100 - d.pct_ausentismo * 6) : 50;
+
+  // Periodos dots
+  const obj = d.periodos_objetivo;
+  const cnt = d.periodos_criticos;
+  let dots = '';
+  for (let i = 0; i < obj; i++) {
+    const filled = i < cnt ? `filled ${pcCls}` : '';
+    dots += `<span class="pc-dot ${filled}"></span>`;
+  }
+
+  const dpLabel = d.dias_pico <= 3 ? 'Normal' : d.dias_pico <= 6 ? 'Moderado' : 'Alto';
+  const ausLabel = d.pct_ausentismo == null ? 'sin dato' : d.pct_ausentismo < 5 ? 'Normal' : d.pct_ausentismo < 10 ? 'Moderado' : 'Alto';
+
+  document.getElementById('kpiCal').innerHTML = `
+    <div class="kpi-card ${ndsCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">NDS del mes</div>
+        <div class="kpi-icon">✓</div>
+      </div>
+      <div class="kpi-val ${ndsCls}">${fmtP(d.nds)}</div>
+      <div class="kpi-meta">
+        <span class="kpi-sub">Rec. HL ${fmtP(d.pct_rec_hl, 2)}</span>
+      </div>
+      ${progressBar(ndsPct)}
+    </div>
+
+    <div class="kpi-card ${dpCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">Días pico</div>
+        <div class="kpi-icon">⬆</div>
+      </div>
+      <div class="kpi-val ${dpCls}">${d.dias_pico ?? '—'}</div>
+      <div class="kpi-meta">
+        <span class="kpi-sub">${dpLabel} este mes</span>
+      </div>
+      ${progressBar(dpPct)}
+    </div>
+
+    <div class="kpi-card ${ausCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">Ausentismo</div>
+        <div class="kpi-icon">👤</div>
+      </div>
+      <div class="kpi-val ${ausCls}">${fmtP(d.pct_ausentismo)}</div>
+      <div class="kpi-meta">
+        <span class="kpi-sub">${ausLabel} · histórico</span>
+      </div>
+      ${progressBar(ausPct)}
+    </div>
+
+    <div class="kpi-card ${pcCls}">
+      <div class="kpi-header">
+        <div class="kpi-lbl">Periodos críticos</div>
+        <div class="kpi-icon">◎</div>
+      </div>
+      <div class="kpi-val ${pcCls}">${cnt}<span style="font-size:14px;color:var(--muted);font-weight:400"> / ${obj}</span></div>
+      <div class="kpi-meta">
+        <span class="kpi-sub">${cnt >= obj ? 'Completo' : 'Faltan ' + (obj - cnt)}</span>
+      </div>
+      <div class="pc-dots">${dots}</div>
+    </div>`;
+
+  // ── ALERTAS ───────────────────────────────────────────
+  let html = '';
+  if (cnt === 0) {
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Sin periodos críticos definidos — se requieren al menos ${obj}.</span><a href="/dias-pico" class="alert-link">Definir →</a></div>`;
+  } else if (cnt < obj) {
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">Periodos críticos incompletos — ${cnt} de ${obj} definidos.</span><a href="/dias-pico" class="alert-link">Completar →</a></div>`;
+  }
+  if (d.nds != null && d.nds < 90) {
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">NDS crítico ${fmtP(d.nds)} — revisar rechazos del mes.</span><a href="/dias-pico" class="alert-link">Ver →</a></div>`;
+  } else if (d.nds != null && d.nds < 95) {
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">NDS por debajo del objetivo (${fmtP(d.nds)} — meta ≥95%).</span></div>`;
+  }
+  if (d.pct_ausentismo != null && d.pct_ausentismo >= 10) {
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Ausentismo alto ${fmtP(d.pct_ausentismo)} — activar plan de cobertura.</span></div>`;
+  } else if (d.pct_ausentismo != null && d.pct_ausentismo >= 5) {
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">Ausentismo moderado ${fmtP(d.pct_ausentismo)} — monitorear.</span></div>`;
+  }
+  if (dv != null && dv < -15) {
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Caída fuerte de HL vs mes anterior (${fmtP(dv)}).</span></div>`;
+  } else if (dv != null && dv < -5) {
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">HL por debajo del mes anterior (${fmtP(dv)}).</span></div>`;
+  }
+  document.getElementById('alertsArea').innerHTML = html;
+}
+
+reloadKpis();
+</script>
+</body>
+</html>

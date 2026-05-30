@@ -2,9 +2,8 @@ from __future__ import annotations
 
 from datetime import date
 from io import BytesIO
-from pathlib import Path
 
-from flask import Blueprint, jsonify, request, send_file, send_from_directory
+from flask import Blueprint, jsonify, render_template, request, send_file
 from openpyxl import Workbook
 
 from app.services import dropsize_svc, cache_svc
@@ -28,8 +27,7 @@ def _args_period() -> dict:
 
 @bp.get('/admin/dropsize')
 def admin_dropsize():
-    project_root = Path(__file__).resolve().parent.parent.parent
-    return send_from_directory(project_root, 'panel_dias_pico_v3.html')
+    return render_template('panel_dias_pico_v3.html')
 
 
 @bp.get('/api/dropsize/resumen')
@@ -130,8 +128,7 @@ def eliminar_objetivo(objetivo_id):
 
 @bp.get('/admin/dropsize/objetivos')
 def admin_dropsize_objetivos():
-    project_root = Path(__file__).resolve().parent.parent.parent
-    return send_from_directory(project_root, 'panel_dias_pico_v3.html')
+    return render_template('panel_dias_pico_v3.html')
 
 
 @bp.post('/api/dropsize/recalcular')

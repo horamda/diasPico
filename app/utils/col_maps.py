@@ -133,8 +133,8 @@ CLIENTES_MAP: dict[str, list[str]] = {
     'calle_1': ['calle 1', 'calle_1'],
     'calle_2': ['calle 2', 'calle_2'],
     'comentario': ['comentario'],
-    'coord_x': ['coord x', 'coord_x', 'coordenada x'],
-    'coord_y': ['coord y', 'coord_y', 'coordenada y'],
+    'coord_x': ['coord x', 'coord_x', 'coordenada x', 'coordenada_x'],
+    'coord_y': ['coord y', 'coord_y', 'coordenada y', 'coordenada_y'],
     'lugar_entrega': ['lugar de entrega', 'lugar_entrega'],
     'calle_entrega': ['calle de entrega', 'calle_entrega'],
     'altura_entrega': ['altura de entrega', 'altura_entrega'],
@@ -146,15 +146,15 @@ CLIENTES_MAP: dict[str, list[str]] = {
     'flete_entrega': ['flete de entrega', 'flete_entrega'],
     'coord_x_entrega': ['coord x de entrega', 'coord_x_de_entrega', 'coord_x_entrega'],
     'coord_y_entrega': ['coord y de entrega', 'coord_y_de_entrega', 'coord_y_entrega'],
-    'localidad': ['localidad'],
-    'provincia': ['provincia'],
-    'departamento': ['departamento'],
+    'localidad': ['descripcion localidad', 'localidad'],
+    'provincia': ['descripcion provincia', 'provincia'],
+    'departamento': ['descripcion departamento', 'departamento'],
     'area': ['area', 'área'],
     'subcanal': ['subcanal'],
     'ramo': ['ramo'],
-    'lista_precio': ['lista de precio', 'lista_precio'],
+    'lista_precio': ['lista de precios', 'lista de precio', 'lista_precio'],
     'hereda': ['hereda'],
-    'lista_boni': ['lista de boni', 'lista de bonificacion', 'lista_boni'],
+    'lista_boni': ['lista de bonificaciones', 'lista de boni', 'lista de bonificacion', 'lista_boni'],
     'forma_pago': ['forma de pago', 'forma_pago'],
     'plazo_pago': ['plazo de pago', 'plazo_pago'],
     'limite_cr_anticipo': ['limite cr anticipo', 'limite_cr_anticipo'],
@@ -164,20 +164,28 @@ CLIENTES_MAP: dict[str, list[str]] = {
     'nombres': ['nombres'],
     'tipo_identif': ['tipo identif', 'tipo de identif', 'tipo identificacion', 'tipo_identif'],
     'identificador': ['identificador', 'identificacion'],
-    'fecha_vencimiento': ['fecha vencimiento', 'fecha_vencimiento'],
+    'fecha_vencimiento': ['vencimiento cuit', 'fecha vencimiento', 'fecha_vencimiento'],
     'exento_ib': ['exento ib', 'exento_ib'],
     'inscripto_ib': ['inscripto ib', 'inscripto_ib'],
-    'convenio_mut': ['convenio mu', 'convenio_mut'],
-    'agente_de_pe': ['agente de pe', 'agente_de_pe'],
-    'documento': ['documento', 'documento!'],
-    'licencia_alco': ['licencia alco', 'licencia_alco'],
-    'vencimiento': ['vencimiento'],
+    'convenio_mut': ['convenio multilateral', 'convenio mu', 'convenio_mut'],
+    'agente_de_pe': ['agente de percepcion', 'agente de pe', 'agente_de_pe'],
+    'documento': ['documento! por defecto', 'documento por defecto', 'documento', 'documento!'],
+    'licencia_alco': ['licencia alcohol', 'licencia alco', 'licencia_alco'],
+    'vencimiento': ['vencimiento licencia alcohol', 'vencimiento'],
     'alta_fecha': ['alta fecha', 'alta_fecha'],
     'anulado': ['anulado'],
     'anulado_fecha': ['anulado fecha', 'anulado_fecha'],
-    'modificacion': ['modificacion'],
-    'cliente_asoc': ['cliente asoci', 'cliente_asoc'],
-    'cta_y_ord': ['cta. y ord', 'cta y ord', 'cta_y_ord']
+    'modificacion': ['modificacion fecha', 'modificacion'],
+    'cliente_asoc': ['cliente asociado', 'cliente asoci', 'cliente_asoc'],
+    'cta_y_ord': ['cta y orden', 'cta. y ord', 'cta y ord', 'cta_y_ord'],
+    'fuerza_venta_1_dias_visita': [
+        'fuerza de venta 1 dias de visita',
+        'fuerza de venta 1 dias visita',
+        'fuerza venta 1 dias de visita',
+        'fuerza venta 1 dias visita',
+        'dias de visita',
+        'dias visita',
+    ],
 }
 
 RECHAZOS_MAP: dict[str, list[str]] = {
@@ -189,7 +197,9 @@ RECHAZOS_MAP: dict[str, list[str]] = {
 
 def map_headers(headers: list[str], mapping: dict[str, list[str]]) -> dict[str, int]:
     """Return {db_col: column_index} for the given header row."""
-    hl = {_norm_header(h): i for i, h in enumerate(headers)}
+    hl: dict[str, int] = {}
+    for i, header in enumerate(headers):
+        hl.setdefault(_norm_header(header), i)
     result: dict[str, int] = {}
     for col, aliases in mapping.items():
         for alias in aliases:

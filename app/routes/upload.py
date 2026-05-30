@@ -1,5 +1,6 @@
 from flask import Blueprint, request, jsonify
 from app.services import upload_svc, sheets_svc, cache_svc, dropsize_svc
+from app.services import segmentacion_svc
 
 bp = Blueprint('upload', __name__, url_prefix='/api/upload')
 
@@ -88,10 +89,20 @@ def clientes():
     f = request.files.get('file')
     if not f:
         return jsonify({'error': 'No file'}), 400
+    dry_run = request.form.get('dry_run', 'false').lower() == 'true'
     try:
-        result = upload_svc.load_clientes(f.read())
-        cache_svc.clear()
-        return jsonify(result.to_dict())
+        if dry_run:
+            result = upload_svc.analyze_clientes(f.read())
+            return jsonify(result.to_dict())
+        else:
+            result = upload_svc.load_clientes(f.read())
+            cache_svc.clear()
+            payload = result.to_dict()
+            try:
+                payload['segmentacion_cache'] = segmentacion_svc.refresh_segmentacion_cache('upload_clientes')
+            except Exception as cache_error:
+                payload['segmentacion_cache_error'] = str(cache_error)
+            return jsonify(payload)
     except ValueError as e:
         return jsonify({'error': str(e)}), 422
     except Exception as e:

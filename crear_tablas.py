@@ -181,7 +181,8 @@ CREATE TABLE IF NOT EXISTS clientes (
     anulado_fecha           DATE,
     modificacion            VARCHAR(100),
     cliente_asoc            VARCHAR(100),
-    cta_y_ord               VARCHAR(100)
+    cta_y_ord               VARCHAR(100),
+    fuerza_venta_1_dias_visita VARCHAR(50)
 );
 """)
 
@@ -388,6 +389,20 @@ CREATE TABLE IF NOT EXISTS seg_clientes_atributos (
 """)
 
 cur.execute("""
+CREATE TABLE IF NOT EXISTS cliente_autoelevador (
+    id                BIGSERIAL PRIMARY KEY,
+    is_cliente        VARCHAR(100) NOT NULL,
+    autoelevador      BOOLEAN NOT NULL DEFAULT TRUE,
+    fecha_importacion TIMESTAMP NOT NULL DEFAULT NOW(),
+    fuente            VARCHAR(100) NOT NULL DEFAULT 'manual',
+    updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_cliente_autoelevador_cliente UNIQUE (is_cliente),
+    CONSTRAINT chk_cliente_autoelevador_cliente
+        CHECK (NULLIF(BTRIM(is_cliente), '') IS NOT NULL)
+);
+""")
+
+cur.execute("""
 CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     id                      BIGSERIAL PRIMARY KEY,
     cliente                 VARCHAR(50)  NOT NULL,
@@ -444,6 +459,8 @@ indices_seg = [
     "CREATE INDEX IF NOT EXISTS idx_seg_cli_suc       ON seg_clientes_atributos(sucursal_id);",
     "CREATE INDEX IF NOT EXISTS idx_seg_cli_loc       ON seg_clientes_atributos(localidad);",
     "CREATE INDEX IF NOT EXISTS idx_seg_cli_activo    ON seg_clientes_atributos(activo);",
+    "CREATE INDEX IF NOT EXISTS idx_cli_auto_cliente  ON cliente_autoelevador(is_cliente);",
+    "CREATE INDEX IF NOT EXISTS idx_cli_auto_flag     ON cliente_autoelevador(autoelevador);",
     "CREATE INDEX IF NOT EXISTS idx_seg_hist_cliente  ON seg_cliente_cluster_historico(cliente);",
     "CREATE INDEX IF NOT EXISTS idx_seg_hist_periodo  ON seg_cliente_cluster_historico(periodo_anio, periodo_mes);",
     "CREATE INDEX IF NOT EXISTS idx_seg_hist_cluster  ON seg_cliente_cluster_historico(cluster_dpo);",
@@ -574,7 +591,7 @@ SELECT
          THEN ROUND((COALESCE(y.rec, 0)::NUMERIC / y.ped * 100), 2)
          ELSE 0 END                                          AS pct_rechazo_pedidos,
     COALESCE(ca.localidad, '')                              AS localidad,
-    COALESCE(ca.autoelevador, FALSE)                        AS autoelevador,
+    COALESCE(cae.autoelevador, ca.autoelevador, FALSE)      AS autoelevador,
     ca.nps_valor,
     ca.rmd_valor,
     ROUND((COALESCE(y.hl, 0) * p.costo_entrega_hl)::NUMERIC, 2)  AS costo_entrega,
@@ -599,6 +616,8 @@ LEFT JOIN bmp
    AND bmp.sucursal = COALESCE(y.sucursal, ab.sucursal)
 LEFT JOIN seg_clientes_atributos ca
     ON ca.cliente = COALESCE(y.cliente, ab.cliente)
+LEFT JOIN cliente_autoelevador cae
+    ON cae.is_cliente = COALESCE(y.cliente, ab.cliente)
 CROSS JOIN params p;
 """)
 

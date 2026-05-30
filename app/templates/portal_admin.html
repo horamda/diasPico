@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Administrar accesos</title>
+  <link rel="stylesheet" href="/static/design-system.css">
+  <style>
+    /* map legacy variables to dark theme tokens */
+    :root {
+      --panel:     var(--surf);
+      --line:      var(--brd);
+      --line-soft: var(--brd);
+      --text:      var(--txt);
+      --primary:   var(--acc);
+      --danger:    var(--red);
+    }
+    body { background: var(--bg); }
+    .shell { width: min(1360px, 100%); margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
+    .top {
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+    }
+    h1 { margin: 0; font-size: 23px; }
+    .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .btn {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--text);
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 7px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+    .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--panel);
+      min-width: 0;
+    }
+    .panel-head {
+      min-height: 48px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line-soft);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .panel-title { font-size: 15px; font-weight: 800; }
+    .panel-body { padding: 12px 14px; }
+    .meta { color: var(--muted); font-size: 12px; font-family: Consolas, "SFMono-Regular", monospace; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: var(--muted); }
+    input, textarea, select {
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      outline: none;
+      font: inherit;
+    }
+    textarea { min-height: 78px; resize: vertical; }
+    input:focus, textarea:focus, select:focus {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
+    }
+    .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+    .check input { min-height: auto; width: auto; }
+    .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line-soft); }
+    table { width: 100%; border-collapse: collapse; min-width: 680px; }
+    th {
+      background: #f6f9fd;
+      height: 36px;
+      padding: 6px 10px;
+      font-size: 11px;
+      color: var(--muted);
+      text-align: left;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--line);
+    }
+    td {
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .ops { display: inline-flex; gap: 6px; }
+    .ops button { min-height: 28px; padding: 4px 8px; font-size: 12px; }
+    .full { grid-column: 1 / -1; }
+    .acc-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 8px;
+      max-height: 260px;
+      overflow: auto;
+      padding: 4px 2px;
+    }
+    .acc-item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
+      display: grid;
+      gap: 4px;
+    }
+    .error {
+      border: 1px solid #ffc9c2;
+      background: #fff0ed;
+      color: #9b1c1c;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 13px;
+    }
+    @media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+    @media (max-width: 720px) {
+      .top { grid-template-columns: 1fr; }
+      .actions { justify-content: flex-start; }
+      .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="top">
+      <div>
+        <h1>Administracion de accesos</h1>
+        <div class="sub">{{ user.nombre }} (admin)</div>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/portal">Volver al portal</a>
+        <a class="btn primary" href="/logout">Salir</a>
+      </div>
+    </header>
+
+    <section class="layout">
+      <article class="panel">
+        <div class="panel-head"><div class="panel-title">Modulos</div><div class="meta" id="modMeta"></div></div>
+        <div class="panel-body">
+          <form id="moduleForm" class="form-grid">
+            <label>Codigo<input id="mCodigo" required></label>
+            <label>Titulo<input id="mTitulo" required></label>
+            <label class="full">Descripcion<textarea id="mDescripcion"></textarea></label>
+            <label>Ruta<input id="mRuta" required placeholder="/ruta-modulo"></label>
+            <label>Imagen URL<input id="mImage"></label>
+            <label>Orden<input id="mOrden" type="number" value="100"></label>
+            <label class="check"><input id="mActivo" type="checkbox" checked>Activo</label>
+            <div class="full"><button class="btn primary" type="submit">Crear modulo</button></div>
+          </form>
+        </div>
+        <div class="table-wrap"><table id="modulesTable"></table></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head"><div class="panel-title">Usuarios</div><div class="meta" id="usrMeta"></div></div>
+        <div class="panel-body">
+          <form id="userForm" class="form-grid">
+            <label>Nombre<input id="uNombre" required></label>
+            <label>Usuario<input id="uUsername" required></label>
+            <label>Password<input id="uPassword" type="password" required></label>
+            <label class="check"><input id="uAdmin" type="checkbox">Es admin</label>
+            <label class="check"><input id="uActivo" type="checkbox" checked>Activo</label>
+            <div class="full"><button class="btn primary" type="submit">Crear usuario</button></div>
+          </form>
+        </div>
+        <div class="table-wrap"><table id="usersTable"></table></div>
+      </article>
+    </section>
+
+    <article class="panel">
+      <div class="panel-head"><div class="panel-title">Asignacion de accesos</div><div class="meta" id="accMeta"></div></div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <label>Usuario
+            <select id="accUser"></select>
+          </label>
+          <div class="full acc-list" id="accList"></div>
+          <div class="full">
+            <button class="btn primary" id="saveAccBtn" type="button">Guardar accesos</button>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <div id="errorBox"></div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { modules: [], users: [], selectedUser: null, selectedAccess: new Set() };
+
+    async function api(path, options) {
+      const res = await fetch(path, options);
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
+      return body.data;
+    }
+
+    function esc(value) {
+      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function num(v) {
+      return Number(v || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+    }
+
+    function showError(msg) {
+      $("errorBox").innerHTML = msg ? `<div class="error">${esc(msg)}</div>` : "";
+    }
+
+    async function loadData() {
+      showError("");
+      try {
+        const [mods, users] = await Promise.all([
+          api("/api/portal/admin/modulos"),
+          api("/api/portal/admin/usuarios"),
+        ]);
+        state.modules = mods || [];
+        state.users = users || [];
+        if (!state.selectedUser && state.users.length) {
+          state.selectedUser = state.users[0].id;
+        }
+        renderModules();
+        renderUsers();
+        renderAccessUsers();
+        await loadAccessMap();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function renderModules() {
+      $("modMeta").textContent = `${num(state.modules.length)} modulos`;
+      $("modulesTable").innerHTML = `
+        <thead><tr><th>ID</th><th>Codigo</th><th>Titulo</th><th>Ruta</th><th>Orden</th><th>Activo</th><th>Acciones</th></tr></thead>
+        <tbody>${state.modules.map((m) => `
+          <tr>
+            <td>${m.id}</td>
+            <td>${esc(m.codigo)}</td>
+            <td>${esc(m.titulo)}</td>
+            <td>${esc(m.ruta)}</td>
+            <td>${m.orden}</td>
+            <td>${m.activo ? "si" : "no"}</td>
+            <td>
+              <div class="ops">
+                <button class="btn" data-act="edit-mod" data-id="${m.id}" type="button">Editar</button>
+                <button class="btn danger" data-act="del-mod" data-id="${m.id}" type="button">Eliminar</button>
+              </div>
+            </td>
+          </tr>
+        `).join("")}</tbody>
+      `;
+    }
+
+    function renderUsers() {
+      $("usrMeta").textContent = `${num(state.users.length)} usuarios`;
+      $("usersTable").innerHTML = `
+        <thead><tr><th>ID</th><th>Usuario</th><th>Nombre</th><th>Admin</th><th>Activo</th><th>Acciones</th></tr></thead>
+        <tbody>${state.users.map((u) => `
+          <tr>
+            <td>${u.id}</td>
+            <td>${esc(u.username)}</td>
+            <td>${esc(u.nombre)}</td>
+            <td>${u.es_admin ? "si" : "no"}</td>
+            <td>${u.activo ? "si" : "no"}</td>
+            <td>
+              <div class="ops">
+                <button class="btn" data-act="edit-user" data-id="${u.id}" type="button">Editar</button>
+                <button class="btn" data-act="pass-user" data-id="${u.id}" type="button">Password</button>
+              </div>
+            </td>
+          </tr>
+        `).join("")}</tbody>
+      `;
+    }
+
+    function renderAccessUsers() {
+      $("accUser").innerHTML = state.users.map((u) => `
+        <option value="${u.id}" ${Number(state.selectedUser) === Number(u.id) ? "selected" : ""}>
+          ${esc(u.username)} - ${esc(u.nombre)}
+        </option>
+      `).join("");
+      $("accMeta").textContent = state.selectedUser ? `usuario #${state.selectedUser}` : "-";
+    }
+
+    function renderAccessList() {
+      $("accList").innerHTML = state.modules.map((m) => `
+        <label class="acc-item">
+          <span class="check">
+            <input type="checkbox" class="acc-mod" value="${m.id}" ${state.selectedAccess.has(Number(m.id)) ? "checked" : ""}>
+            <strong>${esc(m.titulo)}</strong>
+          </span>
+          <span class="meta">${esc(m.ruta)}</span>
+        </label>
+      `).join("");
+      document.querySelectorAll(".acc-mod").forEach((el) => {
+        el.addEventListener("change", () => {
+          const id = Number(el.value);
+          if (el.checked) state.selectedAccess.add(id);
+          else state.selectedAccess.delete(id);
+        });
+      });
+    }
+
+    async function loadAccessMap() {
+      if (!state.selectedUser) {
+        state.selectedAccess = new Set();
+        renderAccessList();
+        return;
+      }
+      try {
+        const data = await api(`/api/portal/admin/usuarios/${state.selectedUser}/accesos`);
+        state.selectedAccess = new Set((data.module_ids || []).map(Number));
+        renderAccessList();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function createModule(event) {
+      event.preventDefault();
+      try {
+        await api("/api/portal/admin/modulos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            codigo: $("mCodigo").value.trim(),
+            titulo: $("mTitulo").value.trim(),
+            descripcion: $("mDescripcion").value.trim(),
+            ruta: $("mRuta").value.trim(),
+            image_url: $("mImage").value.trim(),
+            orden: Number($("mOrden").value || 100),
+            activo: $("mActivo").checked,
+          }),
+        });
+        event.target.reset();
+        $("mOrden").value = "100";
+        $("mActivo").checked = true;
+        await loadData();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function createUser(event) {
+      event.preventDefault();
+      try {
+        await api("/api/portal/admin/usuarios", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            nombre: $("uNombre").value.trim(),
+            username: $("uUsername").value.trim(),
+            password: $("uPassword").value,
+            es_admin: $("uAdmin").checked,
+            activo: $("uActivo").checked,
+          }),
+        });
+        event.target.reset();
+        $("uActivo").checked = true;
+        await loadData();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function onTableClick(event) {
+      const button = event.target.closest("button[data-act]");
+      if (!button) return;
+      const action = button.dataset.act;
+      const id = Number(button.dataset.id);
+
+      try {
+        if (action === "del-mod") {
+          if (!confirm("Eliminar modulo?")) return;
+          await api(`/api/portal/admin/modulos/${id}`, { method: "DELETE" });
+          await loadData();
+          return;
+        }
+
+        if (action === "edit-mod") {
+          const mod = state.modules.find((m) => Number(m.id) === id);
+          if (!mod) return;
+          const titulo = prompt("Titulo", mod.titulo);
+          if (titulo === null) return;
+          const descripcion = prompt("Descripcion", mod.descripcion || "");
+          if (descripcion === null) return;
+          const ruta = prompt("Ruta", mod.ruta);
+          if (ruta === null) return;
+          const image = prompt("Imagen URL", mod.image_url || "");
+          if (image === null) return;
+          const orden = prompt("Orden", String(mod.orden || 100));
+          if (orden === null) return;
+          await api(`/api/portal/admin/modulos/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              titulo: titulo.trim(),
+              descripcion: descripcion.trim(),
+              ruta: ruta.trim(),
+              image_url: image.trim(),
+              orden: Number(orden || 100),
+            }),
+          });
+          await loadData();
+          return;
+        }
+
+        if (action === "edit-user") {
+          const user = state.users.find((u) => Number(u.id) === id);
+          if (!user) return;
+          const nombre = prompt("Nombre", user.nombre);
+          if (nombre === null) return;
+          const activo = confirm("Aceptar = activo | Cancelar = inactivo");
+          const es_admin = confirm("Aceptar = admin | Cancelar = usuario normal");
+          await api(`/api/portal/admin/usuarios/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ nombre: nombre.trim(), activo, es_admin }),
+          });
+          await loadData();
+          return;
+        }
+
+        if (action === "pass-user") {
+          const pass = prompt("Nuevo password (min 6)");
+          if (pass === null) return;
+          await api(`/api/portal/admin/usuarios/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: pass }),
+          });
+          await loadData();
+        }
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    async function saveAccess() {
+      if (!state.selectedUser) return;
+      try {
+        await api(`/api/portal/admin/usuarios/${state.selectedUser}/accesos`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ module_ids: Array.from(state.selectedAccess) }),
+        });
+        await loadAccessMap();
+      } catch (error) {
+        showError(error.message);
+      }
+    }
+
+    function bind() {
+      $("moduleForm").addEventListener("submit", createModule);
+      $("userForm").addEventListener("submit", createUser);
+      $("modulesTable").addEventListener("click", onTableClick);
+      $("usersTable").addEventListener("click", onTableClick);
+      $("saveAccBtn").addEventListener("click", saveAccess);
+      $("accUser").addEventListener("change", async () => {
+        state.selectedUser = Number($("accUser").value || 0) || null;
+        renderAccessUsers();
+        await loadAccessMap();
+      });
+    }
+
+    document.addEventListener("DOMContentLoaded", async () => {
+      bind();
+      await loadData();
+    });
+  </script>
+</body>
+</html>

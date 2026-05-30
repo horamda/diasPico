@@ -1,6 +1,6 @@
 import os
 from typing import Dict, Type
-from pydantic import Field, PostgresDsn, HttpUrl
+from pydantic import Field, HttpUrl, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from dotenv import load_dotenv
 
@@ -38,14 +38,23 @@ class AppSettings(BaseSettings):
     
     DEBUG: bool = False
 
+    @field_validator('DEBUG', mode='before')
+    @classmethod
+    def parse_debug(cls, value):
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {'1', 'true', 't', 'yes', 'y', 'on'}:
+                return True
+            if normalized in {'0', 'false', 'f', 'no', 'n', 'off'}:
+                return False
+            return False
+        return value
+
 class DevelopmentSettings(AppSettings):
     DEBUG: bool = True
 
 class ProductionSettings(AppSettings):
     DEBUG: bool = False
-
-# Instantiate settings
-settings = AppSettings()
 
 def get_config(env: str = 'development') -> AppSettings:
     if env == 'production':
