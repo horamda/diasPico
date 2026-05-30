@@ -1,23 +1,59 @@
+# ── Entorno & secretos ─────────────────────────────────────
 .env
 .env.*
 !.env.example
 
+# ── Python ──────────────────────────────────────────────────
 venv/
 .venv/
 __pycache__/
 *.py[cod]
 *$py.class
+*.pyo
+*.pyd
+.Python
+pip-log.txt
 
+# ── Testing ─────────────────────────────────────────────────
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.coverage
+htmlcov/
+*.xml
 
+# ── Logs & dumps ────────────────────────────────────────────
 *.log
-*.tmp
-~$*
+*.err.log
+*.out.log
+*.stackdump
+.codex-*.log
+server_*.log
 
-# Local data exports/imports
+# ── Archivos temporales ─────────────────────────────────────
+*.tmp
+*.bak
+~$*
+auxiliar.txt
+test_sync.py
+
+# ── Claude Code (settings locales no van al repo) ───────────
+.claude/settings.local.json
+
+# ── OS ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Datos exportados ────────────────────────────────────────
 *.xlsx
 *.xls
 *.csv
+exports/
+uploads/
 
+# ── IDEs ────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo

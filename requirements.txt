@@ -8,3 +8,4 @@ python-dotenv>=1.2
 flask-migrate>=4.1
 pydantic-settings>=2.8
 pydantic>=2.10
+gunicorn>=22.0
