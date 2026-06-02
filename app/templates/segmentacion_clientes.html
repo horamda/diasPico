@@ -5,6 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Segmentacion DPO 2026 | Clientes</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+  <script>
+    // Registrar globalmente y deshabilitar por defecto — solo se activa donde se configura
+    document.addEventListener("DOMContentLoaded", function() {
+      if (window.ChartDataLabels) {
+        Chart.register(ChartDataLabels);
+        Chart.defaults.set("plugins.datalabels", { display: false });
+      }
+    });
+  </script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
   <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
@@ -878,6 +888,70 @@
             </div>
           </article>
         </div>
+
+        <!-- IMPORTAR PROMOTORES -->
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="user-check"></i>Promotores / Fuerza de ventas</div>
+              <div class="panel-meta">CSV</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="promotorFile">Archivo</label>
+                  <input class="control" id="promotorFile" type="file" accept=".csv,text/csv">
+                </div>
+                <button class="btn primary" id="promotorUploadBtn" onclick="uploadPromotores()">
+                  <i data-lucide="upload"></i>Subir
+                </button>
+              </div>
+              <div class="upload-status" id="promotorUploadStatus">
+                CSV con columnas: <strong>Código de cliente</strong> y <strong>Fuerza de venta 1 Descripcion personal comercial</strong>.<br>
+                Marca automáticamente como activo/inactivo según el promotor asignado.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="users"></i>Resultado importación</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="promotorUploadSummary"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="check-circle-2"></i>OTIF / RMD / NPS</div>
+              <div class="panel-meta">CSV</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="serviceFile">Archivo</label>
+                  <input class="control" id="serviceFile" type="file" accept=".csv,text/csv">
+                </div>
+                <button class="btn primary" id="serviceUploadBtn">
+                  <i data-lucide="upload"></i>Subir
+                </button>
+              </div>
+              <div class="upload-status" id="serviceUploadStatus">
+                CSV con cliente y al menos una columna OTIF, RMD o NPS. OTIF debe estar en porcentaje 0-100.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="bar-chart-3"></i>Resultado servicio</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="serviceUploadSummary"></div>
+            </div>
+          </article>
+        </div>
       </section>
 
       <section class="view" id="view-settings">
@@ -1014,6 +1088,7 @@
       $("recalcBtn").disabled = on;
       $("reloadBtn").disabled = on;
       if ($("autoUploadBtn")) $("autoUploadBtn").disabled = on;
+      if ($("serviceUploadBtn")) $("serviceUploadBtn").disabled = on;
     }
 
     function queryString() {
@@ -1155,9 +1230,11 @@
       const scoreWeight = agg.reduce((sum, row) => sum + row.scoreWeighted, 0);
       const avgScore = total ? scoreWeight / total : 0;
       const autoPct = Number(state.autoResumen.pct_clientes_autoelevador || 0);
+      const avgOtif = avgPlanMetric("otif_valor");
       const items = [
         { label: "Clientes", value: num(total), sub: `${money(venta)} venta YTD`, icon: "users", color: "var(--violet)" },
         { label: "Ganador", value: countCluster("Ganador"), sub: shareCluster("Ganador"), icon: "trophy", color: "var(--green)" },
+        { label: "OTIF prom.", value: pct(avgOtif, 1), sub: "entrega en fecha y completa", icon: "check-circle-2", color: avgOtif >= 90 ? "var(--green)" : "var(--amber)" },
         { label: "Autoelevador", value: pct(autoPct, 1), sub: `${num(state.autoResumen.clientes_autoelevador || 0)} clientes`, icon: "forklift", color: "var(--blue)" },
         { label: "Costo logistico", value: money(costo), sub: `${pct(venta ? costo / venta * 100 : 0)} sobre venta`, icon: "truck", color: "var(--amber)" },
         { label: "Score prom.", value: num(avgScore, 1), sub: "escala 0-100", icon: "gauge", color: scoreColor(avgScore) }
@@ -1206,6 +1283,14 @@
       const item = agg.find((row) => row.cluster === cluster);
       const count = item ? item.clientes : 0;
       return pct(count / total * 100);
+    }
+
+    function avgPlanMetric(key) {
+      const values = state.plan
+        .map((row) => row[key])
+        .filter((value) => value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value)))
+        .map(Number);
+      return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null;
     }
 
     function renderOverviewCharts() {
@@ -1300,7 +1385,7 @@
       $("branchSummary").innerHTML = `
         <table>
           <thead><tr>
-            <th>Sucursal</th><th>Cluster</th><th class="num">Clientes</th><th class="num">Venta</th><th class="num">HL</th><th class="num">Costo</th><th class="num">Rechazo</th><th>Score</th>
+            <th>Sucursal</th><th>Cluster</th><th class="num">Clientes</th><th class="num">Venta</th><th class="num">HL</th><th class="num">Costo</th><th class="num">Rechazo</th><th class="num">RMD</th><th class="num">OTIF</th><th>Score</th>
           </tr></thead>
           <tbody>${rows.map((row) => `
             <tr>
@@ -1311,6 +1396,8 @@
               <td class="num">${num(row.hl_total_ytd, 1)}</td>
               <td class="num">${money(row.costo_logistico_total)}</td>
               <td class="num">${pct(row.pct_rechazo_prom)}</td>
+              <td class="num">${pct(row.rmd_prom)}</td>
+              <td class="num">${pct(row.otif_prom)}</td>
               <td>${scoreBar(row.score_prom)}</td>
             </tr>
           `).join("")}</tbody>
@@ -1329,7 +1416,7 @@
       $("clientsTable").innerHTML = `
         <table>
           <thead><tr>
-            <th>Cliente</th><th>Sucursal</th><th>Cluster</th><th>Subcluster</th><th>Score</th><th class="num">Venta</th><th class="num">Crec.</th><th class="num">HL</th><th class="num">Drop size</th><th class="num">Costo %</th><th class="num">Rechazo</th>
+            <th>Cliente</th><th>Sucursal</th><th>Cluster</th><th>Subcluster</th><th>Score</th><th class="num">Venta</th><th class="num">Crec.</th><th class="num">HL</th><th class="num">Drop size</th><th class="num">Costo %</th><th class="num">Rechazo</th><th class="num">RMD</th><th class="num">OTIF</th>
           </tr></thead>
           <tbody>${rows.slice(0, 500).map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
@@ -1344,6 +1431,8 @@
               <td class="num">${num(row.dropsize_bultos_ytd, 1)}</td>
               <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
               <td class="num">${pct(row.pct_rechazo_pedidos)}</td>
+              <td class="num">${pct(row.rmd_valor)}</td>
+              <td class="num">${pct(row.otif_valor)}</td>
             </tr>
           `).join("")}</tbody>
         </table>
@@ -1580,14 +1669,50 @@
         label: cluster,
         data: months.map((month) => {
           const row = rows.find((item) => Number(item.periodo_mes || 0) === month && item.cluster_dpo === cluster);
-          return row ? Number(row.clientes || 0) : 0;
+          return row ? Number(row.clientes || 0) : null;
         }),
         borderColor: CLUSTER_COLORS[idx],
         backgroundColor: CLUSTER_COLORS[idx] + "22",
+        pointBackgroundColor: CLUSTER_COLORS[idx],
+        pointRadius: 4,
         tension: .25,
-        fill: false
+        fill: false,
+        spanGaps: true,
       }));
-      renderChart("evolutionChart", "line", { labels, datasets });
+
+      if (state.charts["evolutionChart"]) state.charts["evolutionChart"].destroy();
+      const canvas = $("evolutionChart");
+      if (!canvas) return;
+
+      state.charts["evolutionChart"] = new Chart(canvas, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, color: "#667085", font: { size: 12 } } },
+            tooltip: { mode: "index", intersect: false },
+            datalabels: {
+              display: true,
+              align: "top",
+              anchor: "end",
+              offset: 3,
+              color: (ctx) => CLUSTER_COLORS[ctx.datasetIndex],
+              font: { size: 10, weight: "700" },
+              formatter: (value) => (value != null && value > 0) ? value : "",
+            },
+          },
+          scales: {
+            x: { grid: { color: "#eef2f6" }, ticks: { color: "#667085" } },
+            y: {
+              grid: { color: "#eef2f6" },
+              ticks: { color: "#667085", precision: 0 },
+              beginAtZero: true,
+            }
+          }
+        }
+      });
     }
 
     function renderAudit() {
@@ -1718,7 +1843,15 @@
           });
           state.weights = weights;
         }
-        if (recalculate) await recalculateClusters();
+        if (recalculate) {
+          await recalculateClusters();
+        } else {
+          await api("/api/segmentacion/cache/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ejecutado_por: "dashboard_settings" })
+          }, 90000);
+        }
         await loadData();
         if (state.activeTab === "settings") renderSettings();
       } catch (error) {
@@ -1783,6 +1916,73 @@
         ${metric("Costo autoelevador", money(state.autoResumen.costo_autoelevador || 0))}
         ${metric("Acompanantes estimados", num(state.autoResumen.acompanantes_estimados || 0))}
       `;
+    }
+
+    async function uploadPromotores() {
+      const file = $("promotorFile")?.files[0];
+      const statusEl = $("promotorUploadStatus");
+      const summaryEl = $("promotorUploadSummary");
+      if (!file) {
+        if (statusEl) statusEl.textContent = 'Seleccioná un CSV para subir';
+        return;
+      }
+      const btn = $("promotorUploadBtn");
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = 'Subiendo...';
+      if (summaryEl) summaryEl.innerHTML = '';
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        if (statusEl) statusEl.textContent = 'Procesando...';
+        const result = await api("/api/segmentacion/promotor/import", {
+          method: "POST", body: form
+        }, 90000);
+        if (statusEl) statusEl.textContent = `Completado: ${result.leidos} leídos`;
+        if (summaryEl) summaryEl.innerHTML = `
+          ${metric("Leídos", num(result.leidos))}
+          ${metric("Actualizados", num(result.actualizados), "var(--blue)")}
+          ${metric("Activos", num(result.activos), "var(--green)")}
+          ${metric("Inactivos / excluidos", num(result.inactivos), "var(--amber)")}
+        `;
+        await loadData();
+      } catch(e) {
+        if (statusEl) statusEl.textContent = 'Error: ' + e.message;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    async function uploadServicio() {
+      const file = $("serviceFile")?.files[0];
+      const statusEl = $("serviceUploadStatus");
+      const summaryEl = $("serviceUploadSummary");
+      if (!file) {
+        if (statusEl) statusEl.textContent = "Selecciona un CSV para subir";
+        return;
+      }
+      const btn = $("serviceUploadBtn");
+      if (btn) btn.disabled = true;
+      if (statusEl) statusEl.textContent = "Procesando...";
+      if (summaryEl) summaryEl.innerHTML = "";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const result = await api("/api/segmentacion/servicio/import", {
+          method: "POST",
+          body: form
+        }, 90000);
+        if (statusEl) statusEl.textContent = `Completado: ${result.leidos} leidos`;
+        if (summaryEl) summaryEl.innerHTML = `
+          ${metric("Leidos", num(result.leidos))}
+          ${metric("Actualizados", num(result.actualizados), "var(--blue)")}
+          ${metric("Cache", result.segmentacion_cache ? "Refrescada" : "Pendiente", result.segmentacion_cache ? "var(--green)" : "var(--amber)")}
+        `;
+        await loadData();
+      } catch (error) {
+        if (statusEl) statusEl.textContent = "Error: " + error.message;
+      } finally {
+        if (btn) btn.disabled = false;
+      }
     }
 
     async function uploadAutoelevador() {
@@ -1865,6 +2065,8 @@
           ${metric("Costo logistico", money(data.costo_logistico_total))}
           ${metric("Costo / venta", pct(data.ratio_costo_logistico_pct))}
           ${metric("Rechazo", pct(data.pct_rechazo_pedidos))}
+          ${metric("RMD", pct(data.rmd_valor))}
+          ${metric("OTIF", pct(data.otif_valor), Number(data.otif_valor || 0) >= 90 ? "var(--green)" : "var(--amber)")}
           ${metric("Margen proxy", money(data.margen_logistico_proxy), Number(data.margen_logistico_proxy || 0) >= 0 ? "var(--green)" : "var(--red)")}
         </div>
         <div class="note"><strong>Plan de servicio</strong><br>${esc(data.plan_servicio || "-")}</div>
@@ -1905,6 +2107,7 @@
       $("reloadBtn").addEventListener("click", loadData);
       $("recalcBtn").addEventListener("click", handleRecalculate);
       $("autoUploadBtn").addEventListener("click", uploadAutoelevador);
+      if ($("serviceUploadBtn")) $("serviceUploadBtn").addEventListener("click", uploadServicio);
       $("drawerOverlay").addEventListener("click", closeDrawer);
       $("closeDrawerBtn").addEventListener("click", closeDrawer);
     }

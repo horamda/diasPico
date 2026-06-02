@@ -29,12 +29,12 @@ class TestUpsertRows(unittest.TestCase):
         mock_pg_conn.assert_not_called()
         self.assertEqual(result, 0)
 
+    @patch("app.repositories.operacion_camiones_repository.execute_values")
     @patch("app.repositories.operacion_camiones_repository.pg_conn")
     @patch("app.repositories.operacion_camiones_repository._READY", True)
-    def test_upsert_llama_executemany(self, mock_pg_conn):
+    def test_upsert_llama_executemany(self, mock_pg_conn, mock_execute_values):
         mock_conn = MagicMock()
         mock_cur  = MagicMock()
-        mock_cur.rowcount = 2
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__  = MagicMock(return_value=False)
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
@@ -45,18 +45,18 @@ class TestUpsertRows(unittest.TestCase):
         rows = [self._make_row(), self._make_row(chofer="Ana")]
         result = upsert_rows(rows)
 
-        mock_cur.executemany.assert_called_once()
-        sql_arg = mock_cur.executemany.call_args[0][0]
+        mock_execute_values.assert_called_once()
+        sql_arg = mock_execute_values.call_args[0][1]
         self.assertIn("ON CONFLICT", sql_arg)
         self.assertIn("DO UPDATE", sql_arg)
         self.assertEqual(result, 2)
 
+    @patch("app.repositories.operacion_camiones_repository.execute_values")
     @patch("app.repositories.operacion_camiones_repository.pg_conn")
     @patch("app.repositories.operacion_camiones_repository._READY", True)
-    def test_upsert_pasa_todas_las_columnas(self, mock_pg_conn):
+    def test_upsert_pasa_todas_las_columnas(self, mock_pg_conn, mock_execute_values):
         mock_conn = MagicMock()
         mock_cur  = MagicMock()
-        mock_cur.rowcount = 1
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__  = MagicMock(return_value=False)
         mock_conn.cursor.return_value.__enter__ = MagicMock(return_value=mock_cur)
@@ -67,11 +67,13 @@ class TestUpsertRows(unittest.TestCase):
         row = self._make_row()
         upsert_rows([row])
 
-        rows_arg = mock_cur.executemany.call_args[0][1]
-        self.assertEqual(len(rows_arg), 1)
-        self.assertIn("empresa_id", rows_arg[0])
-        self.assertIn("chofer", rows_arg[0])
-        self.assertIn("nro_salida", rows_arg[0])
+        # execute_values(cur, sql, values, page_size=...) — values is a list of tuples
+        # tuple order: empresa_id, sucursal_id, fecha, nro_salida, chofer, ay1, ay2, sync_at
+        values_arg = mock_execute_values.call_args[0][2]
+        self.assertEqual(len(values_arg), 1)
+        self.assertEqual(values_arg[0][0], "1")          # empresa_id
+        self.assertEqual(values_arg[0][2], "2025-05-10") # fecha
+        self.assertEqual(values_arg[0][4], "Juan")        # chofer
 
 
 class TestGetDetalleMensual(unittest.TestCase):

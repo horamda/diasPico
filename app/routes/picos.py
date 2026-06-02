@@ -1,12 +1,13 @@
 from datetime import date
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, send_file
 from app.services import pico_svc, cache_svc
 
 bp = Blueprint('picos', __name__, url_prefix='/api/picos')
 
 
 def _cached(key: str, factory):
-    return cache_svc.get_or_set(f'picos:{key}:{request.full_path}', factory, ttl_seconds=120)
+    params = '&'.join(f'{k}={v}' for k, v in sorted(request.args.items()))
+    return cache_svc.get_or_set(f'picos:{key}:{params}', factory, ttl_seconds=120)
 
 
 @bp.get('/calendario')
@@ -35,8 +36,10 @@ def kpis():
 def historico():
     sucursal = request.args.get('sucursal', 'TODAS')
     n_meses  = request.args.get('meses', 12, type=int)
+    umbral   = request.args.get('umbral', type=float)
+    metrica  = request.args.get('metrica')
     try:
-        return jsonify(_cached('historico', lambda: pico_svc.get_historico(sucursal, n_meses)))
+        return jsonify(_cached('historico', lambda: pico_svc.get_historico(sucursal, n_meses, umbral, metrica)))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -63,6 +66,28 @@ def dia():
         return jsonify(_cached('dia', lambda: pico_svc.get_detalle_dia(sucursal, fecha)))
     except ValueError:
         return jsonify({'error': 'fecha inválida (usar YYYY-MM-DD)'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/dias-detalle/export')
+def export_dias_detalle():
+    sucursal = request.args.get('sucursal', 'TODAS')
+    desde    = request.args.get('desde', '2025-01')
+    hasta    = request.args.get('hasta', date.today().strftime('%Y-%m'))
+    umbral   = request.args.get('umbral', type=float)
+    metrica  = request.args.get('metrica')
+    try:
+        stream, filename, mimetype = pico_svc.export_dias_detalle_periodo(
+            sucursal=sucursal,
+            desde=desde,
+            hasta=hasta,
+            umbral_override=umbral,
+            metrica_override=metrica,
+        )
+        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -94,6 +119,20 @@ def dotacion_diaria():
         return jsonify(pico_svc.get_dotacion_diaria(empresa_id, sucursal_id, fi, ff))
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/cobertura-dotacion')
+def cobertura_dotacion():
+    empresa_id  = request.args.get('empresa_id', '1')
+    sucursal_id = request.args.get('sucursal_id', request.args.get('sucursal', 'TODAS'))
+    anio = request.args.get('anio', type=int)
+    mes  = request.args.get('mes', type=int)
+    if not anio or not mes:
+        return jsonify({'error': 'anio y mes requeridos'}), 400
+    try:
+        return jsonify(pico_svc.get_cobertura_picos(empresa_id, sucursal_id, anio, mes))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -131,10 +170,13 @@ def periodos_criticos_get():
         periodos       = pico_svc.get_periodos_criticos(empresa_id, sucursal_id, anio)
         sugeridos      = pico_svc.sugerir_periodos_criticos(sucursal_id, anio)
         aus_mensual    = pico_svc.get_ausentismo_mensual(empresa_id, sucursal_id, anio)
+        aus_mensual_ant = pico_svc.get_ausentismo_mensual(empresa_id, sucursal_id, anio - 1)
         return jsonify({
             'periodos': periodos,
             'sugeridos': sugeridos,
             'ausentismo_mensual': aus_mensual,
+            'ausentismo_mensual_anterior': aus_mensual_ant,
+            'anio': anio,
             'total': len(periodos),
             'cumple_minimo': len(periodos) >= 3,
         })

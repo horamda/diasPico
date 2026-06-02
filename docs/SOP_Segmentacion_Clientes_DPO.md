@@ -9,6 +9,7 @@ Este SOP define como se ejecuta la segmentacion logistica-comercial de clientes 
 - clasificacion DPO en 4 clusters oficiales
 - score 0-100 parametrizable
 - subclasificacion operativa con autoelevador
+- comparacion de servicio por cluster con OTIF y RMD
 - georreferenciacion para mapa
 - guardado historico mensual y auditoria
 
@@ -28,7 +29,7 @@ No cubre cambios de modelo fuera del esquema actual ni rediseno funcional de mod
 - `seg_parametros`: costos por HL, percentiles, anios base/YTD.
 - `seg_periodos_calculo`: rango de periodo YTD y base.
 - `seg_score_pesos`: pesos por variable del score.
-- `seg_clientes_atributos`: atributos de cliente (NPS, RMD, autoelevador, etc.).
+- `seg_clientes_atributos`: atributos de cliente (OTIF, NPS, RMD, autoelevador, etc.).
 - `cliente_autoelevador`: fuente externa/importada de autoelevador.
 - `cliente_geografia`: latitud/longitud por cliente.
 
@@ -71,7 +72,7 @@ La vista base es `vw_cliente_metricas`. Calcula, entre otros:
 - `dropsize_bultos_ytd`
 - `ticket_promedio_ytd`
 - `rechazos_ytd`, `pct_rechazo_pedidos`
-- `nps_valor`, `rmd_valor`
+- `nps_valor`, `rmd_valor`, `otif_valor`
 - `costo_entrega`, `costo_almacen`
 - `costo_logistico_total`
 - `margen_logistico_proxy`
@@ -84,6 +85,7 @@ Definiciones clave:
 - `costo_entrega = hl_ytd * costo_entrega_hl`
 - `costo_almacen = hl_ytd * costo_almacen_hl`
 - `ratio_costo_logistico_pct = (costo_logistico_total / venta_ytd) * 100`
+- `otif_valor = entregas a tiempo y completas / entregas evaluadas * 100`
 
 ## 5. Clusters DPO oficiales (4)
 
@@ -121,7 +123,9 @@ Distribucion objetivo:
 Direccion de mejora:
 
 - Menor es mejor: rechazos, ratio de costo.
-- Mayor es mejor: venta, HL, crecimiento, drop size, NPS, RMD.
+- Mayor es mejor: venta, HL, crecimiento, drop size, NPS, RMD, OTIF.
+
+OTIF significa On Time In Full: porcentaje de entregas que llegaron en la fecha/ventana acordada y completas, sin faltantes. En este modulo se usa como KPI auditable por cliente y por cluster. Si no esta cargado, queda nulo; no se infiere desde repartos porque para calcularlo correctamente se requiere fecha/ventana prometida y confirmacion de entrega completa.
 
 ### 6.2 Autoelevador y costo diferencial
 
@@ -207,7 +211,9 @@ Pesos de visualizacion soportados por API:
 
 ### 8.3 Cache para panel
 
-- `mv_cliente_plan_servicio` (materialized view)
+- `seg_cliente_dpo_cache` (tabla cache del panel)
+
+La cache incluye `rmd_valor`, `otif_valor` y `nps_valor` para comparar clusters contra indicadores de servicio.
 
 ## 9. Recalculo mensual, historico y auditoria
 
@@ -291,23 +297,27 @@ Ejecutar en cada recalculo:
 3. Cargar clientes autoelevador:
    - desde el panel `/segmentacion-clientes`, pestania `Carga`.
    - `POST /api/segmentacion/autoelevador/import` con CSV o JSON.
-4. Cargar geografia de clientes:
+4. Cargar metricas de servicio:
+   - desde el panel `/segmentacion-clientes`, pestania `Carga`.
+   - `POST /api/segmentacion/servicio/import` con CSV o JSON.
+   - columnas esperadas: `cliente` y al menos una de `OTIF`, `RMD` o `NPS`.
+5. Cargar geografia de clientes:
    - `POST /api/segmentacion/geografia/bulk`.
-5. Validar padrón activo:
+6. Validar padron activo:
    - `GET /api/segmentacion/clientes-activos`.
-6. Refrescar cache:
+7. Refrescar cache:
    - `POST /api/segmentacion/cache/refresh`.
-7. Ejecutar recalculo oficial:
+8. Ejecutar recalculo oficial:
    - `POST /api/segmentacion/recalcular`.
-8. Verificar resultados:
+9. Verificar resultados:
    - `GET /api/segmentacion/clusters`
    - `GET /api/segmentacion/cluster-logistico`
    - `GET /api/segmentacion/mapa/clientes`
    - `GET /api/segmentacion/resumen/sucursal`
    - `GET /api/segmentacion/resumen/localidad`
-9. Revisar trazabilidad:
+10. Revisar trazabilidad:
    - `GET /api/segmentacion/auditoria`.
-10. Publicar en panel:
+11. Publicar en panel:
    - validar que el dashboard consuma vistas y endpoints actualizados.
 
 ## 12. Anexo: descarga del SOP en PDF

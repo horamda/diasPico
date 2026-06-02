@@ -25,7 +25,7 @@ from app.services import cache_svc
 _TABLES_READY = False
 _TABLES_LOCK = Lock()
 _PLAN_SOURCE_CACHE: str | None = None
-_SCHEMA_VERSION = '20260526_segmentacion_dpo_r42_activos_v4'
+_SCHEMA_VERSION = '20260531_segmentacion_dpo_cache_otif_v1'
 
 _DDL_SCHEMA_VERSION = """
 CREATE TABLE IF NOT EXISTS seg_schema_version (
@@ -69,11 +69,14 @@ CREATE TABLE IF NOT EXISTS seg_clientes_atributos (
     cliente         VARCHAR(50) PRIMARY KEY,
     sucursal_id     VARCHAR(50),
     localidad       VARCHAR(100),
+    promotor        VARCHAR(255),
     autoelevador    BOOLEAN     DEFAULT FALSE,
     nps_valor       NUMERIC(6,2),
     nps_fecha       DATE,
     rmd_valor       NUMERIC(6,2),
     rmd_fecha       DATE,
+    otif_valor      NUMERIC(6,2),
+    otif_fecha      DATE,
     activo          BOOLEAN     NOT NULL DEFAULT TRUE,
     updated_at      TIMESTAMP   NOT NULL DEFAULT NOW()
 );"""
@@ -158,6 +161,7 @@ CREATE TABLE IF NOT EXISTS seg_cliente_dpo_cache (
     crecimiento_pct NUMERIC(10,2),
     nps_valor NUMERIC(6,2),
     rmd_valor NUMERIC(6,2),
+    otif_valor NUMERIC(6,2),
     costo_entrega NUMERIC(18,2),
     costo_almacen NUMERIC(18,2),
     costo_logistico_total NUMERIC(18,2),
@@ -219,15 +223,16 @@ CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     rechazos_ytd            NUMERIC(18,4),
     nps_valor               NUMERIC(6,2),
     rmd_valor               NUMERIC(6,2),
+    otif_valor              NUMERIC(6,2),
     costo_entrega           NUMERIC(18,2),
     costo_almacen           NUMERIC(18,2),
     margen_logistico_proxy  NUMERIC(18,2),
-    crecimiento_pct         NUMERIC(10,4),
+    crecimiento_pct         NUMERIC(14,4),
     costo_logistico_total   NUMERIC(18,2),
-    ratio_costo_logistico   NUMERIC(8,4),
+    ratio_costo_logistico   NUMERIC(14,4),
     pedidos_ytd             INTEGER,
-    dropsize_ytd            NUMERIC(10,4),
-    pct_rechazo_pedidos     NUMERIC(8,4),
+    dropsize_ytd            NUMERIC(14,4),
+    pct_rechazo_pedidos     NUMERIC(12,4),
     fecha_calculo           TIMESTAMP    NOT NULL DEFAULT NOW(),
     version_regla           SMALLINT     NOT NULL DEFAULT 1,
     proceso                 VARCHAR(100) NOT NULL DEFAULT 'sistema',
@@ -417,7 +422,7 @@ SELECT COALESCE(y.cliente,ab.cliente) AS cliente,
        COALESCE(cae.autoelevador,ca.autoelevador,FALSE) AS autoelevador,
        COALESCE(y.es_ruta_temp,FALSE) AS es_ruta_temp,
        CASE WHEN COALESCE(y.venta,0)<=0 AND COALESCE(bmp.venta,0)>0 THEN TRUE ELSE FALSE END AS es_inactivo,
-       ca.nps_valor, ca.rmd_valor,
+       ca.nps_valor, ca.rmd_valor, ca.otif_valor,
        ROUND((COALESCE(y.hl,0)*p.costo_entrega_hl)::NUMERIC,2) AS costo_entrega,
        ROUND((COALESCE(y.hl,0)*p.costo_almacen_hl)::NUMERIC,2) AS costo_almacen,
        ROUND((COALESCE(y.hl,0)*(p.costo_entrega_hl+p.costo_almacen_hl))::NUMERIC,2) AS costo_logistico_total,
@@ -517,11 +522,20 @@ WITH m AS (
      AND a.sucursal = m.sucursal
     WHERE m.venta_ytd > 0 OR m.venta_anio_base > 0
 ),
+cfg AS (
+    SELECT
+        COALESCE(percentil_alta, 0.75) AS percentil_alta,
+        COALESCE(percentil_baja, 0.25) AS percentil_baja
+    FROM seg_parametros
+    WHERE activo
+    ORDER BY (sucursal_id IS NULL) DESC, id DESC
+    LIMIT 1
+),
 u AS (
     SELECT
-        percentile_cont(0.25) WITHIN GROUP (ORDER BY venta_ytd) AS p25_ingresos,
+        percentile_cont((SELECT percentil_baja FROM cfg)) WITHIN GROUP (ORDER BY venta_ytd) AS p25_ingresos,
         percentile_cont(0.50) WITHIN GROUP (ORDER BY venta_ytd) AS p50_ingresos,
-        percentile_cont(0.75) WITHIN GROUP (ORDER BY venta_ytd) AS p75_ingresos,
+        percentile_cont((SELECT percentil_alta FROM cfg)) WITHIN GROUP (ORDER BY venta_ytd) AS p75_ingresos,
         percentile_cont(0.25) WITHIN GROUP (ORDER BY COALESCE(crecimiento_pct,0)) AS p25_crecimiento,
         percentile_cont(0.50) WITHIN GROUP (ORDER BY COALESCE(crecimiento_pct,0)) AS p50_crecimiento,
         percentile_cont(0.75) WITHIN GROUP (ORDER BY COALESCE(crecimiento_pct,0)) AS p75_crecimiento,
@@ -566,7 +580,14 @@ FROM m CROSS JOIN u;
 -- vw_cliente_score ------------------------------------------
 DROP VIEW IF EXISTS vw_cliente_score CASCADE;
 CREATE VIEW vw_cliente_score AS
-WITH m AS (SELECT * FROM vw_cliente_metricas WHERE venta_ytd>0 OR venta_anio_base>0),
+WITH m AS (
+    SELECT m.*
+    FROM vw_cliente_metricas m
+    JOIN vw_clientes_activos_dpo a
+      ON a.cliente_id = m.cliente
+     AND a.sucursal = m.sucursal
+    WHERE m.venta_ytd>0 OR m.venta_anio_base>0
+),
 md AS (SELECT COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY rmd_valor),5) AS mrmd,
               COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY nps_valor),5) AS mnps,
               COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY crecimiento_pct),0) AS mcrec FROM m),
@@ -658,15 +679,20 @@ DROP VIEW IF EXISTS vw_cliente_plan_servicio CASCADE;
 CREATE VIEW vw_cliente_plan_servicio AS
 SELECT c.cliente,c.descripcion_cliente,c.sucursal,c.sucursal_nombre,c.localidad,c.autoelevador,
        c.cluster_dpo,c.subcluster_logistico,
+       c.ingreso,c.ventas_anio_actual,c.ventas_anio_anterior,
+       c.venta_anio_base,c.venta_base_mismo_per,
        s.score_total,s.dim_negocio,s.dim_productividad,s.dim_servicio,s.dim_rentabilidad,s.dim_geo,
        s.pts_venta,s.pts_hl,s.pts_crecimiento,s.pts_dropsize,s.pts_rechazos,s.pts_rmd,s.pts_nps,
-       c.venta_ytd,c.venta_anio_base,c.venta_base_mismo_per,c.crecimiento_pct,
+       c.venta_ytd,c.crecimiento_pct,
        c.hl_ytd,c.bultos_ytd,c.pallets_ytd,c.up_ytd,c.pedidos_ytd,
        c.dropsize_bultos_ytd,c.ticket_promedio_ytd,
        c.rechazos_ytd,c.pct_rechazo_pedidos,
-       c.nps_valor,c.rmd_valor,
+       c.nps_valor,c.rmd_valor,c.otif_valor,
        c.costo_entrega,c.costo_almacen,c.costo_logistico_total,
        c.margen_logistico_proxy,c.ratio_costo_logistico_pct,
+       c.p25_ingresos,c.p50_ingresos,c.p75_ingresos,
+       c.p25_crecimiento,c.p50_crecimiento,c.p75_crecimiento,
+       c.umbral_venta_alta,c.umbral_venta_baja,c.umbral_crecimiento,
        CASE c.cluster_dpo
            WHEN 'Ganador'        THEN 'Prioridad de inventario - mejor OTIF - ventanas horarias precisas - evaluar flex/express'
            WHEN 'En crecimiento' THEN 'Seguimiento comercial-logistico - mejorar frecuencia - acompanar experiencia'
@@ -682,6 +708,7 @@ SELECT c.cliente,c.descripcion_cliente,c.sucursal,c.sucursal_nombre,c.localidad,
            ELSE                       'Monitorear indicadores mensualmente' END AS accion_prioritaria,
        CASE WHEN c.pct_rechazo_pedidos>20 THEN 'CRITICO: tasa de rechazo > 20 %'
             WHEN c.pct_rechazo_pedidos>10 THEN 'ATENCION: tasa de rechazo > 10 %'
+            WHEN c.otif_valor IS NOT NULL AND c.otif_valor<85 THEN 'ATENCION: OTIF menor a 85 %'
             WHEN c.ratio_costo_logistico_pct>40 THEN 'CRITICO: ratio costo logistico > 40 %'
             WHEN COALESCE(c.crecimiento_pct,0)<-30 THEN 'ALERTA: caida de venta > 30 %'
             WHEN c.cluster_dpo='Ganador' AND COALESCE(c.crecimiento_pct,0)<0 THEN 'AVISO: Ganador con caida YTD'
@@ -707,6 +734,7 @@ SELECT c.sucursal, c.cluster_dpo,
        ROUND(AVG(c.ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
        ROUND(AVG(COALESCE(c.crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
        ROUND(AVG(c.rmd_valor)::NUMERIC,2) AS rmd_prom,
+       ROUND(AVG(c.otif_valor)::NUMERIC,2) AS otif_prom,
        ROUND(AVG(c.nps_valor)::NUMERIC,2) AS nps_prom,
        ROUND(AVG(s.score_total)::NUMERIC,2) AS score_prom,
        ROUND((SUM(c.venta_ytd)/NULLIF(SUM(SUM(c.venta_ytd)) OVER (PARTITION BY c.sucursal),0)*100)::NUMERIC,2)
@@ -728,6 +756,9 @@ SELECT COALESCE(NULLIF(c.localidad,''),'Sin localidad') AS localidad,
        ROUND(AVG(c.pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
        ROUND(AVG(c.dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
        ROUND(AVG(COALESCE(c.crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
+       ROUND(AVG(c.otif_valor)::NUMERIC,2) AS otif_prom,
+       ROUND(AVG(c.rmd_valor)::NUMERIC,2) AS rmd_prom,
+       ROUND(AVG(c.nps_valor)::NUMERIC,2) AS nps_prom,
        ROUND(AVG(s.score_total)::NUMERIC,2) AS score_prom
 FROM vw_cliente_cluster_dpo c
 LEFT JOIN vw_cliente_score s ON s.cliente=c.cliente AND s.sucursal=c.sucursal
@@ -1218,9 +1249,18 @@ def ensure_tables() -> None:
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS rechazos_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS nps_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS rmd_valor NUMERIC(6,2);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS costo_entrega NUMERIC(18,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS costo_almacen NUMERIC(18,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS margen_logistico_proxy NUMERIC(18,2);
+                    ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN crecimiento_pct TYPE NUMERIC(14,4);
+                    ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN ratio_costo_logistico TYPE NUMERIC(14,4);
+                    ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN dropsize_ytd TYPE NUMERIC(14,4);
+                    ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN pct_rechazo_pedidos TYPE NUMERIC(12,4);
+
+                    ALTER TABLE seg_clientes_atributos ADD COLUMN IF NOT EXISTS promotor VARCHAR(255);
+                    ALTER TABLE seg_clientes_atributos ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
+                    ALTER TABLE seg_clientes_atributos ADD COLUMN IF NOT EXISTS otif_fecha DATE;
 
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS descripcion_cliente TEXT;
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS sucursal_nombre TEXT;
@@ -1242,6 +1282,7 @@ def ensure_tables() -> None:
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS crecimiento_pct NUMERIC(10,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS nps_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS rmd_valor NUMERIC(6,2);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS costo_entrega NUMERIC(18,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS costo_almacen NUMERIC(18,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS costo_logistico_total NUMERIC(18,2);
@@ -1389,7 +1430,41 @@ def get_cache_status() -> dict:
     return cache
 
 
-def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
+def _refresh_segmentacion_cache_from_view(ejecutado_por: str = 'sistema') -> dict:
+    ensure_tables()
+    t0 = time.time()
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT pg_advisory_xact_lock(2026052502)")
+            cur.execute("TRUNCATE TABLE seg_cliente_dpo_cache")
+            cur.execute("SET LOCAL statement_timeout = '90000ms'")
+            cur.execute(
+                f"""INSERT INTO seg_cliente_dpo_cache (
+                        {_DPO_CACHE_SELECT}, payload, updated_at
+                    )
+                    SELECT
+                        {_DPO_CACHE_SELECT}, '{{}}'::jsonb, NOW()
+                    FROM vw_cliente_plan_servicio
+                    ORDER BY prioridad_gestion, venta_ytd DESC NULLS LAST"""
+            )
+            rows = cur.rowcount
+            cur.execute("ANALYZE seg_cliente_dpo_cache")
+            cur.execute(
+                """INSERT INTO seg_schema_version(component, version, applied_at)
+                   VALUES ('segmentacion_cache', %s, NOW())
+                   ON CONFLICT (component)
+                   DO UPDATE SET version = EXCLUDED.version, applied_at = NOW()""",
+                (f'{_SCHEMA_VERSION}:{ejecutado_por}',),
+            )
+    cache_svc.clear('segmentacion:')
+    return {
+        'filas': rows,
+        'duracion_ms': int((time.time() - t0) * 1000),
+        'cache': 'seg_cliente_dpo_cache',
+    }
+
+
+def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
     ensure_tables()
     t0 = time.time()
     with pg_conn() as conn:
@@ -1510,7 +1585,8 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                         COALESCE(NULLIF(TRIM(s.nombre),''), j.sucursal) AS sucursal_nombre,
                         COALESCE(cae.autoelevador, ca.autoelevador, FALSE) AS autoelevador,
                         ca.nps_valor,
-                        ca.rmd_valor
+                        ca.rmd_valor,
+                        ca.otif_valor
                     FROM joined j
                     JOIN clientes c ON c.cliente = j.cliente
                                   AND COALESCE(NULLIF(TRIM(c.sucursal),''), j.sucursal) = j.sucursal
@@ -1561,6 +1637,7 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                         CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100),2) ELSE 0 END AS pct_rechazo_pedidos,
                         a.nps_valor,
                         a.rmd_valor,
+                        a.otif_valor,
                         ROUND((a.hl_ytd * p.costo_entrega_hl)::NUMERIC,2) AS costo_entrega,
                         ROUND((a.hl_ytd * p.costo_almacen_hl)::NUMERIC,2) AS costo_almacen,
                         ROUND((a.hl_ytd * (p.costo_entrega_hl + p.costo_almacen_hl))::NUMERIC,2) AS costo_logistico_total,
@@ -1625,6 +1702,7 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                         CASE
                             WHEN a.rechazos_ytd > 0 AND a.pedidos_ytd > 0 AND (a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100) > 20
                                 THEN 'CRITICO: tasa de rechazo > 20 %'
+                            WHEN a.otif_valor IS NOT NULL AND a.otif_valor < 85 THEN 'ATENCION: OTIF menor a 85 %'
                             WHEN COALESCE(a.crecimiento_pct,0) < -30 THEN 'ALERTA: caida de venta > 30 %'
                             ELSE NULL
                         END AS alerta_operativa,
@@ -1649,7 +1727,7 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                         venta_anio_base, venta_base_mismo_per, venta_ytd, hl_ytd,
                         bultos_ytd, pallets_ytd, up_ytd, pedidos_ytd,
                         dropsize_bultos_ytd, ticket_promedio_ytd, rechazos_ytd,
-                        pct_rechazo_pedidos, crecimiento_pct, nps_valor, rmd_valor,
+                        pct_rechazo_pedidos, crecimiento_pct, nps_valor, rmd_valor, otif_valor,
                         costo_entrega, costo_almacen, costo_logistico_total,
                         margen_logistico_proxy, ratio_costo_logistico_pct,
                         p25_ingresos, p50_ingresos, p75_ingresos,
@@ -1688,6 +1766,7 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                     crecimiento_pct,
                     nps_valor,
                     rmd_valor,
+                    otif_valor,
                     costo_entrega,
                     costo_almacen,
                     costo_logistico_total,
@@ -1724,6 +1803,7 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
                 FROM final_rows
             """)
             rows = cur.rowcount
+            score_rows = _update_dpo_cache_scores(cur)
             cur.execute("ANALYZE seg_cliente_dpo_cache")
             cur.execute(
                 """INSERT INTO seg_schema_version(component, version, applied_at)
@@ -1735,9 +1815,150 @@ def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
     cache_svc.clear('segmentacion:')
     return {
         'filas': rows,
+        'score_actualizados': score_rows,
         'duracion_ms': int((time.time() - t0) * 1000),
         'cache': 'seg_cliente_dpo_cache',
+        'modo': 'fast_sql',
     }
+
+
+def _update_dpo_cache_scores(cur) -> int:
+    cur.execute("""
+        WITH md AS (
+            SELECT
+                COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY rmd_valor), 5)::NUMERIC AS mrmd,
+                COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY nps_valor), 5)::NUMERIC AS mnps,
+                COALESCE(percentile_cont(0.5) WITHIN GROUP (ORDER BY crecimiento_pct), 0)::NUMERIC AS mcrec
+            FROM seg_cliente_dpo_cache
+        ),
+        w AS (
+            SELECT
+                COALESCE(MAX(peso) FILTER (WHERE variable='venta' AND activo),15) AS venta,
+                COALESCE(MAX(peso) FILTER (WHERE variable='hl' AND activo),10) AS hl,
+                COALESCE(MAX(peso) FILTER (WHERE variable='crecimiento' AND activo),10) AS crecimiento,
+                COALESCE(MAX(peso) FILTER (WHERE variable='dropsize' AND activo),10) AS dropsize,
+                COALESCE(MAX(peso) FILTER (WHERE variable='pallets_pedido' AND activo),5) AS pallets_pedido,
+                COALESCE(MAX(peso) FILTER (WHERE variable='autoelevador' AND activo),5) AS autoelevador,
+                COALESCE(MAX(peso) FILTER (WHERE variable='rechazos' AND activo),10) AS rechazos,
+                COALESCE(MAX(peso) FILTER (WHERE variable='rmd' AND activo),5) AS rmd,
+                COALESCE(MAX(peso) FILTER (WHERE variable='nps' AND activo),5) AS nps,
+                COALESCE(MAX(peso) FILTER (WHERE variable='ratio_costo' AND activo),10) AS ratio_costo,
+                COALESCE(MAX(peso) FILTER (WHERE variable='margen' AND activo),5) AS margen,
+                COALESCE(MAX(peso) FILTER (WHERE variable='frecuencia' AND activo),7) AS frecuencia,
+                COALESCE(MAX(peso) FILTER (WHERE variable='localidad' AND activo),2) AS localidad,
+                COALESCE(MAX(peso) FILTER (WHERE variable='sucursal' AND activo),1) AS sucursal
+            FROM seg_score_pesos
+        ),
+        cl AS (
+            SELECT d.*,
+                   GREATEST(-100,LEAST(300,COALESCE(d.crecimiento_pct,md.mcrec))) AS cc,
+                   COALESCE(d.rmd_valor,md.mrmd) AS ri,
+                   COALESCE(d.nps_valor,md.mnps) AS ni,
+                   CASE WHEN COALESCE(d.pedidos_ytd,0)>0 THEN COALESCE(d.pallets_ytd,0)/d.pedidos_ytd ELSE 0 END AS ppp,
+                   GREATEST(0,COALESCE(d.ratio_costo_logistico_pct,0)) AS rcp
+            FROM seg_cliente_dpo_cache d
+            CROSS JOIN md
+        ),
+        rn AS (
+            SELECT c.*,
+                   MIN(venta_ytd) OVER() AS mnv, MAX(venta_ytd) OVER() AS mxv,
+                   MIN(hl_ytd) OVER() AS mnh, MAX(hl_ytd) OVER() AS mxh,
+                   MIN(cc) OVER() AS mnc, MAX(cc) OVER() AS mxc,
+                   MIN(dropsize_bultos_ytd) OVER() AS mnd, MAX(dropsize_bultos_ytd) OVER() AS mxd,
+                   MIN(ppp) OVER() AS mnp, MAX(ppp) OVER() AS mxp,
+                   MIN(pct_rechazo_pedidos) OVER() AS mnr, MAX(pct_rechazo_pedidos) OVER() AS mxr,
+                   MIN(ri) OVER() AS mnrmd, MAX(ri) OVER() AS mxrmd,
+                   MIN(ni) OVER() AS mnnps, MAX(ni) OVER() AS mxnps,
+                   MIN(rcp) OVER() AS mnrc, MAX(rcp) OVER() AS mxrc,
+                   MIN(margen_logistico_proxy) OVER() AS mnmg, MAX(margen_logistico_proxy) OVER() AS mxmg,
+                   MIN(pedidos_ytd) OVER() AS mnped, MAX(pedidos_ytd) OVER() AS mxped
+            FROM cl c
+        ),
+        nr AS (
+            SELECT r.*,
+                   CASE WHEN mxv>mnv THEN (venta_ytd-mnv)/(mxv-mnv) ELSE 0.5 END AS nv,
+                   CASE WHEN mxh>mnh THEN (hl_ytd-mnh)/(mxh-mnh) ELSE 0.5 END AS nh,
+                   CASE WHEN mxc>mnc THEN (cc-mnc)/(mxc-mnc) ELSE 0.5 END AS nc,
+                   CASE WHEN mxd>mnd THEN (dropsize_bultos_ytd-mnd)/(mxd-mnd) ELSE 0.5 END AS nd,
+                   CASE WHEN mxp>mnp THEN (ppp-mnp)/(mxp-mnp) ELSE 0.5 END AS np,
+                   CASE WHEN mxr>mnr THEN 1-(pct_rechazo_pedidos-mnr)/(mxr-mnr) ELSE 0.5 END AS nr_,
+                   CASE WHEN mxrmd>mnrmd THEN (ri-mnrmd)/(mxrmd-mnrmd) ELSE 0.5 END AS nrmd,
+                   CASE WHEN mxnps>mnnps THEN (ni-mnnps)/(mxnps-mnnps) ELSE 0.5 END AS nnps,
+                   CASE WHEN mxrc>mnrc THEN 1-(rcp-mnrc)/(mxrc-mnrc) ELSE 0.5 END AS nrc,
+                   CASE WHEN mxmg>mnmg THEN (margen_logistico_proxy-mnmg)/(mxmg-mnmg) ELSE 0.5 END AS nmg,
+                   CASE WHEN mxped>mnped THEN (pedidos_ytd-mnped)/(mxped-mnped) ELSE 0.5 END AS nped
+            FROM rn r
+        ),
+        calc AS (
+            SELECT n.cliente,
+                   ROUND((n.nv*w.venta+n.nh*w.hl+n.nc*w.crecimiento)::NUMERIC,2) AS dim_negocio,
+                   ROUND((n.nd*w.dropsize+n.np*w.pallets_pedido+(CASE WHEN n.autoelevador THEN w.autoelevador ELSE 0.0 END))::NUMERIC,2) AS dim_productividad,
+                   ROUND((n.nr_*w.rechazos+n.nrmd*w.rmd+n.nnps*w.nps)::NUMERIC,2) AS dim_servicio,
+                   ROUND((n.nrc*w.ratio_costo+n.nmg*w.margen)::NUMERIC,2) AS dim_rentabilidad,
+                   ROUND((n.nped*w.frecuencia+(CASE WHEN NULLIF(n.localidad,'') IS NOT NULL THEN w.localidad ELSE 0.0 END)
+                         +(CASE WHEN NULLIF(n.sucursal,'') IS NOT NULL THEN w.sucursal ELSE 0.0 END))::NUMERIC,2) AS dim_geo,
+                   ROUND((n.nv*w.venta)::NUMERIC,2) AS pts_venta,
+                   ROUND((n.nh*w.hl)::NUMERIC,2) AS pts_hl,
+                   ROUND((n.nc*w.crecimiento)::NUMERIC,2) AS pts_crecimiento,
+                   ROUND((n.nd*w.dropsize)::NUMERIC,2) AS pts_dropsize,
+                   ROUND((n.nr_*w.rechazos)::NUMERIC,2) AS pts_rechazos,
+                   ROUND((n.nrmd*w.rmd)::NUMERIC,2) AS pts_rmd,
+                   ROUND((n.nnps*w.nps)::NUMERIC,2) AS pts_nps,
+                   ROUND((n.nv*w.venta+n.nh*w.hl+n.nc*w.crecimiento+n.nd*w.dropsize+n.np*w.pallets_pedido
+                         +(CASE WHEN n.autoelevador THEN w.autoelevador ELSE 0.0 END)
+                         +n.nr_*w.rechazos+n.nrmd*w.rmd+n.nnps*w.nps+n.nrc*w.ratio_costo+n.nmg*w.margen+n.nped*w.frecuencia
+                         +(CASE WHEN NULLIF(n.localidad,'') IS NOT NULL THEN w.localidad ELSE 0.0 END)
+                         +(CASE WHEN NULLIF(n.sucursal,'') IS NOT NULL THEN w.sucursal ELSE 0.0 END))::NUMERIC,2) AS score_total
+            FROM nr n CROSS JOIN w
+        )
+        UPDATE seg_cliente_dpo_cache d
+           SET score_total = calc.score_total,
+               dim_negocio = calc.dim_negocio,
+               dim_productividad = calc.dim_productividad,
+               dim_servicio = calc.dim_servicio,
+               dim_rentabilidad = calc.dim_rentabilidad,
+               dim_geo = calc.dim_geo,
+               pts_venta = calc.pts_venta,
+               pts_hl = calc.pts_hl,
+               pts_crecimiento = calc.pts_crecimiento,
+               pts_dropsize = calc.pts_dropsize,
+               pts_rechazos = calc.pts_rechazos,
+               pts_rmd = calc.pts_rmd,
+               pts_nps = calc.pts_nps,
+               updated_at = NOW()
+          FROM calc
+         WHERE d.cliente = calc.cliente
+    """)
+    return int(cur.rowcount or 0)
+
+
+def repair_segmentacion_cache_scores(ejecutado_por: str = 'sistema') -> dict:
+    ensure_tables()
+    t0 = time.time()
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SET LOCAL statement_timeout = '30000ms'")
+            score_rows = _update_dpo_cache_scores(cur)
+            cur.execute("ANALYZE seg_cliente_dpo_cache")
+            cur.execute(
+                """INSERT INTO seg_schema_version(component, version, applied_at)
+                   VALUES ('segmentacion_cache', %s, NOW())
+                   ON CONFLICT (component)
+                   DO UPDATE SET version = EXCLUDED.version, applied_at = NOW()""",
+                (f'{_SCHEMA_VERSION}:score_repair:{ejecutado_por}',),
+            )
+    cache_svc.clear('segmentacion:')
+    return {
+        'filas': score_rows,
+        'score_actualizados': score_rows,
+        'duracion_ms': int((time.time() - t0) * 1000),
+        'cache': 'seg_cliente_dpo_cache',
+        'modo': 'score_repair',
+    }
+
+
+def refresh_segmentacion_cache(ejecutado_por: str = 'sistema') -> dict:
+    return _refresh_segmentacion_cache_legacy(ejecutado_por)
 
 
 def get_parametros() -> dict:
@@ -1769,6 +1990,13 @@ def get_parametros() -> dict:
 
 def update_parametros(data: dict) -> dict:
     ensure_tables()
+    if 'percentil_alta' in data or 'percentil_baja' in data:
+        current = get_parametros()
+        alta = float(data.get('percentil_alta', current.get('percentil_alta', 0.70)))
+        baja = float(data.get('percentil_baja', current.get('percentil_baja', 0.30)))
+        if not (0 <= baja < alta <= 1):
+            raise ValueError('percentil_baja debe ser menor que percentil_alta y ambos deben estar entre 0 y 1')
+
     period_fields = {
         'empresa_id', 'periodo_anio', 'periodo_mes',
         'fecha_desde', 'fecha_hasta', 'fecha_base_desde', 'fecha_base_hasta',
@@ -1897,7 +2125,8 @@ def upsert_atributos_cliente(cliente: str, data: dict) -> dict:
     data['cliente'] = cliente.strip()
     data['updated_at'] = datetime.now()
     campos = ('cliente', 'sucursal_id', 'localidad', 'autoelevador',
-              'nps_valor', 'nps_fecha', 'rmd_valor', 'rmd_fecha', 'updated_at')
+              'nps_valor', 'nps_fecha', 'rmd_valor', 'rmd_fecha',
+              'otif_valor', 'otif_fecha', 'updated_at')
     presentes = [c for c in campos if c in data]
     cols = ', '.join(presentes)
     vals = ', '.join(f'%({c})s' for c in presentes)
@@ -1928,11 +2157,13 @@ def bulk_upsert_atributos(registros: list[dict]) -> int:
             r.get('cliente', '').strip(),
             r.get('sucursal_id'),
             r.get('localidad'),
-            r.get('autoelevador', False),
+            r.get('autoelevador'),
             r.get('nps_valor'),
             r.get('nps_fecha'),
             r.get('rmd_valor'),
             r.get('rmd_fecha'),
+            r.get('otif_valor'),
+            r.get('otif_fecha'),
             now,
         )
         for r in registros
@@ -1944,16 +2175,18 @@ def bulk_upsert_atributos(registros: list[dict]) -> int:
                 cur,
                 """INSERT INTO seg_clientes_atributos
                    (cliente,sucursal_id,localidad,autoelevador,
-                    nps_valor,nps_fecha,rmd_valor,rmd_fecha,updated_at)
+                    nps_valor,nps_fecha,rmd_valor,rmd_fecha,otif_valor,otif_fecha,updated_at)
                    VALUES %s
                    ON CONFLICT (cliente) DO UPDATE SET
-                       sucursal_id  = EXCLUDED.sucursal_id,
-                       localidad    = EXCLUDED.localidad,
-                       autoelevador = EXCLUDED.autoelevador,
-                       nps_valor    = EXCLUDED.nps_valor,
-                       nps_fecha    = EXCLUDED.nps_fecha,
-                       rmd_valor    = EXCLUDED.rmd_valor,
-                       rmd_fecha    = EXCLUDED.rmd_fecha,
+                       sucursal_id  = COALESCE(EXCLUDED.sucursal_id, seg_clientes_atributos.sucursal_id),
+                       localidad    = COALESCE(EXCLUDED.localidad, seg_clientes_atributos.localidad),
+                       autoelevador = COALESCE(EXCLUDED.autoelevador, seg_clientes_atributos.autoelevador),
+                       nps_valor    = COALESCE(EXCLUDED.nps_valor, seg_clientes_atributos.nps_valor),
+                       nps_fecha    = COALESCE(EXCLUDED.nps_fecha, seg_clientes_atributos.nps_fecha),
+                       rmd_valor    = COALESCE(EXCLUDED.rmd_valor, seg_clientes_atributos.rmd_valor),
+                       rmd_fecha    = COALESCE(EXCLUDED.rmd_fecha, seg_clientes_atributos.rmd_fecha),
+                       otif_valor   = COALESCE(EXCLUDED.otif_valor, seg_clientes_atributos.otif_valor),
+                       otif_fecha   = COALESCE(EXCLUDED.otif_fecha, seg_clientes_atributos.otif_fecha),
                        updated_at   = EXCLUDED.updated_at""",
                 batch,
                 page_size=500,
@@ -2011,6 +2244,68 @@ def bulk_upsert_autoelevador(clientes: list[dict | str], fuente: str = 'api') ->
     return len(values)
 
 
+_PROMOTORES_EXCLUIDOS = {'mayoristas', 'oficina mda', 'venta remota', 'oficina dolores', '50-oficina dolores'}
+
+def bulk_upsert_promotores(rows: list[dict]) -> dict:
+    """Importa la asignación cliente → promotor y marca activos según criterio."""
+    ensure_tables()
+    now = datetime.now()
+    dedup: dict[str, str] = {}
+    for row in rows or []:
+        cid = str(_first_present(row,
+            ('cliente', 'is_cliente', 'codigo_cliente', 'codigo_de_cliente', 'cod_cliente', 'codigo'), ''
+        )).strip()
+        prom = str(_first_present(row,
+            ('promotor', 'fuerza_venta_1_descripcion_personal_comercial',
+             'fuerza_de_venta_1_descripcion_personal_comercial',
+             'fuerza_venta_1_descripcion', 'descripcion_vendedor', 'vendedor'), ''
+        )).strip()
+        if not cid:
+            continue
+        dedup[cid] = prom
+
+    if not dedup:
+        return {'actualizados': 0, 'activos': 0, 'inactivos': 0}
+
+    activos, inactivos = 0, 0
+    values = []
+    for cid, prom in dedup.items():
+        es_activo = bool(prom) and prom.lower() not in _PROMOTORES_EXCLUIDOS
+        values.append((cid, prom or None, es_activo, now))
+        if es_activo:
+            activos += 1
+        else:
+            inactivos += 1
+
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO seg_clientes_atributos (cliente, promotor, activo, updated_at)
+                   VALUES %s
+                   ON CONFLICT (cliente) DO UPDATE SET
+                       promotor   = EXCLUDED.promotor,
+                       activo     = EXCLUDED.activo,
+                       updated_at = EXCLUDED.updated_at""",
+                values, page_size=500,
+            )
+            psycopg2.extras.execute_values(
+                cur,
+                """UPDATE clientes AS c
+                   SET fuerza_venta_1_dias_visita = data.promotor,
+                       activo_maestro = data.activo,
+                       desactivado_en = CASE
+                           WHEN data.activo THEN NULL
+                           ELSE COALESCE(c.desactivado_en, data.updated_at)
+                       END
+                   FROM (VALUES %s) AS data(cliente, promotor, activo, updated_at)
+                   WHERE c.cliente = data.cliente""",
+                values, page_size=500,
+            )
+    _use_live_plan_source()
+    return {'actualizados': len(values), 'activos': activos, 'inactivos': inactivos}
+
+
 def bulk_upsert_cliente_geografia(rows: list[dict]) -> int:
     ensure_tables()
     batch: list[tuple[str, Any, Any, Any, Any, datetime]] = []
@@ -2059,6 +2354,7 @@ _DPO_CACHE_COLUMNS = (
     'bultos_ytd', 'pallets_ytd', 'up_ytd', 'pedidos_ytd',
     'dropsize_bultos_ytd', 'ticket_promedio_ytd', 'rechazos_ytd',
     'pct_rechazo_pedidos', 'crecimiento_pct', 'nps_valor', 'rmd_valor',
+    'otif_valor',
     'costo_entrega', 'costo_almacen', 'costo_logistico_total',
     'margen_logistico_proxy', 'ratio_costo_logistico_pct',
     'p25_ingresos', 'p50_ingresos', 'p75_ingresos',
@@ -2088,6 +2384,18 @@ def _light_plan_cache_key() -> str:
 
 
 def _compute_plan_servicio_light_rows() -> list[dict]:
+    with pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SET LOCAL statement_timeout = '90000ms'")
+            cur.execute(
+                f"""SELECT {_DPO_CACHE_SELECT}
+                    FROM vw_cliente_plan_servicio
+                    ORDER BY prioridad_gestion, venta_ytd DESC NULLS LAST"""
+            )
+            return _dict_rows(cur)
+
+
+def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
     with pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SET LOCAL statement_timeout = '90000ms'")
@@ -2413,6 +2721,7 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
             '_dropsize': [],
             '_crecimiento': [],
             '_rmd': [],
+            '_otif': [],
             '_nps': [],
             '_score': [],
         })
@@ -2427,6 +2736,8 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
         item['_crecimiento'].append(float(row.get('crecimiento_pct') or 0))
         if row.get('rmd_valor') is not None:
             item['_rmd'].append(float(row.get('rmd_valor') or 0))
+        if row.get('otif_valor') is not None:
+            item['_otif'].append(float(row.get('otif_valor') or 0))
         if row.get('nps_valor') is not None:
             item['_nps'].append(float(row.get('nps_valor') or 0))
         item['_score'].append(float(row.get('score_total') or 0))
@@ -2454,6 +2765,7 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
             'dropsize_prom': avg(item['_dropsize']),
             'crecimiento_prom_pct': avg(item['_crecimiento']),
             'rmd_prom': avg(item['_rmd']),
+            'otif_prom': avg(item['_otif']),
             'nps_prom': avg(item['_nps']),
             'score_prom': avg(item['_score']),
             'pct_venta_en_sucursal': round((venta_total / suc_total * 100), 2) if suc_total else 0.0,
@@ -2638,6 +2950,7 @@ def get_resumen_sucursal() -> list[dict]:
                            ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
                            ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                            ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
+                           ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
                            ROUND(AVG(nps_valor)::NUMERIC,2) AS nps_prom,
                            ROUND(AVG(score_total)::NUMERIC,2) AS score_prom
                     FROM seg_cliente_dpo_cache
@@ -2675,6 +2988,7 @@ def get_resumen_sucursal() -> list[dict]:
                                    ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
                                    ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                                    ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
+                                   ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
                                    ROUND(AVG(nps_valor)::NUMERIC,2) AS nps_prom,
                                    ROUND(AVG(score_total)::NUMERIC,2) AS score_prom
                             FROM {source}
@@ -2712,6 +3026,9 @@ def get_resumen_localidad(sucursal: str | None = None) -> list[dict]:
                            ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
                            ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                            ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
+                           ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
+                           ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
+                           ROUND(AVG(nps_valor)::NUMERIC,2) AS nps_prom,
                            ROUND(AVG(score_total)::NUMERIC,2) AS score_prom
                     FROM seg_cliente_dpo_cache
                     {where}
@@ -2746,6 +3063,9 @@ def get_resumen_localidad(sucursal: str | None = None) -> list[dict]:
                                ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
                                ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                                ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
+                               ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
+                               ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
+                               ROUND(AVG(nps_valor)::NUMERIC,2) AS nps_prom,
                                ROUND(AVG(score_total)::NUMERIC,2) AS score_prom
                         FROM {source}
                         {where}
@@ -3137,6 +3457,17 @@ def get_cliente_cluster_logistico(
 
 def get_cliente_detalle(cliente: str) -> dict | None:
     ensure_tables()
+    if _dpo_cache_has_rows():
+        with pg_cursor() as cur:
+            cur.execute(
+                f"""SELECT {_DPO_CACHE_SELECT}
+                    FROM seg_cliente_dpo_cache
+                    WHERE cliente = %(c)s""",
+                {'c': cliente},
+            )
+            row = cur.fetchone()
+        if row:
+            return dict(row)
     source = _plan_source()
     with pg_cursor() as cur:
         cur.execute(
@@ -3152,7 +3483,8 @@ def get_evolucion_cluster(cliente: str) -> list[dict]:
     with pg_cursor() as cur:
         cur.execute(
             """SELECT periodo_anio, periodo_mes, cluster_dpo, subcluster_logistico,
-                      score_total, venta_ytd, crecimiento_pct, fecha_calculo
+                      score_total, venta_ytd, crecimiento_pct,
+                      rmd_valor, otif_valor, nps_valor, fecha_calculo
                FROM seg_cliente_cluster_historico
                WHERE cliente = %(c)s
                ORDER BY periodo_anio DESC, periodo_mes DESC""",
@@ -3179,6 +3511,9 @@ def get_evolucion_mensual_clusters(
             f"""SELECT periodo_anio, periodo_mes, cluster_dpo,
                        COUNT(*) AS clientes,
                        ROUND(SUM(venta_ytd)::NUMERIC,2) AS venta_total,
+                       ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
+                       ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
+                       ROUND(AVG(nps_valor)::NUMERIC,2) AS nps_prom,
                        ROUND(AVG(score_total)::NUMERIC,2) AS score_prom
                 FROM seg_cliente_cluster_historico WHERE {where}
                 GROUP BY periodo_anio, periodo_mes, cluster_dpo
@@ -3244,17 +3579,17 @@ def recalcular_clusters(
                    score_total, dim_negocio, dim_productividad, dim_servicio,
                    dim_rentabilidad, dim_geo,
                    venta_base_mismo_per, venta_ytd, bultos_ytd, pallets_ytd,
-                   up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor,
+                   up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor, otif_valor,
                    costo_entrega, costo_almacen, margen_logistico_proxy,
                    crecimiento_pct, costo_logistico_total, ratio_costo_logistico_pct,
                    pedidos_ytd, dropsize_bultos_ytd, pct_rechazo_pedidos
-            FROM mv_cliente_plan_servicio
+            FROM seg_cliente_dpo_cache
             ORDER BY score_total DESC NULLS LAST
         """)
         rows = cur.fetchall()
 
     if not rows:
-        return {'procesados': 0, 'error': 'Sin datos en mv_cliente_plan_servicio'}
+        return {'procesados': 0, 'error': 'Sin datos en seg_cliente_dpo_cache'}
 
     # 3. Conteo por cluster
     conteos: dict[str, int] = {}
@@ -3272,7 +3607,7 @@ def recalcular_clusters(
             r['dim_servicio'], r['dim_rentabilidad'], r['dim_geo'],
             r['venta_base_mismo_per'], r['venta_ytd'], r['bultos_ytd'],
             r['pallets_ytd'], r['up_ytd'], r['hl_ytd'], r['rechazos_ytd'],
-            r['nps_valor'], r['rmd_valor'], r['costo_entrega'],
+            r['nps_valor'], r['rmd_valor'], r['otif_valor'], r['costo_entrega'],
             r['costo_almacen'], r['margen_logistico_proxy'],
             r['crecimiento_pct'], r['costo_logistico_total'], r['ratio_costo_logistico_pct'],
             r['pedidos_ytd'], r['dropsize_bultos_ytd'], r['pct_rechazo_pedidos'],
@@ -3294,7 +3629,7 @@ def recalcular_clusters(
                        score_total, dim_negocio, dim_productividad, dim_servicio,
                        dim_rentabilidad, dim_geo,
                        venta_base_mismo_periodo, venta_ytd, bultos_ytd, pallets_ytd,
-                       up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor,
+                       up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor, otif_valor,
                        costo_entrega, costo_almacen, margen_logistico_proxy,
                        crecimiento_pct, costo_logistico_total, ratio_costo_logistico,
                        pedidos_ytd, dropsize_ytd, pct_rechazo_pedidos,
@@ -3318,6 +3653,7 @@ def recalcular_clusters(
                        rechazos_ytd          = EXCLUDED.rechazos_ytd,
                        nps_valor             = EXCLUDED.nps_valor,
                        rmd_valor             = EXCLUDED.rmd_valor,
+                       otif_valor            = EXCLUDED.otif_valor,
                        costo_entrega         = EXCLUDED.costo_entrega,
                        costo_almacen         = EXCLUDED.costo_almacen,
                        margen_logistico_proxy = EXCLUDED.margen_logistico_proxy,
@@ -3365,5 +3701,3 @@ def recalcular_clusters(
         'version_regla': version,
         'duracion_ms': duracion_ms,
     }
-
-

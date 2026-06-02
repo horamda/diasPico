@@ -153,6 +153,7 @@ erDiagram
         boolean autoelevador
         numeric nps_valor
         numeric rmd_valor
+        numeric otif_valor
         boolean activo
     }
 
@@ -191,6 +192,7 @@ erDiagram
         smallint periodo_mes
         varchar cluster_dpo
         numeric score_total
+        numeric otif_valor
     }
 
     seg_auditoria {

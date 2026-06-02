@@ -139,6 +139,92 @@ def test_post_autoelevador_import_csv_acepta_cliente_y_fuente(client, monkeypatc
     ]
 
 
+def test_post_promotor_import_csv_actualiza_y_refresca_cache(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows):
+        captured["rows"] = rows
+        return {"actualizados": len(rows), "activos": 1, "inactivos": 1}
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_promotores", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 2, "usuario": user})
+
+    csv_body = (
+        "Codigo de cliente;Fuerza de venta 1 Descripcion personal comercial\n"
+        "10001;Juan Perez\n"
+        "10055;Mayoristas\n"
+    ).encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "promotores.csv")}
+
+    res = client.post("/api/segmentacion/promotor/import", data=data, content_type="multipart/form-data")
+    assert res.status_code == 200
+
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["leidos"] == 2
+    assert payload["data"]["segmentacion_cache"] == {"filas": 2, "usuario": "upload_promotor"}
+    assert captured["rows"] == [
+        {"cliente": "10001", "promotor": "Juan Perez"},
+        {"cliente": "10055", "promotor": "Mayoristas"},
+    ]
+
+
+def test_post_promotor_import_csv_rechaza_sin_columna_promotor(client, monkeypatch):
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_promotores", lambda rows: {"actualizados": len(rows)})
+
+    data = {"file": (io.BytesIO(b"cliente\n10001\n"), "promotores.csv")}
+    res = client.post("/api/segmentacion/promotor/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 400
+    assert res.get_json()["ok"] is False
+
+
+def test_post_servicio_import_csv_carga_otif_rmd_nps(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows):
+        captured["rows"] = rows
+        return len(rows)
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_atributos", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 2, "usuario": user})
+
+    csv_body = (
+        "cliente;OTIF;RMD;NPS;fecha\n"
+        "10001;96,5%;91;8;31/05/2026\n"
+        "10055;84;72;6;2026-05-31\n"
+    ).encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "servicio.csv")}
+
+    res = client.post("/api/segmentacion/servicio/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["leidos"] == 2
+    assert payload["data"]["segmentacion_cache"] == {"filas": 2, "usuario": "upload_metricas_servicio"}
+    assert captured["rows"] == [
+        {
+            "cliente": "10001",
+            "otif_valor": 96.5,
+            "otif_fecha": "2026-05-31",
+            "rmd_valor": 91.0,
+            "rmd_fecha": "2026-05-31",
+            "nps_valor": 8.0,
+            "nps_fecha": "2026-05-31",
+        },
+        {
+            "cliente": "10055",
+            "otif_valor": 84.0,
+            "otif_fecha": "2026-05-31",
+            "rmd_valor": 72.0,
+            "rmd_fecha": "2026-05-31",
+            "nps_valor": 6.0,
+            "nps_fecha": "2026-05-31",
+        },
+    ]
+
+
 def test_post_geografia_bulk_smoke(client, monkeypatch):
     monkeypatch.setattr(segmentacion.svc, "bulk_upsert_cliente_geografia", lambda rows: len(rows))
 

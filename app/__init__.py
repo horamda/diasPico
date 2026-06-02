@@ -13,7 +13,6 @@ BLUEPRINT_MODULES = (
     'app.routes.feriados',
     'app.routes.parametros',
     'app.routes.articulos',
-    'app.routes.ausentismo',
     'app.routes.rechazos',
     'app.routes.eventos',
     'app.routes.dropsize',
@@ -39,7 +38,7 @@ def create_app(env: str | None = None) -> Flask:
 
     # Load config
     from app.config import configs
-    env = env or os.getenv('FLASK_ENV', 'development')
+    env = env or os.getenv('FLASK_ENV') or ('production' if os.getenv('RAILWAY_ENVIRONMENT') else 'development')
     app.config.from_object(configs.get(env, configs['default']))
 
     db.init_app(app)

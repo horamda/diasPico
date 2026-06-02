@@ -157,30 +157,75 @@ def _table_status(row: dict) -> str:
     return 'activa'
 
 
+_SQL_LIST_TABLES = """
+    SELECT st.relname AS table_name,
+           COALESCE(st.n_live_tup, 0)::BIGINT AS estimated_rows,
+           COALESCE(st.n_dead_tup, 0)::BIGINT AS dead_rows,
+           COALESCE(st.seq_scan, 0)::BIGINT AS seq_scan,
+           COALESCE(st.idx_scan, 0)::BIGINT AS idx_scan,
+           st.last_vacuum,
+           st.last_autovacuum,
+           st.last_analyze,
+           st.last_autoanalyze,
+           pg_total_relation_size(c.oid)::BIGINT AS total_bytes,
+           pg_relation_size(c.oid)::BIGINT AS table_bytes,
+           pg_indexes_size(c.oid)::BIGINT AS index_bytes,
+           pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size,
+           pg_size_pretty(pg_relation_size(c.oid)) AS table_size,
+           pg_size_pretty(pg_indexes_size(c.oid)) AS index_size
+    FROM pg_stat_user_tables st
+    JOIN pg_class c ON c.oid = st.relid
+    ORDER BY pg_total_relation_size(c.oid) DESC, st.relname
+"""
+
+_SQL_LIST_INDEXES = """
+    SELECT s.relname AS table_name,
+           s.indexrelname AS index_name,
+           COALESCE(s.idx_scan, 0)::BIGINT AS idx_scan,
+           COALESCE(s.idx_tup_read, 0)::BIGINT AS idx_tup_read,
+           COALESCE(s.idx_tup_fetch, 0)::BIGINT AS idx_tup_fetch,
+           pg_relation_size(s.indexrelid)::BIGINT AS index_bytes,
+           pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
+           ix.indisprimary AS is_primary,
+           ix.indisunique AS is_unique,
+           pi.indexdef
+    FROM pg_stat_user_indexes s
+    JOIN pg_index ix ON ix.indexrelid = s.indexrelid
+    JOIN pg_class i ON i.oid = s.indexrelid
+    JOIN pg_indexes pi ON pi.schemaname = s.schemaname
+                    AND pi.tablename = s.relname
+                    AND pi.indexname = s.indexrelname
+    ORDER BY pg_relation_size(s.indexrelid) DESC, s.relname, s.indexrelname
+"""
+
+_SQL_DB_INFO = """
+    SELECT current_database() AS database_name,
+           pg_size_pretty(pg_database_size(current_database())) AS database_size,
+           pg_database_size(current_database())::BIGINT AS database_bytes,
+           version() AS postgres_version
+"""
+
+
+def _list_tables_from_cursor(cur) -> list[dict]:
+    cur.execute(_SQL_LIST_TABLES)
+    return _decorate_table_rows([dict(r) for r in cur.fetchall()])
+
+
+def _list_indexes_from_cursor(cur) -> list[dict]:
+    cur.execute(_SQL_LIST_INDEXES)
+    rows = [dict(r) for r in cur.fetchall()]
+    for row in rows:
+        row['status'] = (
+            'primario' if row['is_primary']
+            else 'sin_uso_estadistico' if int(row['idx_scan'] or 0) == 0
+            else 'activo'
+        )
+    return rows
+
+
 def list_tables() -> list[dict]:
     with pg_cursor() as cur:
-        cur.execute("""
-            SELECT st.relname AS table_name,
-                   COALESCE(st.n_live_tup, 0)::BIGINT AS estimated_rows,
-                   COALESCE(st.n_dead_tup, 0)::BIGINT AS dead_rows,
-                   COALESCE(st.seq_scan, 0)::BIGINT AS seq_scan,
-                   COALESCE(st.idx_scan, 0)::BIGINT AS idx_scan,
-                   st.last_vacuum,
-                   st.last_autovacuum,
-                   st.last_analyze,
-                   st.last_autoanalyze,
-                   pg_total_relation_size(c.oid)::BIGINT AS total_bytes,
-                   pg_relation_size(c.oid)::BIGINT AS table_bytes,
-                   pg_indexes_size(c.oid)::BIGINT AS index_bytes,
-                   pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size,
-                   pg_size_pretty(pg_relation_size(c.oid)) AS table_size,
-                   pg_size_pretty(pg_indexes_size(c.oid)) AS index_size
-            FROM pg_stat_user_tables st
-            JOIN pg_class c ON c.oid = st.relid
-            ORDER BY pg_total_relation_size(c.oid) DESC, st.relname
-        """)
-        rows = [dict(row) for row in cur.fetchall()]
-    return _decorate_table_rows(rows)
+        return _list_tables_from_cursor(cur)
 
 
 def _decorate_table_rows(rows: list[dict]) -> list[dict]:
@@ -192,33 +237,7 @@ def _decorate_table_rows(rows: list[dict]) -> list[dict]:
 
 def list_indexes() -> list[dict]:
     with pg_cursor() as cur:
-        cur.execute("""
-            SELECT s.relname AS table_name,
-                   s.indexrelname AS index_name,
-                   COALESCE(s.idx_scan, 0)::BIGINT AS idx_scan,
-                   COALESCE(s.idx_tup_read, 0)::BIGINT AS idx_tup_read,
-                   COALESCE(s.idx_tup_fetch, 0)::BIGINT AS idx_tup_fetch,
-                   pg_relation_size(s.indexrelid)::BIGINT AS index_bytes,
-                   pg_size_pretty(pg_relation_size(s.indexrelid)) AS index_size,
-                   ix.indisprimary AS is_primary,
-                   ix.indisunique AS is_unique,
-                   pi.indexdef
-            FROM pg_stat_user_indexes s
-            JOIN pg_index ix ON ix.indexrelid = s.indexrelid
-            JOIN pg_class i ON i.oid = s.indexrelid
-            JOIN pg_indexes pi ON pi.schemaname = s.schemaname
-                            AND pi.tablename = s.relname
-                            AND pi.indexname = s.indexrelname
-            ORDER BY pg_relation_size(s.indexrelid) DESC, s.relname, s.indexrelname
-        """)
-        rows = [dict(row) for row in cur.fetchall()]
-    for row in rows:
-        row['status'] = (
-            'primario' if row['is_primary']
-            else 'sin_uso_estadistico' if int(row['idx_scan'] or 0) == 0
-            else 'activo'
-        )
-    return rows
+        return _list_indexes_from_cursor(cur)
 
 
 def cleanup_candidates() -> list[dict]:
@@ -245,25 +264,23 @@ def _segmentacion_cache_status_readonly() -> dict:
 
 def _segmentacion_cache_status_from_cursor(cur) -> dict:
     cur.execute("""
-        SELECT to_regclass('public.mv_cliente_plan_servicio') AS cache_regclass
+        SELECT to_regclass('public.seg_cliente_dpo_cache') AS cache_regclass
     """)
     exists = bool((cur.fetchone() or {}).get('cache_regclass'))
     if not exists:
-        return {'populated': False, 'rows': 0, 'total_size': '0 bytes'}
+        return {'cache': 'seg_cliente_dpo_cache', 'populated': False, 'rows': 0, 'total_size': '0 bytes'}
     cur.execute("""
-        SELECT COALESCE(c.relispopulated, FALSE) AS populated,
-               COALESCE(c.reltuples, 0)::BIGINT AS estimated_rows,
+        SELECT COALESCE(c.reltuples, 0)::BIGINT AS estimated_rows,
                pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
-        WHERE n.nspname = 'public' AND c.relname = 'mv_cliente_plan_servicio'
+        WHERE n.nspname = 'public' AND c.relname = 'seg_cliente_dpo_cache'
     """)
     cache = dict(cur.fetchone() or {})
-    if cache.get('populated'):
-        cur.execute("SELECT COUNT(*) AS rows FROM mv_cliente_plan_servicio")
-        cache['rows'] = int((cur.fetchone() or {}).get('rows') or 0)
-    else:
-        cache['rows'] = 0
+    cur.execute("SELECT COUNT(*) AS rows FROM seg_cliente_dpo_cache")
+    cache['rows'] = int((cur.fetchone() or {}).get('rows') or 0)
+    cache['populated'] = cache['rows'] > 0
+    cache['cache'] = 'seg_cliente_dpo_cache'
     cur.execute("""
         SELECT version, applied_at
         FROM seg_schema_version
@@ -276,18 +293,14 @@ def _segmentacion_cache_status_from_cursor(cur) -> dict:
 
 
 def overview() -> dict:
-    tables = list_tables()
-    indexes = list_indexes()
-    candidates = _cleanup_candidates_from_tables(tables)
     with pg_cursor() as cur:
-        cur.execute("""
-            SELECT current_database() AS database_name,
-                   pg_size_pretty(pg_database_size(current_database())) AS database_size,
-                   pg_database_size(current_database())::BIGINT AS database_bytes,
-                   version() AS postgres_version
-        """)
+        tables = _list_tables_from_cursor(cur)
+        indexes = _list_indexes_from_cursor(cur)
+        cur.execute(_SQL_DB_INFO)
         db = dict(cur.fetchone() or {})
+        cache = _segmentacion_cache_status_from_cursor(cur)
 
+    candidates = _cleanup_candidates_from_tables(tables)
     total_rows = sum(int(t.get('estimated_rows') or 0) for t in tables)
     total_bytes = sum(int(t.get('total_bytes') or 0) for t in tables)
     dead_rows = sum(int(t.get('dead_rows') or 0) for t in tables)
@@ -308,40 +321,23 @@ def overview() -> dict:
         'tablas_top': tables[:12],
         'indices_top': indexes[:12],
         'candidatas_limpieza': candidates,
-        'segmentacion_cache': _segmentacion_cache_status_readonly(),
+        'segmentacion_cache': cache,
     }
+
+
+_SQL_DB_INFO_WITH_INDEX_COUNT = """
+    SELECT current_database() AS database_name,
+           pg_size_pretty(pg_database_size(current_database())) AS database_size,
+           pg_database_size(current_database())::BIGINT AS database_bytes,
+           version() AS postgres_version,
+           (SELECT COUNT(*) FROM pg_stat_user_indexes)::INT AS index_count
+"""
 
 
 def dashboard_summary() -> dict:
     with pg_cursor() as cur:
-        cur.execute("""
-            SELECT st.relname AS table_name,
-                   COALESCE(st.n_live_tup, 0)::BIGINT AS estimated_rows,
-                   COALESCE(st.n_dead_tup, 0)::BIGINT AS dead_rows,
-                   COALESCE(st.seq_scan, 0)::BIGINT AS seq_scan,
-                   COALESCE(st.idx_scan, 0)::BIGINT AS idx_scan,
-                   st.last_vacuum,
-                   st.last_autovacuum,
-                   st.last_analyze,
-                   st.last_autoanalyze,
-                   pg_total_relation_size(c.oid)::BIGINT AS total_bytes,
-                   pg_relation_size(c.oid)::BIGINT AS table_bytes,
-                   pg_indexes_size(c.oid)::BIGINT AS index_bytes,
-                   pg_size_pretty(pg_total_relation_size(c.oid)) AS total_size,
-                   pg_size_pretty(pg_relation_size(c.oid)) AS table_size,
-                   pg_size_pretty(pg_indexes_size(c.oid)) AS index_size
-            FROM pg_stat_user_tables st
-            JOIN pg_class c ON c.oid = st.relid
-            ORDER BY pg_total_relation_size(c.oid) DESC, st.relname
-        """)
-        tables = _decorate_table_rows([dict(row) for row in cur.fetchall()])
-        cur.execute("""
-            SELECT current_database() AS database_name,
-                   pg_size_pretty(pg_database_size(current_database())) AS database_size,
-                   pg_database_size(current_database())::BIGINT AS database_bytes,
-                   version() AS postgres_version,
-                   (SELECT COUNT(*) FROM pg_stat_user_indexes)::INT AS index_count
-        """)
+        tables = _list_tables_from_cursor(cur)
+        cur.execute(_SQL_DB_INFO_WITH_INDEX_COUNT)
         db = dict(cur.fetchone() or {})
         cache = _segmentacion_cache_status_from_cursor(cur)
 

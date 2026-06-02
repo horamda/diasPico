@@ -48,7 +48,8 @@ http://localhost:5001/api/health
 Crear un archivo `.env` con las conexiones:
 
 ```text
-RAILWAY_URL=postgresql://...
+DATABASE_URL=postgresql://...
+# RAILWAY_URL tambien funciona como alias local
 MYSQL_HOST=...
 MYSQL_USER=...
 MYSQL_PASSWORD=...
@@ -57,7 +58,37 @@ SHEETS_TIMEOUT=10
 SECRET_KEY=...
 ```
 
-`RAILWAY_URL` es obligatorio para la base principal PostgreSQL. Las variables `MYSQL_*` se usan para ausentismo.
+`DATABASE_URL` es la variable recomendada para PostgreSQL en Railway. `RAILWAY_URL` se mantiene como alias por compatibilidad. Las variables `MYSQL_*` se usan solo si el modulo externo de ausentismo esta disponible.
+
+## Deploy en Railway
+
+El repo ya incluye lo necesario para Railway:
+
+- `railway.toml`: usa Nixpacks, healthcheck en `/api/health` y start command con Gunicorn.
+- `Procfile`: comando web equivalente para entornos que lo usen.
+- `.python-version`: fija Python 3.12.
+- `requirements.txt`: incluye `gunicorn` y dependencias de Flask/PostgreSQL.
+
+Variables minimas en Railway:
+
+```text
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+SECRET_KEY=<generar-con-python -c "import secrets; print(secrets.token_hex(32))">
+FLASK_ENV=production
+```
+
+Variables opcionales segun modulos activos:
+
+```text
+EXTERNAL_API_BASE_URL=...
+EXTERNAL_API_KEY=...
+SHEETS_TIMEOUT=30
+DOTACION_ENTREGA_URL=...
+DOTACION_RECARGAS_URL=...
+PG_POOL_MAX=10
+```
+
+No configurar `PORT` manualmente: Railway lo inyecta y el start command hace bind a `0.0.0.0:$PORT`.
 
 ## Carga de datos
 

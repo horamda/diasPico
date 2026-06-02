@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
+from psycopg2.extras import execute_values
 from app.database import pg_conn, pg_cursor
 
 _READY = False
@@ -19,29 +21,82 @@ def ensure_tables() -> None:
 
 
 def upsert_rows(rows: list[dict]) -> int:
-    """Insert rows, skipping duplicates. Returns number of rows processed."""
+    """Batch-upsert rows using execute_values (single round-trip). Returns rows processed."""
     ensure_tables()
     if not rows:
         return 0
+    # Deduplicar: el sheet puede tener filas repetidas — quedarse con la última
+    seen: dict = {}
+    for r in rows:
+        key = (r['empresa_id'], r['sucursal_id'], r['fecha'], r['nro_salida'], r['chofer'])
+        seen[key] = r
+    rows = list(seen.values())
+
+    sync_at = datetime.now(timezone.utc)
+    values = [
+        (r['empresa_id'], r['sucursal_id'], r['fecha'], r['nro_salida'],
+         r['chofer'], r['ayudante_1'], r['ayudante_2'], sync_at)
+        for r in rows
+    ]
     with pg_conn() as conn:
         with conn.cursor() as cur:
-            cur.executemany(
+            execute_values(
+                cur,
                 """
                 INSERT INTO operacion_camiones
-                    (empresa_id, sucursal_id, fecha, nro_salida, chofer, ayudante_1, ayudante_2, sync_at)
-                VALUES
-                    (%(empresa_id)s, %(sucursal_id)s, %(fecha)s, %(nro_salida)s,
-                     %(chofer)s, %(ayudante_1)s, %(ayudante_2)s, NOW())
+                    (empresa_id, sucursal_id, fecha, nro_salida, chofer,
+                     ayudante_1, ayudante_2, sync_at)
+                VALUES %s
                 ON CONFLICT (empresa_id, sucursal_id, fecha, nro_salida, chofer)
                 DO UPDATE SET
                     ayudante_1 = EXCLUDED.ayudante_1,
                     ayudante_2 = EXCLUDED.ayudante_2,
-                    sync_at    = NOW()
+                    sync_at    = EXCLUDED.sync_at
                 """,
-                rows,
+                values,
+                page_size=500,
             )
-            # executemany rowcount solo refleja la última fila — devolvemos len(rows)
-            return len(rows)
+    return len(rows)
+
+
+def replace_rows(rows: list[dict], sucursal_id: str, nro_salida: int) -> int:
+    """Borra todo lo de (sucursal_id, nro_salida) e inserta desde cero. Sync limpio."""
+    ensure_tables()
+    if not rows:
+        return 0
+    empresa_id = rows[0]['empresa_id']
+    # Deduplicar filas del sheet
+    seen: dict = {}
+    for r in rows:
+        key = (r['empresa_id'], r['sucursal_id'], r['fecha'], r['nro_salida'], r['chofer'])
+        seen[key] = r
+    rows = list(seen.values())
+
+    sync_at = datetime.now(timezone.utc)
+    values = [
+        (r['empresa_id'], r['sucursal_id'], r['fecha'], r['nro_salida'],
+         r['chofer'], r['ayudante_1'], r['ayudante_2'], sync_at)
+        for r in rows
+    ]
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM operacion_camiones WHERE empresa_id=%s AND sucursal_id=%s AND nro_salida=%s",
+                (empresa_id, sucursal_id, nro_salida),
+            )
+            borradas = cur.rowcount
+            execute_values(
+                cur,
+                """
+                INSERT INTO operacion_camiones
+                    (empresa_id, sucursal_id, fecha, nro_salida, chofer,
+                     ayudante_1, ayudante_2, sync_at)
+                VALUES %s
+                """,
+                values,
+                page_size=500,
+            )
+    return len(rows)
 
 
 def get_resumen_mensual(

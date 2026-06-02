@@ -33,7 +33,10 @@ _AUTO_CLIENT_KEYS = (
     'idcliente',
     'codcliente',
     'codigocliente',
+    'codigodecliente',
     'codigo',
+    'nrocliente',
+    'numerocliente',
 )
 
 _AUTO_FLAG_KEYS = (
@@ -43,6 +46,76 @@ _AUTO_FLAG_KEYS = (
     'auto',
     'forklift',
 )
+
+_PROMOTOR_KEYS = (
+    'fuerzaventa1descripcionpersonalcomercial',
+    'fuerzadeventa1descripcionpersonalcomercial',
+    'fuerzaventa1descripcion',
+    'descripcionvendedor',
+    'promotor',
+    'vendedor',
+    'fuerza',
+)
+
+_OTIF_KEYS = (
+    'otif',
+    'otifvalor',
+    'otifpct',
+    'otifporcentaje',
+    'porcentajeotif',
+    'ontimeinfull',
+)
+
+_RMD_KEYS = (
+    'rmd',
+    'rmdvalor',
+    'rmdpct',
+    'porcentajermd',
+)
+
+_NPS_KEYS = (
+    'nps',
+    'npsvalor',
+    'npspuntaje',
+)
+
+_FECHA_KEYS = (
+    'fecha',
+    'fechamedicion',
+    'periodo',
+)
+
+_OTIF_FECHA_KEYS = ('fechaotif', 'otiffecha')
+_RMD_FECHA_KEYS = ('fecharmd', 'rmdfecha')
+_NPS_FECHA_KEYS = ('fechanps', 'npsfecha')
+
+
+def _parse_promotor_csv(raw: str) -> list[dict]:
+    try:
+        dialect = csv.Sniffer().sniff(raw[:4096], delimiters=',;\t|')
+    except csv.Error:
+        dialect = csv.excel
+
+    reader = csv.DictReader(io.StringIO(raw), dialect=dialect)
+    fieldnames = [f for f in (reader.fieldnames or []) if f]
+    if not fieldnames:
+        return []
+
+    by_key = {_norm_csv_key(name): name for name in fieldnames}
+    cliente_col = next((by_key[k] for k in _AUTO_CLIENT_KEYS if k in by_key), None)
+    promotor_col = next((by_key[k] for k in _PROMOTOR_KEYS if k in by_key), None)
+
+    if not cliente_col or not promotor_col:
+        return []
+
+    rows = []
+    for row in reader:
+        cliente = str(row.get(cliente_col) or '').strip()
+        if not cliente:
+            continue
+        prom = str(row.get(promotor_col) or '').strip() if promotor_col else ''
+        rows.append({'cliente': cliente, 'promotor': prom})
+    return rows
 
 
 def _norm_csv_key(value: str | None) -> str:
@@ -58,6 +131,86 @@ def _decode_csv_upload(raw: bytes) -> str:
         except UnicodeDecodeError:
             continue
     return raw.decode('utf-8-sig', errors='replace')
+
+
+def _parse_metric_number(value: str | None) -> float | None:
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    raw = raw.replace('%', '').replace(' ', '')
+    if ',' in raw and '.' in raw:
+        raw = raw.replace('.', '').replace(',', '.')
+    else:
+        raw = raw.replace(',', '.')
+    try:
+        return float(raw)
+    except ValueError:
+        return None
+
+
+def _parse_metric_date(value: str | None) -> str | None:
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%d-%m-%Y', '%Y/%m/%d'):
+        try:
+            return datetime.strptime(raw[:10], fmt).date().isoformat()
+        except ValueError:
+            continue
+    return raw[:10] if len(raw) >= 10 else None
+
+
+def _parse_servicio_csv(raw: str) -> list[dict]:
+    try:
+        dialect = csv.Sniffer().sniff(raw[:4096], delimiters=',;\t|')
+    except csv.Error:
+        dialect = csv.excel
+
+    reader = csv.DictReader(io.StringIO(raw), dialect=dialect)
+    fieldnames = [f for f in (reader.fieldnames or []) if f]
+    if not fieldnames:
+        return []
+
+    by_key = {_norm_csv_key(name): name for name in fieldnames}
+    cliente_col = next((by_key[k] for k in _AUTO_CLIENT_KEYS if k in by_key), None)
+    otif_col = next((by_key[k] for k in _OTIF_KEYS if k in by_key), None)
+    rmd_col = next((by_key[k] for k in _RMD_KEYS if k in by_key), None)
+    nps_col = next((by_key[k] for k in _NPS_KEYS if k in by_key), None)
+    fecha_col = next((by_key[k] for k in _FECHA_KEYS if k in by_key), None)
+    otif_fecha_col = next((by_key[k] for k in _OTIF_FECHA_KEYS if k in by_key), fecha_col)
+    rmd_fecha_col = next((by_key[k] for k in _RMD_FECHA_KEYS if k in by_key), fecha_col)
+    nps_fecha_col = next((by_key[k] for k in _NPS_FECHA_KEYS if k in by_key), fecha_col)
+
+    if not cliente_col or not any((otif_col, rmd_col, nps_col)):
+        return []
+
+    rows = []
+    for row in reader:
+        cliente = str(row.get(cliente_col) or '').strip()
+        if not cliente:
+            continue
+        item = {'cliente': cliente}
+        if otif_col:
+            val = _parse_metric_number(row.get(otif_col))
+            if val is not None:
+                item['otif_valor'] = val
+                if otif_fecha_col:
+                    item['otif_fecha'] = _parse_metric_date(row.get(otif_fecha_col))
+        if rmd_col:
+            val = _parse_metric_number(row.get(rmd_col))
+            if val is not None:
+                item['rmd_valor'] = val
+                if rmd_fecha_col:
+                    item['rmd_fecha'] = _parse_metric_date(row.get(rmd_fecha_col))
+        if nps_col:
+            val = _parse_metric_number(row.get(nps_col))
+            if val is not None:
+                item['nps_valor'] = val
+                if nps_fecha_col:
+                    item['nps_fecha'] = _parse_metric_date(row.get(nps_fecha_col))
+        if len(item) > 1:
+            rows.append(item)
+    return rows
 
 
 def _parse_autoelevador_csv(raw: str) -> list[dict]:
@@ -191,6 +344,16 @@ def refresh_cache():
         body = request.get_json(silent=True) or {}
         user = str(body.get('ejecutado_por', 'api'))
         return _ok(svc.refresh_segmentacion_cache(user))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.post('/cache/repair-scores')
+def repair_cache_scores():
+    try:
+        body = request.get_json(silent=True) or {}
+        user = str(body.get('ejecutado_por', 'api'))
+        return _ok(svc.repair_segmentacion_cache_scores(user))
     except Exception as e:
         return _err(e, 500)
 
@@ -333,6 +496,59 @@ def mapa_clientes():
             limit=int(request.args.get('limit', 5000)),
         )
         return _ok(rows, total=len(rows))
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.post('/promotor/import')
+def import_promotor():
+    """Importa asignación cliente → promotor desde CSV. Actualiza campo activo."""
+    try:
+        if request.files.get('file'):
+            raw = _decode_csv_upload(request.files['file'].read())
+            rows = _parse_promotor_csv(raw)
+        else:
+            return _err('Se esperaba un archivo CSV')
+        if not rows:
+            return _err('No se encontraron clientes válidos en el CSV')
+        resultado = svc.bulk_upsert_promotores(rows)
+        payload = {'leidos': len(rows), **resultado}
+        try:
+            payload['segmentacion_cache'] = svc.refresh_segmentacion_cache('upload_promotor')
+        except Exception as cache_error:
+            payload['segmentacion_cache_error'] = str(cache_error)
+        return _ok(payload)
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.post('/servicio/import')
+def import_metricas_servicio():
+    """Importa OTIF/RMD/NPS por cliente desde CSV o JSON y refresca cache."""
+    try:
+        if request.files.get('file'):
+            raw = _decode_csv_upload(request.files['file'].read())
+            rows = _parse_servicio_csv(raw)
+            fuente = str(request.form.get('fuente') or 'csv_upload')
+        else:
+            payload = request.get_json(force=True, silent=True)
+            if isinstance(payload, dict) and isinstance(payload.get('clientes'), list):
+                rows = payload['clientes']
+                fuente = str(payload.get('fuente') or 'json')
+            elif isinstance(payload, list):
+                rows = payload
+                fuente = 'json'
+            else:
+                return _err('Se esperaba CSV (file) o JSON lista de clientes')
+        if not rows:
+            return _err('No se encontraron clientes validos con OTIF/RMD/NPS')
+        actualizados = svc.bulk_upsert_atributos(rows)
+        payload = {'leidos': len(rows), 'actualizados': actualizados, 'fuente': fuente}
+        try:
+            payload['segmentacion_cache'] = svc.refresh_segmentacion_cache('upload_metricas_servicio')
+        except Exception as cache_error:
+            payload['segmentacion_cache_error'] = str(cache_error)
+        return _ok(payload)
     except Exception as e:
         return _err(e, 500)
 

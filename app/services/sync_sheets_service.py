@@ -20,7 +20,8 @@ from app.repositories import operacion_camiones_repository as repo
 
 
 _GID_TO_SUCURSAL: dict[str, str] = {
-    "0":          "1",   # datos mda
+    "0":          "1",   # datos mda (legacy)
+    "1241670089": "1",   # datos mda (reparto cc)
     "1883083406": "1",   # recargas mda
     "249846040":  "2",   # datos dol
     "680588527":  "2",   # recargas dol
@@ -85,7 +86,7 @@ def sync_operacion_camiones(empresa_id: str = "1") -> dict:
             raw = _fetch_rows(url)
             cols = list(raw[0].keys()) if raw else []
             rows = _parse_rows(raw, sucursal_id, nro_salida, empresa_id)
-            n = repo.upsert_rows(rows)
+            n = repo.replace_rows(rows, sucursal_id, nro_salida)
             total_insertados += n
             detalle.append({
                 "url_tag":       tag,

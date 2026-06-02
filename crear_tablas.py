@@ -378,11 +378,14 @@ CREATE TABLE IF NOT EXISTS seg_clientes_atributos (
     cliente         VARCHAR(50) PRIMARY KEY,
     sucursal_id     VARCHAR(50),
     localidad       VARCHAR(100),
+    promotor        VARCHAR(255),
     autoelevador    BOOLEAN     DEFAULT FALSE,
     nps_valor       NUMERIC(6,2),
     nps_fecha       DATE,
     rmd_valor       NUMERIC(6,2),
     rmd_fecha       DATE,
+    otif_valor      NUMERIC(6,2),
+    otif_fecha      DATE,
     activo          BOOLEAN     NOT NULL DEFAULT TRUE,
     updated_at      TIMESTAMP   NOT NULL DEFAULT NOW()
 );
@@ -421,12 +424,13 @@ CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     dim_geo                 NUMERIC(6,2),
     venta_ytd               NUMERIC(18,2),
     hl_ytd                  NUMERIC(18,4),
-    crecimiento_pct         NUMERIC(10,4),
+    otif_valor              NUMERIC(6,2),
+    crecimiento_pct         NUMERIC(14,4),
     costo_logistico_total   NUMERIC(18,2),
-    ratio_costo_logistico   NUMERIC(8,4),
+    ratio_costo_logistico   NUMERIC(14,4),
     pedidos_ytd             INTEGER,
-    dropsize_ytd            NUMERIC(10,4),
-    pct_rechazo_pedidos     NUMERIC(8,4),
+    dropsize_ytd            NUMERIC(14,4),
+    pct_rechazo_pedidos     NUMERIC(12,4),
     fecha_calculo           TIMESTAMP    NOT NULL DEFAULT NOW(),
     version_regla           SMALLINT     NOT NULL DEFAULT 1,
     proceso                 VARCHAR(100) NOT NULL DEFAULT 'sistema',
@@ -594,6 +598,7 @@ SELECT
     COALESCE(cae.autoelevador, ca.autoelevador, FALSE)      AS autoelevador,
     ca.nps_valor,
     ca.rmd_valor,
+    ca.otif_valor,
     ROUND((COALESCE(y.hl, 0) * p.costo_entrega_hl)::NUMERIC, 2)  AS costo_entrega,
     ROUND((COALESCE(y.hl, 0) * p.costo_almacen_hl)::NUMERIC, 2)  AS costo_almacen,
     ROUND((COALESCE(y.hl, 0)
@@ -792,7 +797,7 @@ SELECT
     c.hl_ytd, c.bultos_ytd, c.pallets_ytd, c.pedidos_ytd,
     c.dropsize_bultos_ytd, c.ticket_promedio_ytd,
     c.rechazos_ytd, c.pct_rechazo_pedidos,
-    c.nps_valor, c.rmd_valor,
+    c.nps_valor, c.rmd_valor, c.otif_valor,
     c.costo_entrega, c.costo_almacen, c.costo_logistico_total,
     c.margen_logistico_proxy, c.ratio_costo_logistico_pct,
     CASE c.cluster_dpo
@@ -818,6 +823,7 @@ SELECT
         WHEN c.pct_rechazo_pedidos > 20                         THEN 'CRÍTICO: tasa de rechazo > 20 %'
         WHEN c.pct_rechazo_pedidos > 10                         THEN 'ATENCIÓN: tasa de rechazo > 10 %'
         WHEN c.ratio_costo_logistico_pct > 40                   THEN 'CRÍTICO: ratio costo logístico > 40 %'
+        WHEN c.otif_valor IS NOT NULL AND c.otif_valor < 85     THEN 'ATENCION: OTIF menor a 85 %'
         WHEN COALESCE(c.crecimiento_pct, 0) < -30              THEN 'ALERTA: caída de venta > 30 % vs año base'
         WHEN c.cluster_dpo = 'Ganador'
          AND COALESCE(c.crecimiento_pct, 0) < 0               THEN 'AVISO: Ganador con caída YTD'
@@ -851,6 +857,7 @@ SELECT
     ROUND(AVG(c.ratio_costo_logistico_pct)::NUMERIC, 2)                     AS ratio_costo_prom,
     ROUND(AVG(COALESCE(c.crecimiento_pct, 0))::NUMERIC, 2)                  AS crecimiento_prom_pct,
     ROUND(AVG(c.rmd_valor)::NUMERIC, 2)                                     AS rmd_prom,
+    ROUND(AVG(c.otif_valor)::NUMERIC, 2)                                    AS otif_prom,
     ROUND(AVG(c.nps_valor)::NUMERIC, 2)                                     AS nps_prom,
     ROUND(AVG(s.score_total)::NUMERIC, 2)                                   AS score_prom,
     ROUND((SUM(c.venta_ytd)

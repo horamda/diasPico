@@ -1,7 +1,6 @@
 flask>=3.1
 flask-cors>=6.0
 psycopg2-binary>=2.9
-pymysql>=1.2
 openpyxl>=3.1
 requests>=2.34
 python-dotenv>=1.2
@@ -9,3 +8,4 @@ flask-migrate>=4.1
 pydantic-settings>=2.8
 pydantic>=2.10
 gunicorn>=22.0
+reportlab>=4.2

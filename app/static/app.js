@@ -19,6 +19,7 @@ let _loadHlSeq = 0;
 let _dropAbort = null;
 let _loadDropSeq = 0;
 let historicoChart = null;
+let historicoPicosChart = null;
 let dropDiarioChart = null;
 let dropMensualChart = null;
 let planActualId = null;
@@ -41,6 +42,37 @@ const fmtDrop = v => Number(v || 0).toLocaleString('es-AR', { minimumFractionDig
 const fmt1 = v => Number(v || 0).toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const fmtPct1 = v => `${fmt1(v)}%`;
 const fmtDelta = v => v == null ? '—' : `${v > 0 ? '+' : ''}${fmtPct(v)}`;
+const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+const chartValueLabels = {
+  id: 'chartValueLabels',
+  afterDatasetsDraw(chart, _args, opts = {}) {
+    const ctx = chart.ctx;
+    const datasets = chart.data.datasets || [];
+    ctx.save();
+    ctx.font = opts.font || '600 10px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    datasets.forEach((ds, dsIndex) => {
+      if (ds.showLabels === false) return;
+      const meta = chart.getDatasetMeta(dsIndex);
+      if (!meta || meta.hidden) return;
+      const color = ds.labelColor || ds.borderColor || '#e8eaf0';
+      ctx.fillStyle = color;
+      meta.data.forEach((element, index) => {
+        const raw = ds.data?.[index];
+        if (raw == null || Number.isNaN(Number(raw))) return;
+        if (opts.hideZero && Number(raw) === 0) return;
+        const pos = element.tooltipPosition();
+        const isBar = ds.type === 'bar';
+        const y = isBar ? pos.y - 8 : (pos.y <= 18 ? pos.y + 14 : pos.y - 12);
+        const label = ds.valueFormatter ? ds.valueFormatter(raw) : fmtN(Math.round(raw));
+        ctx.fillText(label, pos.x, y);
+      });
+    });
+    ctx.restore();
+  },
+};
 
 function metricSummaryLabel(metric) {
   return ({
@@ -56,6 +88,39 @@ function metricSummaryLabel(metric) {
 function metricSummaryValue(kpis, metric) {
   if (metric === 'pedidos' || metric === 'clientes') return fmtN(kpis?.[metric] ?? 0);
   return fmtN(Math.round(kpis?.[metric] ?? 0));
+}
+
+function _kpiProyeccion(kAnt) {
+  return {
+    bultos: kAnt.bultos ?? 0,
+    hectolitros: kAnt.hectolitros ?? 0,
+    pallets: kAnt.pallets ?? 0,
+    up: kAnt.up ?? 0,
+    pedidos: kAnt.pedidos ?? 0,
+    clientes: kAnt.clientes ?? 0,
+    importe: kAnt.importe ?? 0,
+    camiones: kAnt.camiones ?? 0,
+    dias: kAnt.dias ?? 0,
+    rechazo_bultos: kAnt.rechazo_bultos ?? 0,
+    rechazo_bultos_parcial: kAnt.rechazo_bultos_parcial ?? 0,
+    rechazo_bultos_total: kAnt.rechazo_bultos_total ?? 0,
+    rechazo_hl: kAnt.rechazo_hl ?? 0,
+    rechazo_hl_parcial: kAnt.rechazo_hl_parcial ?? 0,
+    rechazo_hl_total: kAnt.rechazo_hl_total ?? 0,
+    rechazo_pedidos: kAnt.rechazo_pedidos ?? 0,
+    pct_rechazo_bultos: kAnt.pct_rechazo_bultos ?? 0,
+    pct_rechazo_hl: kAnt.pct_rechazo_hl ?? 0,
+    pct_rechazo_pedidos: kAnt.pct_rechazo_pedidos ?? 0,
+    rmcyo_bultos: kAnt.rmcyo_bultos ?? 0,
+    rmcyo_hl: kAnt.rmcyo_hl ?? 0,
+    rmcyo_pedidos: kAnt.rmcyo_pedidos ?? 0,
+    rmcyo_rechazo_bultos: kAnt.rmcyo_rechazo_bultos ?? 0,
+    rmcyo_rechazo_hl: kAnt.rmcyo_rechazo_hl ?? 0,
+    rmcyo_pct_rechazo_hl: kAnt.rmcyo_pct_rechazo_hl ?? 0,
+    rmcyo_pct_rechazo_bultos: kAnt.rmcyo_pct_rechazo_bultos ?? 0,
+    rmcyo_pct_rechazo_pedidos: kAnt.rmcyo_pct_rechazo_pedidos ?? 0,
+    objetivos: kAnt.objetivos || {},
+  };
 }
 
 async function api(path, options = {}) {
@@ -256,14 +321,21 @@ function renderCal() {
     if (dd?.es_evento)      cls += ' evento';
     if (isToday)            cls += ' today';
     if (dd)                 cls += ' has-data';
-    if (dd?.es_problema_nds) cls += ' nds-problema';
+    if (dd?.es_problema_nds)               cls += ' nds-problema';
+    if (dd?.es_proyeccion)                 cls += ' proyeccion';
+    if (dd?.dot?.tiene_s2)                 cls += ' dot-s2';
+    else if (dd?.dot?.tiene_datos)         cls += ' dot-s1only';
     e.className  = cls;
     e.textContent = d;
+    const dotTip = dd?.dot?.tiene_datos
+      ? ` — Dot: S1:${dd.dot.s1?.personas ?? 0}p` + (dd.dot.tiene_s2 ? ` / S2:${dd.dot.s2?.personas ?? 0}p` : ' (sin S2)')
+      : '';
     e.title = dd
       ? `${dd.bultos} bultos — ${dd.hectolitros} hl` +
         ` — NDS: ${dd.nds ?? 100}%` +
         (dd.ausentismo > 0 ? ` — Ausentismo: ${dd.ausentismo}` : '') +
         ` — Rec: ${dd.pct_rechazo_pedidos ?? 0}% PDV / ${dd.pct_rechazo_bultos ?? 0}% blt / ${dd.pct_rechazo_hl ?? 0}% hl` +
+        dotTip +
         (dd.es_feriado ? ` — ${dd.feriado_tipo || 'Feriado'}: ${dd.feriado_desc}` : '') +
         (dd.es_evento  ? ` — Evento: ${dd.evento_desc}` : '')
       : '';
@@ -307,22 +379,126 @@ async function loadMes() {
     if (seq !== _loadMesSeq || mes !== mesPad() || suc !== getSuc() || m !== document.getElementById('selMetrica').value || u !== document.getElementById('sliderUmbral').value) return;
 
     diasData = data.dias || [];
-    picoSet  = new Set(diasData.filter(d => d.es_pico).map(d => d.fecha));
+    const diasAnt = data.dias_anterior || [];
+    const kAnt    = data.kpis_anterior || null;
+    // Un mes es proyección si no tiene ventas reales (puede tener feriados con bultos=0)
+    const tieneVentas = diasData.some(d => (d.bultos || 0) > 0 || (d.hectolitros || 0) > 0);
+    const esProyeccion = !tieneVentas && diasAnt.length > 0;
+
+    if (esProyeccion) {
+      // Indexar feriados/eventos del mes actual para superponerlos en el calendario
+      const feriadosActuales = {};
+      diasData.forEach(d => { if (d.es_feriado || d.es_evento) feriadosActuales[d.fecha] = d; });
+      // Mes futuro sin ventas: usar año anterior como proyección de referencia
+      diasData = diasAnt.map(d => {
+        const fechaActual = d.fecha_ant.replace(/^\d{4}/, String(vY));
+        const fer = feriadosActuales[fechaActual] || {};
+        return {
+          fecha:           fechaActual,
+          fecha_ant:       d.fecha_ant,
+          bultos:          d.bultos,
+          hectolitros:     d.hectolitros,
+          pallets:         d.pallets ?? 0,
+          up:              d.up ?? 0,
+          pedidos:         d.pedidos ?? 0,
+          importe:         d.importe ?? 0,
+          camiones_salidos: d.camiones_salidos ?? 0,
+          clientes_unicos: d.clientes,
+          nds:             d.nds,
+          metrica_val:     d.metrica_val,
+          ausentismo:      0,
+          es_pico:         d.es_pico,
+          es_feriado:      fer.es_feriado  ?? false,
+          feriado_desc:    fer.feriado_desc ?? '',
+          feriado_tipo:    fer.feriado_tipo ?? '',
+          es_evento:       fer.es_evento   ?? false,
+          evento_desc:     fer.evento_desc  ?? '',
+          es_proyeccion:   true,
+          dot:             { tiene_datos: false },
+          rechazo_bultos: d.rechazo_bultos ?? 0,
+          rechazo_bultos_parcial: d.rechazo_bultos_parcial ?? 0,
+          rechazo_bultos_total: d.rechazo_bultos_total ?? 0,
+          rechazo_hl: d.rechazo_hl ?? 0,
+          rechazo_hl_parcial: d.rechazo_hl_parcial ?? 0,
+          rechazo_hl_total: d.rechazo_hl_total ?? 0,
+          rechazo_pedidos: d.rechazo_pedidos ?? 0,
+          rmcyo_bultos: d.rmcyo_bultos ?? 0,
+          rmcyo_hl: d.rmcyo_hl ?? 0,
+          rmcyo_pedidos: d.rmcyo_pedidos ?? 0,
+          rmcyo_rechazo_bultos: d.rmcyo_rechazo_bultos ?? 0,
+          rmcyo_rechazo_hl: d.rmcyo_rechazo_hl ?? 0,
+          rmcyo_rechazo_pedidos: d.rmcyo_rechazo_pedidos ?? 0,
+          pct_rechazo_bultos: d.pct_rechazo_bultos ?? 0,
+          pct_rechazo_hl: d.pct_rechazo_hl ?? 0,
+          pct_rechazo_pedidos: d.pct_rechazo_pedidos ?? 0,
+        };
+      });
+    }
+    picoSet = new Set(diasData.filter(d => d.es_pico).map(d => d.fecha));
     renderCal();
 
     // Sidebar stats
     const k = data.kpis || {};
-    mesKpis = k;
-    document.getElementById('sPicos').textContent    = data.picos_count ?? diasData.filter(d => d.es_pico).length;
+    const camionesSheets = diasData.reduce((s,d)=>s+(d.dot?.tiene_datos?d.dot.total_camiones:0),0);
+    if (!esProyeccion && camionesSheets > 0) k.camiones = camionesSheets;
+    mesKpis = (esProyeccion && kAnt) ? kAnt : k;
+    document.getElementById('sPicos').textContent     = esProyeccion
+      ? diasData.filter(d => d.es_pico).length
+      : (data.picos_count ?? diasData.filter(d => d.es_pico).length);
     document.getElementById('sMetricLbl').textContent = metricSummaryLabel(m);
-    document.getElementById('sMetricVal').textContent = metricSummaryValue(k, m);
-    document.getElementById('sCamiones').textContent = fmtN(k.camiones ?? 0);
-    document.getElementById('sClientes').textContent = fmtN(k.clientes ?? 0);
-    document.getElementById('sAvg').textContent      = data.avg_mes ?? data.avg_hist;
-    document.getElementById('sUmbral').textContent   = data.umbral_val;
+    document.getElementById('sMetricVal').textContent = (esProyeccion && kAnt)
+      ? metricSummaryValue(kAnt, m)
+      : metricSummaryValue(k, m);
+    document.getElementById('sCamiones').textContent  = (esProyeccion && kAnt)
+      ? fmtN(kAnt.camiones ?? 0)
+      : fmtN(k.camiones ?? 0);
+    document.getElementById('sClientes').textContent  = (esProyeccion && kAnt)
+      ? fmtN(kAnt.clientes ?? 0)
+      : fmtN(k.clientes ?? 0);
+    document.getElementById('sAvg').textContent       = data.avg_mes ?? data.avg_hist;
+    document.getElementById('sUmbral').textContent    = data.umbral_val;
 
-    // KPIs y tabla de días desde la misma respuesta
-    renderKpiGrid(k);
+    // Próximos feriados / eventos
+    const proximos = data.proximos_eventos || (data.proximo_feriado ? [data.proximo_feriado] : []);
+    const pfBox = document.getElementById('proximoFeriadoBox');
+    const pfList = document.getElementById('sPfList');
+    if (proximos.length && pfBox && pfList) {
+      pfBox.style.display = '';
+      pfList.innerHTML = proximos.slice(0, 3).map(item => {
+        const dias = Number(item.dias_restantes ?? 0);
+        const diasTxt = dias === 0 ? 'HOY' : dias === 1 ? 'mañana' : `${dias} días`;
+        const color = dias <= 3 ? 'var(--red)' : dias <= 7 ? 'var(--acc)' : 'var(--grn)';
+        const origen = item.origen === 'evento' ? 'evento' : 'feriado';
+        const scope = item.origen === 'evento' && item.sucursal && item.sucursal !== 'TODAS'
+          ? ` · ${item.sucursal}`
+          : item.tipo === 'local'
+            ? ' · local'
+            : item.origen === 'feriado'
+              ? ' · nacional'
+              : '';
+        return `<div style="border-top:1px solid rgba(255,255,255,.08);padding-top:7px">
+          <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${color};min-width:58px">${esc(diasTxt)}</div>
+            <div style="min-width:0">
+              <div style="font-size:10px;color:var(--muted);font-family:var(--mono)">${esc(item.fecha)} · ${esc(origen)}${esc(scope)}</div>
+              <div style="font-size:11px;color:var(--txt);font-weight:600;line-height:1.25;margin-top:2px">${esc(item.descripcion)}</div>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    } else if (pfBox) {
+      pfBox.style.display = 'none';
+    }
+
+    // KPIs y tabla de días
+    renderKpiGrid((esProyeccion && kAnt) ? _kpiProyeccion(kAnt) : k);
+    if (esProyeccion && kAnt) {
+      const banner = document.createElement('div');
+      banner.style.cssText = 'background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.38);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--acc)';
+      banner.textContent = `🔮 Proyección basada en ${MESES[vM]} ${kAnt.anio} — ${kAnt.picos ?? 0} días pico ese año — sin ventas registradas para este mes aún`;
+      const grid = document.getElementById('kpiGrid');
+      grid.insertBefore(banner, grid.firstChild);
+    }
     renderTablaDias();
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -371,7 +547,7 @@ function renderKpiGridLegacy(d) {
     <div class="kpi-section">Operacion</div>
     <!-- OTROS -->
     <div class="kpi pur"><div class="kpi-lbl">PDV únicos</div><div class="kpi-val pur">${fmtN(d.clientes ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">Salidas únicas</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Salidas (camiones)</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
     <div class="kpi grn"><div class="kpi-lbl">Días con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
   `;
 }
@@ -410,9 +586,48 @@ function renderKpiGrid(d) {
 
     <div class="kpi-section">Operacion</div>
     <div class="kpi ora"><div class="kpi-lbl">Importe total</div><div class="kpi-val ora" style="font-size:14px">${fmtM(d.importe)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">Salidas unicas</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
+    <div class="kpi pur"><div class="kpi-lbl">Salidas (camiones)</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
     <div class="kpi grn"><div class="kpi-lbl">Dias con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
   `;
+}
+
+function _renderTablaDiasProyeccion() {
+  const anioAnt = diasData[0]?.fecha_ant?.slice(0, 4) ?? (vY - 1);
+  const totalBultos = diasData.reduce((s, d) => s + (d.bultos || 0), 0);
+  const totalHl     = diasData.reduce((s, d) => s + (d.hectolitros || 0), 0);
+  const totalPicos  = diasData.filter(d => d.es_pico).length;
+  let html = `<div style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.38);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--acc)">
+    🔮 Proyección basada en <strong>${MESES[vM]} ${anioAnt}</strong> — los días marcados como PICO lo fueron ese año
+  </div>
+  <div style="overflow-x:auto"><table class="rtbl"><thead><tr>
+    <th>Fecha ${vY}</th>
+    <th>Bultos (${anioAnt})</th>
+    <th>HL (${anioAnt})</th>
+    <th>PDV únicos (${anioAnt})</th>
+    <th>NDS</th>
+    <th>Pico</th>
+  </tr></thead><tbody>`;
+  diasData.forEach(d => {
+    const tagPico = d.es_pico
+      ? '<span class="tag pico">PICO</span>'
+      : '<span class="tag ok">Normal</span>';
+    html += `<tr${d.es_pico ? ' style="background:rgba(245,166,35,.07)"' : ''}>
+      <td>${d.fecha}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(Math.round(d.bultos || 0))}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmt1(d.hectolitros || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(d.clientes_unicos || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmt1(d.nds)}%</td>
+      <td>${tagPico}</td>
+    </tr>`;
+  });
+  html += `<tr style="background:var(--surf3);font-weight:700">
+    <td>TOTAL</td>
+    <td style="font-family:var(--mono);text-align:right;color:var(--grn)">${fmtN(Math.round(totalBultos))}</td>
+    <td style="font-family:var(--mono);text-align:right;color:var(--grn)">${fmt1(totalHl)}</td>
+    <td></td><td></td>
+    <td style="color:var(--acc)">${totalPicos} pico${totalPicos !== 1 ? 's' : ''}</td>
+  </tr></tbody></table></div>`;
+  document.getElementById('tablaDias').innerHTML = html;
 }
 
 function renderTablaDias() {
@@ -420,10 +635,12 @@ function renderTablaDias() {
     document.getElementById('tablaDias').innerHTML = '<div class="empty"><div class="icon">📅</div>Sin datos para este mes</div>';
     return;
   }
+  if (diasData[0]?.es_proyeccion) { _renderTablaDiasProyeccion(); return; }
   let html = `<table class="rtbl"><thead><tr>
     <th>Fecha</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
     <th>NDS</th><th>Ausentismo</th>
     <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th>
+    <th>Dot. S1</th><th>Dot. S2</th>
     <th>Pico</th><th>Feriado</th><th>Evento</th>
   </tr></thead><tbody>`;
   diasData.forEach(d => {
@@ -457,7 +674,9 @@ function renderTablaDias() {
       <td style="font-family:var(--mono);color:${(d.pct_rechazo_pedidos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_pedidos ?? 0}%</td>
       <td style="font-family:var(--mono);color:${(d.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_bultos ?? 0}%</td>
       <td><span class="pct-pill ${(d.pct_rechazo_hl ?? 0) > 5 ? 'bad' : 'ok'}">${fmtPct1(d.pct_rechazo_hl ?? 0)}</span></td>
-      <td style="font-family:var(--mono)">${d.camiones_salidos}</td>
+      <td style="font-family:var(--mono)">${d.dot?.tiene_datos ? d.dot.total_camiones : d.camiones_salidos}</td>
+      <td style="font-family:var(--mono)">${d.dot?.s1 ? `${d.dot.s1.personas}p` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-family:var(--mono)">${d.dot?.tiene_s2 ? `<span style="color:var(--grn);font-weight:600">${d.dot.s2?.personas ?? 0}p</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${tagPico}</td>
       <td>${tagFeriado}</td>
       <td>${tagEvento}</td>
@@ -483,30 +702,40 @@ async function loadHistorico() {
     historicoChart.destroy();
     historicoChart = null;
   }
-  load('barHistorico'); load('tablaHistorico');
+  if (historicoPicosChart) {
+    historicoPicosChart.destroy();
+    historicoPicosChart = null;
+  }
+  load('barHistorico'); load('picosAnualHistorico'); load('tablaHistorico');
   const n = document.getElementById('selPeriodoHist').value;
   const suc = getSuc();
+  const m = document.getElementById('selMetrica').value;
+  const u = document.getElementById('sliderUmbral').value;
   try {
-    const data  = await api(`/api/picos/historico?sucursal=${suc}&meses=${n}`, { signal: _histAbort.signal });
-    if (seq !== _loadHistSeq || suc !== getSuc() || n !== document.getElementById('selPeriodoHist').value) return;
+    const data  = await api(`/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=${n}&umbral=${u}&metrica=${m}`, { signal: _histAbort.signal });
+    if (seq !== _loadHistSeq || suc !== getSuc() || n !== document.getElementById('selPeriodoHist').value || m !== document.getElementById('selMetrica').value || u !== document.getElementById('sliderUmbral').value) return;
     const meses = data.meses || [];
     if (!meses.length) {
       document.getElementById('barHistorico').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos históricos</div>';
+      document.getElementById('tablaHistorico').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin datos para la tabla</div>';
+      await loadHistoricoPicosAnual(seq, suc, m, u);
       return;
     }
-    const m      = document.getElementById('selMetrica').value;
-    document.getElementById('barHistorico').innerHTML = '<canvas id="histChart"></canvas>';
+    document.getElementById('barHistorico').innerHTML = '<div class="chart-wrap" style="height:280px"><canvas id="histChart"></canvas></div>';
     historicoChart = renderHistoricoChart(
       meses.map(x => x.mes.slice(2)),
       meses.map(x => Number(x[m] || 0)),
-      m
+      m,
+      meses.map(x => Number(x.dias_pico || 0))
     );
+    await loadHistoricoPicosAnual(seq, suc, m, u);
 
     let html = `<table class="rtbl"><thead><tr>
       <th>Mes</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
-      <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th><th>Días</th>
+      <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th><th>Días</th><th>Días pico</th>
     </tr></thead><tbody>`;
     meses.forEach(x => {
+      const picoTitle = `Metrica: ${metricSummaryLabel(x.metrica_pico || m)} | Prom.: ${fmtN(Math.round(x.promedio_pico || 0))} | Umbral: ${fmtN(Math.round(x.umbral_pico || 0))}`;
       html += `<tr>
         <td style="font-family:var(--mono)">${x.mes}</td>
         <td style="font-family:var(--mono)">${fmtN(Math.round(x.bultos))}</td>
@@ -518,8 +747,9 @@ async function loadHistorico() {
         <td style="font-family:var(--mono);color:${(x.pct_rechazo_pedidos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_pedidos ?? 0}%</td>
         <td style="font-family:var(--mono);color:${(x.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_bultos ?? 0}%</td>
         <td style="font-family:var(--mono);color:${(x.pct_rechazo_hl ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${x.pct_rechazo_hl ?? 0}%</td>
-        <td style="font-family:var(--mono)">${x.camiones}</td>
+        <td style="font-family:var(--mono)">${x.camiones_sheets || x.camiones}</td>
         <td style="font-family:var(--mono)">${x.dias}</td>
+        <td title="${esc(picoTitle)}"><span class="tag pico">${fmtN(x.dias_pico || 0)}</span></td>
       </tr>`;
     });
     html += '</tbody></table>';
@@ -527,7 +757,7 @@ async function loadHistorico() {
   } catch (e) { if (e.name === 'AbortError') return; errBox('barHistorico', 'Error: ' + e.message); }
 }
 
-function renderHistoricoChart(labels, values, metric) {
+function renderHistoricoChart(labels, values, metric, picos = []) {
   if (!window.Chart) return historicoChart;
   const el = document.getElementById('histChart');
   if (!el) return historicoChart;
@@ -557,17 +787,36 @@ function renderHistoricoChart(labels, values, metric) {
         pointHoverRadius: 6,
         tension: .28,
         fill: true,
+        yAxisID: 'y',
+        labelColor: color,
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
+      }, {
+        type: 'bar',
+        label: 'Días pico',
+        data: picos,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,.28)',
+        borderWidth: 1,
+        borderRadius: 4,
+        yAxisID: 'yPicos',
+        labelColor: '#f5a623',
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
       }],
     },
+    plugins: [chartValueLabels],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 18 } },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: true },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))}`,
+            label: ctx => ctx.dataset.yAxisID === 'yPicos'
+              ? `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} días`
+              : `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))}`,
           },
         },
       },
@@ -576,6 +825,124 @@ function renderHistoricoChart(labels, values, metric) {
         y: {
           beginAtZero: true,
           ticks: { color: '#6b7080', callback: value => fmtN(Math.round(value)) },
+          grid: { color: 'rgba(42,46,58,.35)' },
+        },
+        yPicos: {
+          position: 'right',
+          beginAtZero: true,
+          suggestedMax: Math.max(5, ...picos) + 1,
+          ticks: { color: '#f5a623', precision: 0 },
+          grid: { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+}
+
+async function loadHistoricoPicosAnual(seq, suc, metric, umbralValue) {
+  const cont = document.getElementById('picosAnualHistorico');
+  if (!cont) return;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando comparación anual…</div>';
+  try {
+    const data = await api(
+      `/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=24&umbral=${umbralValue}&metrica=${metric}`,
+      { signal: _histAbort.signal }
+    );
+    if (
+      seq !== _loadHistSeq ||
+      suc !== getSuc() ||
+      metric !== document.getElementById('selMetrica').value ||
+      umbralValue !== document.getElementById('sliderUmbral').value
+    ) return;
+    const meses = data.meses || [];
+    if (!meses.length) {
+      cont.innerHTML = '<div class="empty"><div class="icon">📈</div>Sin datos para comparar años</div>';
+      return;
+    }
+    cont.innerHTML = '<div class="chart-wrap" style="height:260px"><canvas id="histPicosChart"></canvas></div>';
+    historicoPicosChart = renderHistoricoPicosAnualChart(meses);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    errBox('picosAnualHistorico', 'Error al cargar comparación anual: ' + e.message);
+  }
+}
+
+function renderHistoricoPicosAnualChart(meses) {
+  if (!window.Chart) return historicoPicosChart;
+  const el = document.getElementById('histPicosChart');
+  if (!el) return historicoPicosChart;
+  if (historicoPicosChart) historicoPicosChart.destroy();
+
+  const anios = [...new Set((meses || []).map(x => Number(String(x.mes).slice(0, 4))).filter(Boolean))];
+  if (!anios.length) return historicoPicosChart;
+  const anioActual = Math.max(...anios);
+  const anioAnterior = anioActual - 1;
+  const byYearMonth = {};
+  meses.forEach(x => {
+    const [yy, mm] = String(x.mes).split('-').map(Number);
+    if (!yy || !mm) return;
+    byYearMonth[`${yy}-${mm}`] = Number(x.dias_pico || 0);
+  });
+  const prevFull = Array.from({ length: 12 }, (_, i) => byYearMonth[`${anioAnterior}-${i + 1}`] ?? null);
+  const currFull = Array.from({ length: 12 }, (_, i) => byYearMonth[`${anioActual}-${i + 1}`] ?? null);
+  const labels = MES_CORTO;
+  const prev = prevFull;
+  const curr = currFull;
+  const maxPicos = Math.max(5, ...prev.filter(v => v != null), ...curr.filter(v => v != null));
+
+  return new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: `Días pico año anterior (${anioAnterior})`,
+        data: prev,
+        borderColor: '#5b8dee',
+        backgroundColor: 'rgba(91,141,238,.15)',
+        pointBackgroundColor: '#5b8dee',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#8fb3ff',
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
+      }, {
+        label: `Días pico año actual (${anioActual})`,
+        data: curr,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,.16)',
+        pointBackgroundColor: '#f5a623',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#f5a623',
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
+      }],
+    },
+    plugins: [chartValueLabels],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} días`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: {
+          beginAtZero: true,
+          suggestedMax: maxPicos + 1,
+          ticks: { color: '#6b7080', precision: 0 },
           grid: { color: 'rgba(42,46,58,.35)' },
         },
       },
@@ -1301,6 +1668,7 @@ function setUmbral(v) {
   document.getElementById('sliderUmbral').value = v;
   onUmbralChange(v);
   loadMes();
+  loadHistorico();
 }
 
 async function guardarUmbral() {
@@ -1317,6 +1685,7 @@ async function guardarUmbral() {
     el.textContent  = '✓ Guardado';
     setTimeout(() => el.textContent = '', 2000);
     await loadMes();
+    loadHistorico();
   } catch (e) {
     el.style.color = 'var(--red)';
     el.textContent = 'Error';
@@ -1736,7 +2105,7 @@ function renderKpiObjetivos(rows) {
     pct_rechazo_pedidos: mesKpis.pct_rechazo_pedidos ?? 0,
     pct_rechazo_bultos: mesKpis.pct_rechazo_bultos ?? 0,
     pct_rechazo_hl: mesKpis.pct_rechazo_hl ?? 0,
-    camiones: mesKpis.camiones ?? sum('camiones_salidos'),
+    camiones: diasData.reduce((s,d)=>s+(d.dot?.tiene_datos?d.dot.total_camiones:0),0) || mesKpis.camiones || sum('camiones_salidos'),
     picos: diasData.filter(d => d.es_pico).length,
     feriados: diasData.filter(d => d.es_feriado).length,
     eventos: diasData.filter(d => d.es_evento).length,
@@ -2611,7 +2980,7 @@ async function guardarVariablePlanificacion() {
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
-  ['kpis', 'historico', 'comparativo', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'upload', 'config', 'ayuda'].forEach(x => {
+  ['kpis', 'historico', 'comparativo', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'calibres', 'upload', 'config', 'ayuda'].forEach(x => {
     const el2 = document.getElementById('tab-' + x);
     if (el2) el2.style.display = x === t ? '' : 'none';
   });
@@ -2619,6 +2988,7 @@ function switchTab(t, el) {
   if (t === 'comparativo') loadComparativo();
   if (t === 'dotacion')    loadDotacion();
   if (t === 'analisis')    loadAnalisisHl();
+  if (t === 'calibres')    loadCalibres();
   if (t === 'dropsize')  {
     if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();
     if (document.getElementById('dropMes')) {
@@ -2659,7 +3029,7 @@ async function loadCamiones() {
     const data = await api(`/api/flota/vehiculos?incluir_anulados=${incluirAnulados}`);
     _camionesTodos = data.vehiculos || [];
     _renderCamionesResumen(data.resumen);
-    _renderCamionesTbody(_camionesTodos);
+    filtrarCamiones();
     _populateCamSucursal();
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
@@ -2679,6 +3049,7 @@ function _renderCamionesResumen(resumen) {
 
 function _renderCamionesTbody(rows) {
   const tbody = document.getElementById('camionesTbody');
+  rows = rows || [];
   if (!rows.length) {
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:20px">Sin camiones. Agregá uno o sincronizá desde Transportes.</td></tr>';
     return;
@@ -2686,7 +3057,7 @@ function _renderCamionesTbody(rows) {
   const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   tbody.innerHTML = rows.map(v => {
     const anulado = v.anulado;
-    const base    = v.activo_base;
+    const base    = _estadoActivo(v.activo_base);
     return `<tr style="${anulado ? 'opacity:.5' : ''}">
       <td style="font-family:var(--mono);font-size:11px">${esc(v.codigo)}</td>
       <td style="font-size:12px">${esc(v.descripcion)}</td>
@@ -2706,15 +3077,29 @@ function _renderCamionesTbody(rows) {
   }).join('');
 }
 
-function filtrarCamiones() {
+function _estadoActivo(valor) {
+  return valor === true || valor === 1 || valor === '1';
+}
+
+function _camionesFiltrados() {
   const q = (document.getElementById('camBuscar')?.value || '').toLowerCase();
-  if (!q) { _renderCamionesTbody(_camionesTodos); return; }
-  const filtrados = _camionesTodos.filter(v =>
-    String(v.codigo||'').toLowerCase().includes(q) ||
-    String(v.descripcion||'').toLowerCase().includes(q) ||
-    String(v.placa||'').toLowerCase().includes(q)
-  );
-  _renderCamionesTbody(filtrados);
+  const estado = document.getElementById('camFiltroEstado')?.value || 'todos';
+  return _camionesTodos.filter(v => {
+    const coincideTexto = !q ||
+      String(v.codigo||'').toLowerCase().includes(q) ||
+      String(v.descripcion||'').toLowerCase().includes(q) ||
+      String(v.placa||'').toLowerCase().includes(q);
+    const activo = _estadoActivo(v.activo_base);
+    const coincideEstado =
+      estado === 'todos' ||
+      (estado === 'activos' && activo) ||
+      (estado === 'inactivos' && !activo);
+    return coincideTexto && coincideEstado;
+  });
+}
+
+function filtrarCamiones() {
+  _renderCamionesTbody(_camionesFiltrados());
 }
 
 function _populateCamSucursal() {
@@ -2925,6 +3310,29 @@ function initFlotaSelects() {
   }
 }
 
+function _flotaFiltrada() {
+  const estado = document.getElementById('flotaFiltroEstado')?.value || 'todos';
+  if (estado === 'activos') return _flotaData.filter(v => _estadoActivo(v.activo_mes));
+  if (estado === 'inactivos') return _flotaData.filter(v => !_estadoActivo(v.activo_mes));
+  return _flotaData;
+}
+
+function _resumenFlotaDesdeRows(rows) {
+  const activos = rows.filter(v => _estadoActivo(v.activo_mes));
+  const inactivos = rows.length - activos.length;
+  const capUp = activos.reduce((s, v) => s + (Number(v.capacidad_up) || 0), 0);
+  return {
+    total: rows.length,
+    activos: activos.length,
+    inactivos,
+    capacidad_up_activa: Math.round(capUp * 100) / 100,
+  };
+}
+
+function filtrarFlota() {
+  renderFlotaTabla(_flotaFiltrada());
+}
+
 async function loadFlota() {
   const anio = document.getElementById('flotaAnio')?.value;
   const mes  = document.getElementById('flotaMes')?.value;
@@ -2938,20 +3346,23 @@ async function loadFlota() {
     if (suc && suc !== 'TODAS') path += `&sucursal_id=${encodeURIComponent(suc)}`;
     const data = await api(path);
     _flotaData = data.vehiculos || [];
-    renderFlotaTabla(_flotaData, data.resumen);
+    renderFlotaTabla(_flotaFiltrada(), data.resumen);
   } catch(e) {
     tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
   }
 }
 
 function renderFlotaTabla(vehiculos, resumen) {
+  vehiculos = vehiculos || [];
   const summaryEl = document.getElementById('flotaSummary');
-  if (resumen) {
+  const estadoFiltro = document.getElementById('flotaFiltroEstado')?.value || 'todos';
+  const resumenVisible = (resumen && estadoFiltro === 'todos') ? resumen : _resumenFlotaDesdeRows(vehiculos);
+  if (summaryEl) {
     summaryEl.innerHTML = `
-      <div class="mini" style="min-width:120px"><span class="lbl">Total</span><span class="val">${resumen.total || 0}</span></div>
-      <div class="mini" style="min-width:120px"><span class="lbl">Activos mes</span><span class="val" style="color:var(--grn)">${resumen.activos || 0}</span></div>
-      <div class="mini" style="min-width:120px"><span class="lbl">Inactivos mes</span><span class="val" style="color:var(--red)">${resumen.inactivos || 0}</span></div>
-      <div class="mini" style="min-width:140px"><span class="lbl">Cap. UP activa</span><span class="val" style="color:var(--acc)">${resumen.capacidad_up_activa || 0}</span></div>
+      <div class="mini" style="min-width:120px"><span class="lbl">Total</span><span class="val">${resumenVisible.total || 0}</span></div>
+      <div class="mini" style="min-width:120px"><span class="lbl">Activos mes</span><span class="val" style="color:var(--grn)">${resumenVisible.activos || 0}</span></div>
+      <div class="mini" style="min-width:120px"><span class="lbl">Inactivos mes</span><span class="val" style="color:var(--red)">${resumenVisible.inactivos || 0}</span></div>
+      <div class="mini" style="min-width:140px"><span class="lbl">Cap. UP activa</span><span class="val" style="color:var(--acc)">${resumenVisible.capacidad_up_activa || 0}</span></div>
     `;
   }
 
@@ -2962,7 +3373,9 @@ function renderFlotaTabla(vehiculos, resumen) {
   }
 
   tbody.innerHTML = vehiculos.map((v, i) => {
-    const activo = v.activo_mes;
+    const activo = _estadoActivo(v.activo_mes);
+    const originalIdx = _flotaData.findIndex(x => x.id === v.id);
+    const idx = originalIdx >= 0 ? originalIdx : i;
     return `
       <tr id="flotaRow${v.id}">
         <td style="font-family:var(--mono);font-size:11px">${v.codigo}</td>
@@ -2970,14 +3383,14 @@ function renderFlotaTabla(vehiculos, resumen) {
         <td style="font-family:var(--mono);font-size:11px">${v.placa || '—'}</td>
         <td style="font-size:11px">${v.sucursal || v.sucursal_id}</td>
         <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up != null ? v.capacidad_up : '—'}</td>
-        <td>${_flotaToggleBtn(v.id, activo, i)}</td>
+        <td>${_flotaToggleBtn(v.id, activo, idx)}</td>
         <td>
           <input type="text" id="flotaMotivo${v.id}" value="${v.motivo_mes || ''}"
             placeholder="Motivo inactividad"
             style="width:100%;font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
         </td>
         <td>
-          <button class="btn sm" onclick="guardarDisponibilidadFlota(${v.id}, ${i})" style="font-size:11px">✓</button>
+          <button class="btn sm" onclick="guardarDisponibilidadFlota(${v.id}, ${idx})" style="font-size:11px">✓</button>
         </td>
       </tr>`;
   }).join('');
@@ -3001,20 +3414,11 @@ function _actualizarToggle(vehiculoId, activo, idx) {
 }
 
 function _actualizarSummaryFlota() {
-  const summaryEl = document.getElementById('flotaSummary');
-  if (!summaryEl) return;
-  const activos   = _flotaData.filter(v => v.activo_mes).length;
-  const inactivos = _flotaData.filter(v => !v.activo_mes).length;
-  const capUp     = _flotaData.filter(v => v.activo_mes).reduce((s, v) => s + (v.capacidad_up || 0), 0);
-  summaryEl.innerHTML = `
-    <div class="mini" style="min-width:120px"><span class="lbl">Total</span><span class="val">${_flotaData.length}</span></div>
-    <div class="mini" style="min-width:120px"><span class="lbl">Activos mes</span><span class="val" style="color:var(--grn)">${activos}</span></div>
-    <div class="mini" style="min-width:120px"><span class="lbl">Inactivos mes</span><span class="val" style="color:var(--red)">${inactivos}</span></div>
-    <div class="mini" style="min-width:140px"><span class="lbl">Cap. UP activa</span><span class="val" style="color:var(--acc)">${Math.round(capUp * 100) / 100}</span></div>
-  `;
+  renderFlotaTabla(_flotaFiltrada());
 }
 
 function toggleFlotaEstado(vehiculoId, estadoActual, idx) {
+  if (!_flotaData[idx]) return;
   const nuevoEstado = !estadoActual;
   _flotaData[idx].activo_mes = nuevoEstado;
   _actualizarToggle(vehiculoId, nuevoEstado, idx);
@@ -3022,9 +3426,10 @@ function toggleFlotaEstado(vehiculoId, estadoActual, idx) {
 }
 
 async function guardarDisponibilidadFlota(vehiculoId, idx, estadoAnterior) {
+  if (!_flotaData[idx]) return;
   const anio   = parseInt(document.getElementById('flotaAnio').value);
   const mes    = parseInt(document.getElementById('flotaMes').value);
-  const activo = _flotaData[idx].activo_mes;
+  const activo = _estadoActivo(_flotaData[idx].activo_mes);
   const motivo = (document.getElementById(`flotaMotivo${vehiculoId}`)?.value || '').trim();
   const msgEl  = document.getElementById('flotaSyncMsg');
 
@@ -3095,6 +3500,22 @@ function abrirReportePicos() {
   window.open(url, '_blank');
 }
 
+function exportDiasDetalle() {
+  const hasta = mesPad();
+  if (hasta < '2025-01') {
+    alert('El exportador comienza en enero 2025. Seleccioná enero 2025 o un mes posterior.');
+    return;
+  }
+  const params = new URLSearchParams({
+    sucursal: getSuc(),
+    desde: '2025-01',
+    hasta,
+    umbral: document.getElementById('sliderUmbral')?.value || '1.20',
+    metrica: document.getElementById('selMetrica')?.value || 'bultos',
+  });
+  window.location.href = `${API}/api/picos/dias-detalle/export?${params.toString()}`;
+}
+
 // ── PLANILLA OPERATIVA ─────────────────────────────────────────────────────
 
 const MESES_PLANILLA = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -3145,18 +3566,82 @@ async function cargarPlanillaOperativa() {
   }
 }
 
+async function syncDotacionConfig() {
+  const btn    = document.getElementById('cfgBtnSyncDot');
+  const msgEl  = document.getElementById('cfgSyncDotMsg');
+  const detEl  = document.getElementById('cfgSyncDotDetalle');
+  if (btn) btn.disabled = true;
+  if (msgEl) { msgEl.textContent = 'Sincronizando…'; msgEl.style.color = 'var(--muted)'; }
+  if (detEl) detEl.innerHTML = '';
+
+  let secs = 0;
+  const timer = setInterval(() => {
+    secs++;
+    if (msgEl) msgEl.textContent = `Sincronizando… ${secs}s`;
+  }, 1000);
+
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 90000);
+
+  try {
+    const data = await fetch(`${API}/api/sync/sheets-operativo`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ empresa_id: '1' }),
+      signal: controller.signal,
+    }).then(r => r.json());
+
+    clearTimeout(timeoutId); clearInterval(timer);
+
+    const n    = data.insertados ?? 0;
+    const errs = data.errores   ?? [];
+    const det  = data.detalle   ?? [];
+
+    if (msgEl) {
+      msgEl.textContent = errs.length
+        ? `Completado con ${errs.length} error(es) — ${n} registros`
+        : `Completado en ${secs}s — ${n} registros sincronizados`;
+      msgEl.style.color = errs.length ? 'var(--acc)' : 'var(--grn)';
+    }
+    if (detEl) {
+      detEl.innerHTML = det.map(d => d.error
+        ? `<div style="color:var(--red)">⚠ ${escHtml(d.url_tag)}: ${escHtml(d.error)}</div>`
+        : `<div>✓ ${escHtml(d.url_tag)}: ${d.filas_csv} filas → ${d.filas_parseadas} parseadas → ${d.upsertados} insertadas</div>`
+      ).join('');
+    }
+  } catch (e) {
+    clearTimeout(timeoutId); clearInterval(timer);
+    const msg = e.name === 'AbortError' ? 'Tiempo de espera agotado (90s). Intentá de nuevo.' : e.message;
+    if (msgEl) { msgEl.textContent = '⚠ ' + msg; msgEl.style.color = 'var(--red)'; }
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function syncYCargarPlanilla() {
   const btn   = document.getElementById('planillaBtnSync');
   const msgEl = document.getElementById('planillaSyncMsg');
   const cont  = document.getElementById('planillaContenido');
   if (btn) btn.disabled = true;
-  if (msgEl) { msgEl.textContent = 'Sincronizando desde Google Sheets…'; msgEl.style.color = 'var(--muted)'; }
-  if (cont)  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Importando datos…</div>';
+  if (cont) cont.innerHTML = '<div class="loading"><div class="spinner"></div>Importando datos desde Google Sheets…</div>';
+
+  // Contador de segundos para que el usuario sepa que está procesando
+  let secs = 0;
+  const timer = setInterval(() => {
+    secs++;
+    if (msgEl) { msgEl.textContent = `Sincronizando… ${secs}s (las 4 hojas pueden tardar hasta 30s)`; msgEl.style.color = 'var(--muted)'; }
+  }, 1000);
+
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 90000); // 90s máximo
+
   try {
     const resp = await fetch(`${API}/api/sync/sheets-operativo`, {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ empresa_id: '1' }),
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+    clearInterval(timer);
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || resp.statusText);
 
@@ -3187,7 +3672,12 @@ async function syncYCargarPlanilla() {
 
     await cargarPlanillaOperativa();
   } catch(e) {
-    if (msgEl) { msgEl.textContent = '⚠ ' + esc(e.message); msgEl.style.color = 'var(--red)'; }
+    clearTimeout(timeoutId);
+    clearInterval(timer);
+    const msg = e.name === 'AbortError'
+      ? '⏱ Tiempo de espera agotado (90s). Intentá de nuevo.'
+      : '⚠ ' + (e.message || 'Error desconocido');
+    if (msgEl) { msgEl.textContent = msg; msgEl.style.color = 'var(--red)'; }
     if (cont)  cont.innerHTML = '';
   } finally {
     if (btn) btn.disabled = false;
@@ -3343,40 +3833,100 @@ async function loadPeriodosCriticos() {
   }
 }
 
+function _renderAusLineChart(ausMensual, ausMensualAnt, anio) {
+  const W = 520, H = 155, PL = 30, PR = 10, PT = 28, PB = 22;
+  const CW = W - PL - PR, CH = H - PT - PB;
+  const allPcts = [
+    ...ausMensual.map(m => m.pct_ausentismo || 0),
+    ...ausMensualAnt.map(m => m.pct_ausentismo || 0),
+  ];
+  const maxPct = Math.max(...allPcts, 12);
+  const xOf = i => PL + (i / 11) * CW;
+  const yOf = p => PT + CH - (p / maxPct * CH);
+  const ABREV = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const fmtP = p => Number.isInteger(p) ? `${p}%` : `${p.toFixed(1)}%`;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:155px;overflow:visible;display:block">`;
+
+  // Eje X base
+  svg += `<line x1="${PL}" y1="${PT+CH}" x2="${W-PR}" y2="${PT+CH}" stroke="rgba(255,255,255,.1)" stroke-width="1"/>`;
+
+  // Líneas guía horizontales con etiqueta
+  [5, 10, 15, 20].filter(p => p <= maxPct + 2).forEach(p => {
+    const y = yOf(p);
+    svg += `<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,.07)" stroke-width="1" stroke-dasharray="3,4"/>`;
+    svg += `<text x="${PL-4}" y="${y+3}" font-size="8" fill="rgba(255,255,255,.28)" text-anchor="end">${p}%</text>`;
+  });
+
+  // Etiquetas de meses en el eje X
+  ABREV.forEach((a, i) => {
+    svg += `<text x="${xOf(i)}" y="${H-3}" font-size="8.5" fill="rgba(255,255,255,.45)" text-anchor="middle">${a}</text>`;
+  });
+
+  // ── Serie año anterior (punteada gris) ─────────────────────
+  const ptAnt = ausMensualAnt.filter(m => m.pct_ausentismo != null)
+    .map(m => `${xOf(m.mes-1).toFixed(1)},${yOf(m.pct_ausentismo).toFixed(1)}`).join(' ');
+  if (ptAnt) {
+    svg += `<polyline points="${ptAnt}" fill="none" stroke="rgba(255,255,255,.22)" stroke-width="1.5" stroke-dasharray="4,3"/>`;
+    ausMensualAnt.filter(m => m.pct_ausentismo != null).forEach(m => {
+      const cx = xOf(m.mes-1), cy = yOf(m.pct_ausentismo);
+      const p = m.pct_ausentismo;
+      // Etiqueta debajo del punto (año anterior)
+      const ly = cy + 14;
+      svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="2.5" fill="rgba(255,255,255,.3)"/>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="7.5" fill="rgba(255,255,255,.38)" text-anchor="middle">${fmtP(p)}</text>`;
+    });
+  }
+
+  // ── Serie año actual (sólida, coloreada por umbral) ────────
+  const ptAct = ausMensual.filter(m => m.pct_ausentismo != null)
+    .map(m => `${xOf(m.mes-1).toFixed(1)},${yOf(m.pct_ausentismo).toFixed(1)}`).join(' ');
+  if (ptAct) {
+    svg += `<polyline points="${ptAct}" fill="none" stroke="var(--acc)" stroke-width="2"/>`;
+    ausMensual.filter(m => m.pct_ausentismo != null).forEach(m => {
+      const p = m.pct_ausentismo;
+      const cx = xOf(m.mes-1), cy = yOf(p);
+      const col = p >= 10 ? 'var(--red)' : p >= 5 ? 'var(--acc)' : 'var(--grn)';
+      // Etiqueta encima del punto; si está cerca del tope la pone debajo
+      const ly = cy <= PT + 14 ? cy + 14 : cy - 7;
+      svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${col}" stroke="var(--bg)" stroke-width="1.5"/>`;
+      svg += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="9" fill="${col}" text-anchor="middle" font-weight="600">${fmtP(p)}</text>`;
+    });
+  }
+
+  svg += '</svg>';
+
+  const tieneAnt = ausMensualAnt.some(m => m.pct_ausentismo != null);
+  const leyenda = `<div style="display:flex;gap:14px;margin-top:4px;font-size:10px;color:var(--muted);flex-wrap:wrap;align-items:center">
+    <span><span style="color:var(--grn)">●</span> &lt;5% normal</span>
+    <span><span style="color:var(--acc)">●</span> 5-10% medio</span>
+    <span><span style="color:var(--red)">●</span> ≥10% alto</span>
+    ${tieneAnt ? `<span style="margin-left:6px;display:inline-flex;align-items:center;gap:5px">
+      <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="rgba(255,255,255,.3)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>${anio-1}
+      &nbsp;
+      <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--acc)" stroke-width="2"/></svg>${anio}
+    </span>` : ''}
+  </div>`;
+
+  return `<div style="margin-bottom:16px">
+    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px">Ausentismo histórico mensual</div>
+    ${svg}${leyenda}
+  </div>`;
+}
+
 function renderPeriodosCriticos(data, anio, suc) {
   const cont = document.getElementById('periodosCriticos');
   if (!cont) return;
-  const periodos    = data.periodos  || [];
-  const sugeridos   = data.sugeridos || [];
-  const ausMensual  = data.ausentismo_mensual || [];
-  const cumple      = data.cumple_minimo;
+  const periodos      = data.periodos  || [];
+  const sugeridos     = data.sugeridos || [];
+  const ausMensual    = data.ausentismo_mensual          || [];
+  const ausMensualAnt = data.ausentismo_mensual_anterior || [];
+  const cumple        = data.cumple_minimo;
 
-  // ── Ausentismo histórico (B) ──────────────────────────────
-  let ausHtml = '';
-  if (ausMensual.length) {
-    const maxPct = Math.max(...ausMensual.map(m => m.pct_ausentismo || 0), 1);
-    ausHtml = `<div style="margin-bottom:16px">
-      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Ausentismo histórico mensual</div>
-      <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:4px;align-items:end">`;
-    ausMensual.forEach(m => {
-      const pct = m.pct_ausentismo ?? null;
-      const color = pct === null ? 'var(--brd)' : pct >= 10 ? 'var(--red)' : pct >= 5 ? 'var(--acc)' : 'var(--grn)';
-      const h = pct !== null ? Math.max(4, Math.round(pct / maxPct * 60)) : 4;
-      const label = pct !== null ? `${pct}%` : '—';
-      ausHtml += `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
-        <div style="font-family:var(--mono);font-size:9px;color:${color}">${label}</div>
-        <div style="width:100%;height:${h}px;background:${color};border-radius:2px;opacity:${pct !== null ? '.8' : '.2'}" title="${m.nombre}: ${label}"></div>
-        <div style="font-size:8px;color:var(--muted)">${m.nombre}</div>
-      </div>`;
-    });
-    ausHtml += `</div>
-      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--muted)">
-        <span><span style="color:var(--red)">■</span> ≥10% alto</span>
-        <span><span style="color:var(--acc)">■</span> 5-10% medio</span>
-        <span><span style="color:var(--grn)">■</span> &lt;5% normal</span>
-      </div>
-    </div>`;
-  }
+  // ── Gráfico de línea ausentismo ──────────────────────────
+  const ausHtml = (ausMensual.length || ausMensualAnt.length)
+    ? _renderAusLineChart(ausMensual, ausMensualAnt, anio)
+    : '';
 
   let html = ausHtml + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <div style="display:flex;align-items:center;gap:8px">
@@ -3596,12 +4146,19 @@ function renderComparativo(data) {
   };
 
   const buildCard = (title, accent, defs) => {
+    const sepRule = 'border-left:2px solid rgba(255,255,255,.32)';
+    const styleAttr = (i, extra = '') => {
+      const rules = [];
+      if (i > 0) rules.push(sepRule);
+      if (extra) rules.push(extra);
+      return rules.length ? ' style="'+rules.join(';')+'"' : '';
+    };
     let h1 = '<tr><th class="mes-sticky" rowspan="2">Mes</th>';
     let h2 = '<tr>';
-    defs.forEach(d => {
+    defs.forEach((d, i) => {
       const sp = d.deltaFn ? 3 : 2;
-      h1 += '<th colspan="'+sp+'" class="sec-hdr" style="border-top:2px solid '+accent+'">'+d.label+'</th>';
-      h2 += '<th class="yr" style="font-size:9px">'+anio_base+'</th>'
+      h1 += '<th colspan="'+sp+'" class="sec-hdr" style="border-top:2px solid '+accent+(i > 0 ? ';'+sepRule : '')+'">'+d.label+'</th>';
+      h2 += '<th class="yr"'+styleAttr(i, 'font-size:9px')+'>'+anio_base+'</th>'
           + '<th class="yr" style="font-size:9px;color:var(--acc)">'+anio+'</th>';
       if (d.deltaFn) h2 += '<th class="yr">Δ</th>';
     });
@@ -3613,7 +4170,7 @@ function renderComparativo(data) {
       const fcls = m.es_futuro ? ' class="futuro"' : '';
       const ftip = m.es_futuro ? ' title="🔮 Proyección de '+m.nombre+' '+anio_base+'"' : '';
       let tds = '<td class="mes-lbl">'+m.nombre+(m.es_futuro?' 🔮':' '+sem(m))+'</td>';
-      defs.forEach(d => {
+      defs.forEach((d, i) => {
         const vb=d.get(b), va=d.get(a);
         const fb = vb!=null ? d.fmt(vb) : '—';
         let fa;
@@ -3625,7 +4182,7 @@ function renderComparativo(data) {
         } else {
           fa = '—';
         }
-        const cbStyle = (vb!=null && d.color) ? ' style="color:'+d.color(vb)+'"' : '';
+        const cbStyle = styleAttr(i, (vb!=null && d.color) ? 'color:'+d.color(vb) : '');
         tds += '<td'+cbStyle+'>'+fb+'</td><td>'+fa+'</td>';
         if (d.deltaFn) tds += dCell(va!=null&&vb!=null ? d.deltaFn(va,vb) : null, d.inv);
       });
@@ -3635,10 +4192,10 @@ function renderComparativo(data) {
     const mRealB = meses.filter(m=>!m.es_futuro&&m.base).map(m=>m.base);
     const mRealA = meses.filter(m=>!m.es_futuro&&m.actual).map(m=>m.actual);
     let stds = '<td class="mes-lbl" style="font-size:9px">TOTAL / PROM</td>';
-    defs.forEach(d => {
+    defs.forEach((d, i) => {
       const sb = d.sumFn ? d.sumFn(mRealB) : null;
       const sa = d.sumFn ? d.sumFn(mRealA) : null;
-      stds += '<td>'+(sb!=null?d.fmt(sb):'—')+'</td>'
+      stds += '<td'+styleAttr(i)+'>'+(sb!=null?d.fmt(sb):'—')+'</td>'
             + '<td style="color:var(--acc)">'+(sa!=null?d.fmt(sa):'—')+'</td>';
       if (d.deltaFn) stds += dCell(sb!=null&&sa!=null?d.deltaFn(sa,sb):null, d.inv);
     });
@@ -3662,11 +4219,20 @@ function renderComparativo(data) {
       sumFn:arr=>_sum(arr.map(d=>d?.hl||0))},
     {label:'Bultos',get:d=>d?.bultos,fmt:fBlt,deltaFn:pct,inv:false,
       sumFn:arr=>_sum(arr.map(d=>d?.bultos||0))},
+    {label:'Pallets',get:d=>d?.pallets,fmt:fBlt,deltaFn:pct,inv:false,
+      sumFn:arr=>_sum(arr.map(d=>d?.pallets||0))},
     {label:'PDV únicos',get:d=>d?.pdv_unicos,fmt:fInt,deltaFn:pct,inv:false,
       sumFn:arr=>{const v=arr.filter(d=>d?.pdv_unicos);return v.length?Math.round(_avg(v.map(d=>d.pdv_unicos))):null;}},
-    {label:'Salidas',get:d=>d?.salidas,fmt:fInt,deltaFn:pct,inv:false,
-      sumFn:arr=>{const v=arr.filter(d=>d?.salidas);return v.length?Math.round(_avg(v.map(d=>d.salidas))):null;}},
-    {label:'HL/Salida',get:d=>(d?.hl&&d?.salidas)?Math.round(d.hl/d.salidas*10)/10:null,
+    {label:'Salidas',
+      get:d=>d?.salidas_sheets>0?d.salidas_sheets:d?.salidas??null,
+      fmt:fInt,deltaFn:pct,inv:false,
+      sumFn:arr=>{
+        const v=arr.filter(d=>(d?.salidas_sheets||0)>0);
+        if(v.length) return v.reduce((s,d)=>s+(d.salidas_sheets||0),0);
+        const w=arr.filter(d=>d?.salidas);return w.length?Math.round(_avg(w.map(d=>d.salidas))):null;
+      }},
+    {label:'HL/Salida',
+      get:d=>{const sal=d?.salidas_sheets>0?d.salidas_sheets:d?.salidas;return(d?.hl&&sal)?Math.round(d.hl/sal*10)/10:null;},
       fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
   ]);
 
@@ -3683,33 +4249,60 @@ function renderComparativo(data) {
       sumFn:arr=>{const v=arr.filter(d=>d?.ausentismo!=null);return v.length?Math.round(_avg(v.map(d=>d.ausentismo))*10)/10:null;}},
   ]);
 
+  // Clave de dotacion según sucursal seleccionada en el comparativo
+  const dotKey = _cmpSuc === '1' ? 'cc' : _cmpSuc === '2' ? 'dl' : 'total';
+  const gDot   = d => d?.dotacion?.[dotKey] || {};
+  const gS1    = d => gDot(d)?.s1 || {};
+  const gS2    = d => gDot(d)?.s2 || {};
+
   const dotCard = buildCard('👷 Dotación', 'var(--pur)', [
-    {label:'Chof/día',get:d=>d?.dotacion?.total?.avg_choferes||null,fmt:fF1,deltaFn:pct,inv:false,
-      sumFn:arr=>{const v=arr.filter(d=>d?.dotacion?.total?.avg_choferes);return v.length?Math.round(_avg(v.map(d=>d.dotacion.total.avg_choferes))*10)/10:null;}},
-    {label:'Ayu/día',
-      get:d=>{const t=d?.dotacion?.total;return t?.tiene_datos?Math.round(((t.avg_ayu1||0)+(t.avg_ayu2||0))*10)/10:null;},
+    // ── 1ra Salida (Reparto) ─────────────────────────────────
+    {label:'S1 Chof/día',
+      get:d=>{const s=gS1(d);return s?.tiene_datos?s.avg_chof:null;},
+      fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>gS1(d)?.tiene_datos);return v.length?Math.round(_avg(v.map(d=>gS1(d).avg_chof))*10)/10:null;}},
+    {label:'S1 Ayu/día',
+      get:d=>{const s=gS1(d);return s?.tiene_datos?Math.round(((s.avg_ayu1||0)+(s.avg_ayu2||0))*10)/10:null;},
       fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
-    {label:'Total pers.',get:d=>d?.dotacion?.total?.avg_personas||null,fmt:fF1,deltaFn:pct,inv:false,
-      sumFn:arr=>{const v=arr.filter(d=>d?.dotacion?.total?.avg_personas);return v.length?Math.round(_avg(v.map(d=>d.dotacion.total.avg_personas))*10)/10:null;}},
+    {label:'S1 Pers/día',
+      get:d=>{const s=gS1(d);return s?.tiene_datos?s.avg_pers:null;},
+      fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>gS1(d)?.tiene_datos);return v.length?Math.round(_avg(v.map(d=>gS1(d).avg_pers))*10)/10:null;}},
+    // ── 2da Salida (Recargas) ────────────────────────────────
+    {label:'S2 Chof/día',
+      get:d=>{const s=gS2(d);return s?.tiene_datos?s.avg_chof:null;},
+      fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>gS2(d)?.tiene_datos);return v.length?Math.round(_avg(v.map(d=>gS2(d).avg_chof))*10)/10:null;}},
+    {label:'S2 Ayu/día',
+      get:d=>{const s=gS2(d);return s?.tiene_datos?Math.round(((s.avg_ayu1||0)+(s.avg_ayu2||0))*10)/10:null;},
+      fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
+    {label:'S2 Pers/día',
+      get:d=>{const s=gS2(d);return s?.tiene_datos?s.avg_pers:null;},
+      fmt:fF1,deltaFn:pct,inv:false,
+      sumFn:arr=>{const v=arr.filter(d=>gS2(d)?.tiene_datos);return v.length?Math.round(_avg(v.map(d=>gS2(d).avg_pers))*10)/10:null;}},
+    // ── HL/Persona total ─────────────────────────────────────
     {label:'HL/Persona',
-      get:d=>{const hl=d?.hl,p=d?.dotacion?.total?.avg_personas,di=d?.dias;return(hl&&p&&di&&di>0)?Math.round(hl/di/p*10)/10:null;},
+      get:d=>{const hl=d?.hl,p=gDot(d)?.avg_personas,di=d?.dias;return(hl&&p&&di&&di>0)?Math.round(hl/di/p*10)/10:null;},
       fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
-    {label:'CC Ch/Ayu',
-      get:d=>{const c=d?.dotacion?.cc;return c?.tiene_datos?(c.avg_choferes+'/'+((c.avg_ayu1||0)+(c.avg_ayu2||0)).toFixed(1)):null;},
-      fmt:v=>v,deltaFn:null,sumFn:null},
-    {label:'DL Ch/Ayu',
-      get:d=>{const c=d?.dotacion?.dl;return c?.tiene_datos?(c.avg_choferes+'/'+((c.avg_ayu1||0)+(c.avg_ayu2||0)).toFixed(1)):null;},
-      fmt:v=>v,deltaFn:null,sumFn:null},
+    ...(_cmpSuc === 'TODAS' ? [
+      {label:'CC S1/S2',
+        get:d=>{const cc=d?.dotacion?.cc;if(!cc?.tiene_datos)return null;const s1=cc.s1?.tiene_datos?cc.s1.avg_chof+'':'-';const s2=cc.s2?.tiene_datos?cc.s2.avg_chof:'—';return s1+'/'+s2;},
+        fmt:v=>v,deltaFn:null,sumFn:null},
+      {label:'DL S1/S2',
+        get:d=>{const dl=d?.dotacion?.dl;if(!dl?.tiene_datos)return null;const s1=dl.s1?.tiene_datos?dl.s1.avg_chof+'':'-';const s2=dl.s2?.tiene_datos?dl.s2.avg_chof:'—';return s1+'/'+s2;},
+        fmt:v=>v,deltaFn:null,sumFn:null},
+    ] : []),
   ]);
 
-  cont.innerHTML = '<div class="cmp-grid">'+volCard+calCard+dotCard+'</div>'
-    + '<div style="margin-top:8px;font-size:10px;color:var(--muted);display:flex;gap:14px;flex-wrap:wrap;align-items:center">'
+  const leyendaPie = '<div style="margin-top:6px;font-size:10.5px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap;align-items:center;padding:2px 0">'
     + '<span>🔮 Meses futuros = proyección basada en '+anio_base+'</span>'
     + '<span><span class="sem ok"></span> Sin riesgo</span>'
     + '<span><span class="sem warn"></span> Moderado</span>'
     + '<span><span class="sem crit"></span> Riesgo alto</span>'
     + '<span>HL/Salida = eficiencia por viaje &nbsp;·&nbsp; HL/Persona = productividad operativa</span>'
+    + '<span style="margin-left:auto;font-family:var(--mono)">base <strong>'+anio_base+'</strong> → actual <strong style="color:var(--acc)">'+anio+'</strong></span>'
     + '</div>';
+  cont.innerHTML = '<div class="cmp-grid">'+volCard+calCard+dotCard+'</div>' + leyendaPie;
 }
 
 
@@ -3731,6 +4324,12 @@ function _initDotFechas() {
 
 async function loadDotacion() {
   _initDotFechas();
+  // Inicializar selector de cobertura con el mes actual si está vacío
+  const cobMesEl = document.getElementById('cobPicoMes');
+  if (cobMesEl && !cobMesEl.value) {
+    const hoy = new Date();
+    cobMesEl.value = `${hoy.getFullYear()}-${String(hoy.getMonth()+1).padStart(2,'0')}`;
+  }
   const ids = ['dotCasaCentral', 'dotDolores', 'dotTotal'];
   ids.forEach(id => {
     const el = document.getElementById(id);
@@ -3809,6 +4408,175 @@ function renderDotacionPanel(contId, dias, titulo, esTotal = false) {
   });
 
   html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+
+async function loadCoberturaPicos() {
+  const cont = document.getElementById('coberturaPicos');
+  if (!cont) return;
+  const mesVal = document.getElementById('cobPicoMes')?.value;
+  const sucVal = document.getElementById('cobPicoSuc')?.value || 'TODAS';
+  if (!mesVal) {
+    cont.innerHTML = '<div style="color:var(--acc);font-size:11px">Seleccioná un mes.</div>';
+    return;
+  }
+  const [anio, mes] = mesVal.split('-');
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const data = await api(`/api/picos/cobertura-dotacion?anio=${anio}&mes=${parseInt(mes)}&sucursal_id=${sucVal}`, { timeout: 90000 });
+    renderCoberturaPicos(data);
+  } catch (e) {
+    cont.innerHTML = `<div style="color:var(--red);font-size:11px">${e.message}</div>`;
+  }
+}
+
+function renderCoberturaPicos(data) {
+  const cont = document.getElementById('coberturaPicos');
+  if (!cont) return;
+  const { picos, resumen } = data;
+
+  if (!picos || !picos.length) {
+    cont.innerHTML = '<div style="color:var(--muted);font-size:11px">Sin días pico para el período seleccionado.</div>';
+    return;
+  }
+
+  const pctS2 = resumen.pct_cobertura_s2 ?? 0;
+  const pctColor = pctS2 >= 80 ? 'var(--grn)' : pctS2 >= 50 ? 'var(--acc)' : 'var(--red)';
+
+  let html = `<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--acc)">${resumen.total}</div><div class="klbl">Días pico</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:${pctColor}">${pctS2}%</div><div class="klbl">Con doble salida</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--grn)">${resumen.con_s2}</div><div class="klbl">2 salidas ●</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--acc)">${resumen.sin_s2 ?? 0}</div><div class="klbl">Solo 1 salida ◐</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--red)">${resumen.sin_datos}</div><div class="klbl">Sin datos ○</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv">${resumen.avg_personas}</div><div class="klbl">Pers/día pico (prom)</div></div>
+  </div>`;
+
+  html += `<div style="overflow-x:auto"><table class="cob-tbl"><thead><tr>
+    <th>Estado</th><th>Fecha</th><th>Bultos</th><th>HL</th><th>NDS</th>
+    <th>Salida 1 (reparto)</th><th>Salida 2 (recarga)</th><th>Total personas</th>
+  </tr></thead><tbody>`;
+
+  picos.forEach(p => {
+    const dot = p.dot || {};
+    const s1  = dot.s1;
+    const s2  = dot.s2;
+    const sem = p.semaforo;
+    const semLabel = sem === 'verde' ? 'Completo' : sem === 'amarillo' ? '1 salida' : 'Sin datos';
+    const s1txt = s1 ? `${s1.personas}p · ${s1.camiones} cam.` : '—';
+    const s2txt = s2
+      ? `<span style="color:var(--grn);font-weight:600">${s2.personas}p · ${s2.camiones} cam.</span>`
+      : `<span style="color:var(--muted)">No registrada</span>`;
+    const ndsColor = (p.nds ?? 100) < 85 ? 'var(--red)' : (p.nds ?? 100) < 95 ? 'var(--acc)' : 'var(--grn)';
+
+    html += `<tr>
+      <td><span class="cob-sem ${sem}">${semLabel}</span></td>
+      <td>${p.fecha}</td>
+      <td>${fmtN(Math.round(p.bultos))}</td>
+      <td>${fmtN(Math.round(p.hectolitros))}</td>
+      <td style="color:${ndsColor}">${p.nds ?? 100}%</td>
+      <td>${s1txt}</td>
+      <td>${s2txt}</td>
+      <td style="font-weight:600">${dot.tiene_datos ? dot.total_personas : '—'}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div>';
+  cont.innerHTML = html;
+}
+
+
+// ─── CALIBRES ────────────────────────────────────────────────
+async function loadCalibres() {
+  const cont = document.getElementById('calibresTabla');
+  if (!cont) return;
+  const anioEl = document.getElementById('calibreAnio');
+  if (anioEl && !anioEl.value) anioEl.value = new Date().getFullYear();
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  const anio = document.getElementById('calibreAnio')?.value || new Date().getFullYear();
+  const suc  = document.getElementById('calibreSuc')?.value  || 'TODAS';
+  const div  = document.getElementById('calibreDiv')?.value  || '';
+  const med  = document.getElementById('calibreMedida')?.value || 'bultos';
+  try {
+    const qs = new URLSearchParams({ anio, sucursal: suc });
+    if (div) qs.set('division', div);
+    const data = await api('/api/articulos/bultos-por-calibre?' + qs, { timeout: 60000 });
+    const divEl = document.getElementById('calibreDiv');
+    if (divEl && data.divisiones?.length) {
+      const cur = divEl.value;
+      divEl.innerHTML = '<option value="">Todas las divisiones</option>'
+        + data.divisiones.map(d => '<option value="' + escHtml(d) + '"' + (d === cur ? ' selected' : '') + '>' + escHtml(d) + '</option>').join('');
+    }
+    renderCalibres(data, med);
+  } catch(e) {
+    cont.innerHTML = '<div style="color:var(--red);font-size:12px">' + e.message + '</div>';
+  }
+}
+
+let _calibreData = null;
+function _onCalMedidaChange() {
+  if (_calibreData) renderCalibres(_calibreData, this.value);
+}
+
+function renderCalibres(data, medida) {
+  medida = medida || 'bultos';
+  const cont = document.getElementById('calibresTabla');
+  if (!cont) return;
+  if (!data.calibres || !data.calibres.length) {
+    cont.innerHTML = '<div style="color:var(--muted);font-size:12px">Sin datos.</div>';
+    return;
+  }
+  const meses = data.meses_nombres;
+  const esBultos = medida === 'bultos';
+  const fmt = function(v) { return v > 0 ? fmtN(Math.round(v)) : '<span style="color:var(--muted)">—</span>'; };
+
+  // Detectar meses con datos
+  const mesesConDatos = [1,2,3,4,5,6,7,8,9,10,11,12].filter(function(m) {
+    return data.calibres.some(function(c) { return (c[medida] && c[medida][m] > 0); });
+  });
+
+  let html = '<div style="overflow-x:auto"><table class="rtbl" style="font-size:11px"><thead><tr>'
+    + '<th style="text-align:left;min-width:80px">Calibre</th>'
+    + mesesConDatos.map(function(m) { return '<th>' + meses[m-1] + '</th>'; }).join('')
+    + '<th style="font-weight:700">Total</th>'
+    + '</tr></thead><tbody>';
+
+  data.calibres.forEach(function(c) {
+    const total = esBultos ? c.total_bultos : c.total_pallets;
+    if (total < 1) return;
+    html += '<tr>'
+      + '<td style="font-weight:600;text-align:left">' + escHtml(c.calibre_label) + '</td>'
+      + mesesConDatos.map(function(m) {
+          const v = (c[medida] && c[medida][m]) || 0;
+          return '<td style="font-family:var(--mono);text-align:right">' + fmt(v) + '</td>';
+        }).join('')
+      + '<td style="font-family:var(--mono);font-weight:700;text-align:right;color:var(--acc)">' + fmtN(Math.round(total)) + '</td>'
+      + '</tr>';
+  });
+
+  // Fila totales
+  const totales = mesesConDatos.map(function(m) {
+    return data.calibres.reduce(function(s, c) { return s + ((c[medida] && c[medida][m]) || 0); }, 0);
+  });
+  const granTotal = data.calibres.reduce(function(s, c) {
+    return s + (esBultos ? c.total_bultos : c.total_pallets);
+  }, 0);
+  html += '<tr style="background:var(--surf3);font-weight:700">'
+    + '<td style="text-align:left">TOTAL</td>'
+    + totales.map(function(v) { return '<td style="font-family:var(--mono);text-align:right;color:var(--grn)">' + fmtN(Math.round(v)) + '</td>'; }).join('')
+    + '<td style="font-family:var(--mono);text-align:right;color:var(--grn)">' + fmtN(Math.round(granTotal)) + '</td>'
+    + '</tr>';
+
+  html += '</tbody></table></div>';
+
+  // Re-render sin recarga al cambiar medida
+  _calibreData = data;
+  const medEl = document.getElementById('calibreMedida');
+  if (medEl) {
+    medEl.removeEventListener('change', _onCalMedidaChange);
+    medEl.addEventListener('change', _onCalMedidaChange);
+  }
+
   cont.innerHTML = html;
 }
 

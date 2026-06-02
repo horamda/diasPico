@@ -117,7 +117,7 @@ class TestSyncOperacionCamiones(unittest.TestCase):
         return {"fecha": "10/05/2025", "chofer / responsable billetera": "Juan",
                 "ayudante1": "", "ayudante2": ""}
 
-    @patch("app.services.sync_sheets_service.repo.upsert_rows", return_value=3)
+    @patch("app.services.sync_sheets_service.repo.replace_rows", return_value=3)
     @patch("app.services.sync_sheets_service._fetch_rows")
     def test_sync_llama_4_tabs(self, mock_fetch, mock_upsert):
         mock_fetch.return_value = [self._row()]
@@ -147,11 +147,11 @@ class TestSyncOperacionCamiones(unittest.TestCase):
         mock_fetch.return_value = [self._row()]
         llamadas_upsert = []
 
-        def capture_upsert(rows):
+        def capture_replace(rows, sucursal_id, nro_salida):
             llamadas_upsert.extend(rows)
             return len(rows)
 
-        with patch("app.services.sync_sheets_service.repo.upsert_rows", side_effect=capture_upsert):
+        with patch("app.services.sync_sheets_service.repo.replace_rows", side_effect=capture_replace):
             with self._app().app_context():
                 from app.services.sync_sheets_service import sync_operacion_camiones
                 sync_operacion_camiones("1")
@@ -163,7 +163,7 @@ class TestSyncOperacionCamiones(unittest.TestCase):
         self.assertIn(1, nros)
         self.assertIn(2, nros)
 
-    @patch("app.services.sync_sheets_service.repo.upsert_rows", return_value=0)
+    @patch("app.services.sync_sheets_service.repo.replace_rows", return_value=0)
     @patch("app.services.sync_sheets_service._fetch_rows", return_value=[])
     def test_sync_sin_datos_retorna_cero(self, _f, _u):
         with self._app().app_context():

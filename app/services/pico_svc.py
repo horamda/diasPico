@@ -4,11 +4,14 @@ All heavy SQL lives here; routes stay thin.
 """
 
 from __future__ import annotations
+from io import BytesIO
 from datetime import date, timedelta
 import calendar as cal_mod
 import threading
 
-import psycopg2.extras
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font, PatternFill
+from openpyxl.utils import get_column_letter
 
 from app.database import pg_cursor
 from app.services.articulos_svc import ensure_articulos_table
@@ -141,6 +144,35 @@ def _rango_mes(y: int, m: int) -> tuple[date, date]:
     return date(y, m, 1), date(y, m, cal_mod.monthrange(y, m)[1])
 
 
+def _parse_mes_key(value: str, nombre: str) -> tuple[int, int]:
+    try:
+        y_s, m_s = value.split('-', 1)
+        y, m = int(y_s), int(m_s)
+        if m < 1 or m > 12:
+            raise ValueError
+        return y, m
+    except Exception as exc:
+        raise ValueError(f'{nombre} debe tener formato YYYY-MM') from exc
+
+
+def _iter_meses(desde: str, hasta: str) -> list[str]:
+    y0, m0 = _parse_mes_key(desde, 'desde')
+    y1, m1 = _parse_mes_key(hasta, 'hasta')
+    if (y0, m0) > (y1, m1):
+        raise ValueError('desde no puede ser posterior a hasta')
+    meses: list[str] = []
+    y, m = y0, m0
+    while (y, m) <= (y1, m1):
+        meses.append(f'{y}-{m:02d}')
+        m += 1
+        if m > 12:
+            y += 1
+            m = 1
+    if len(meses) > 120:
+        raise ValueError('El rango no puede superar 120 meses')
+    return meses
+
+
 def get_params(sucursal: str) -> dict:
     with pg_cursor() as cur:
         cur.execute("""
@@ -189,24 +221,55 @@ def get_sucursales() -> list[dict]:
 # ── Calendario mensual ────────────────────────────────────────
 
 def _get_ausentismo_mes(sucursal: str, mes: str) -> dict[str, int]:
-    """Devuelve {fecha_iso: ausentes} para el mes dado. Silencia errores si MySQL no está."""
+    return {}
+
+
+def _dot_map(sucursal: str, ini, fin) -> dict:
+    """Returns {fecha_iso: {s1, s2, tiene_s2, total_personas, tiene_datos}} from operacion_camiones."""
     try:
-        from app.services import ausentismo_svc
-        suc = None if sucursal == 'TODAS' else sucursal
-        result = ausentismo_svc.get_ausentismo(sucursal=suc, mes=mes)
-        if not result.get('disponible'):
-            return {}
-        aus_map = {}
-        for row in (result.get('data') or []):
-            fk = str(row.get('fecha') or '')[:10]
-            if fk:
-                aus_map[fk] = int(row.get('ausentes') or 0)
-        return aus_map
+        from app.repositories import operacion_camiones_repository as op_repo
+        op_repo.ensure_tables()
+        where_suc = "" if sucursal == 'TODAS' else "AND sucursal_id = %(s)s"
+        with pg_cursor() as cur:
+            cur.execute(f"""
+                SELECT
+                    fecha::text AS f,
+                    nro_salida,
+                    COUNT(*) AS camiones,
+                    COUNT(*) +
+                    COUNT(ayudante_1) FILTER (WHERE ayudante_1 IS NOT NULL AND ayudante_1 <> '') +
+                    COUNT(ayudante_2) FILTER (WHERE ayudante_2 IS NOT NULL AND ayudante_2 <> '') AS personas
+                FROM operacion_camiones
+                WHERE empresa_id = '1'
+                  AND fecha BETWEEN %(ini)s AND %(fin)s
+                  {where_suc}
+                GROUP BY fecha, nro_salida
+                ORDER BY fecha, nro_salida
+            """, {'ini': ini, 'fin': fin, 's': sucursal})
+            result: dict = {}
+            for r in cur.fetchall():
+                f = r['f']
+                if f not in result:
+                    result[f] = {'s1': None, 's2': None, 'tiene_s2': False, 'total_personas': 0, 'total_camiones': 0, 'tiene_datos': True}
+                key = 's1' if r['nro_salida'] == 1 else 's2'
+                cams = int(r['camiones'])
+                result[f][key] = {'camiones': cams, 'personas': int(r['personas'])}
+                result[f]['total_personas']  += int(r['personas'])
+                result[f]['total_camiones']  += cams
+                if r['nro_salida'] == 2:
+                    result[f]['tiene_s2'] = True
+            return result
     except Exception:
         return {}
 
 
-def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metrica_override: str | None) -> dict:
+def get_calendario(
+    sucursal: str,
+    mes: str,
+    umbral_override: float | None,
+    metrica_override: str | None,
+    incluir_complementos: bool = True,
+) -> dict:
     ensure_ventas_detalle_table()
     ensure_articulos_table()
     ensure_rechazos_table()
@@ -322,6 +385,7 @@ def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metri
         clientes_mes = int(det_mes.get('clientes_unicos') or 0)
 
     aus_map = _get_ausentismo_mes(sucursal, mes)
+    dot_map = _dot_map(sucursal, ini, fin)
 
     dias_raw = []
     metric_vals = []
@@ -402,6 +466,7 @@ def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metri
             'feriado_tipo': feriados_nac[fk]['tipo'] if fk in feriados_nac else '',
             'es_evento': fk in eventos,
             'evento_desc': eventos.get(fk, ''),
+            'dot': dot_map.get(fk, {'tiene_datos': False, 's1': None, 's2': None, 'tiene_s2': False, 'total_personas': 0}),
         })
 
     avg_mes = sum(metric_vals) / len(metric_vals) if metric_vals else 0
@@ -411,6 +476,61 @@ def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metri
     for row in dias_raw:
         row['es_pico'] = row['metrica_val'] > 0 and row['metrica_val'] >= umbral_val
         dias.append(row)
+
+    # Agregar días sin ventas que tienen feriados, eventos o periodos críticos
+    # (útil para meses futuros donde no hay datos de ventas aún)
+    fechas_con_datos = {d['fecha'] for d in dias}
+    try:
+        with pg_cursor() as cur:
+            cur.execute("""
+                SELECT fecha_inicio::text, fecha_fin::text
+                FROM periodos_criticos
+                WHERE empresa_id = '1' AND anio = %(a)s
+            """, {'a': anio})
+            pc_rangos = cur.fetchall()
+        from datetime import timedelta
+        picos_set = set()
+        for pc in pc_rangos:
+            fi = date.fromisoformat(pc['fecha_inicio'])
+            ff = date.fromisoformat(pc['fecha_fin'])
+            cur_d = fi
+            while cur_d <= ff:
+                picos_set.add(cur_d.isoformat())
+                cur_d += timedelta(days=1)
+    except Exception:
+        picos_set = set()
+
+    _empty = {'tiene_datos': False, 's1': None, 's2': None, 'tiene_s2': False, 'total_personas': 0}
+    for d in range(1, cal_mod.monthrange(anio, mes_num)[1] + 1):
+        fk = f"{anio}-{mes_num:02d}-{d:02d}"
+        if fk in fechas_con_datos:
+            continue
+        is_feriado = fk in feriados_nac
+        is_evento  = fk in eventos
+        is_pc      = fk in picos_set
+        if not (is_feriado or is_evento or is_pc):
+            continue
+        dias.append({
+            'fecha': fk, 'pedidos': 0, 'bultos': 0.0, 'pallets': 0.0,
+            'up': 0.0, 'hectolitros': 0.0, 'importe': 0.0,
+            'camiones_salidos': 0, 'clientes_unicos': 0,
+            'rechazo_bultos': 0.0, 'rechazo_bultos_parcial': 0.0, 'rechazo_bultos_total': 0.0,
+            'rechazo_hl': 0.0, 'rechazo_hl_parcial': 0.0, 'rechazo_hl_total': 0.0,
+            'rechazo_pedidos': 0, 'rmcyo_bultos': 0.0, 'rmcyo_hl': 0.0,
+            'rmcyo_rechazo_bultos': 0.0, 'rmcyo_rechazo_hl': 0.0,
+            'rmcyo_pedidos': 0, 'rmcyo_rechazo_pedidos': 0,
+            'pct_rechazo_bultos': 0.0, 'pct_rechazo_hl': 0.0, 'pct_rechazo_pedidos': 0.0,
+            'metrica_val': 0.0, 'nds': 100.0,
+            'es_problema_nds': False, 'ausentismo': 0,
+            'es_pico': is_pc,
+            'es_feriado': is_feriado,
+            'feriado_desc': feriados_nac[fk]['desc'] if is_feriado else '',
+            'feriado_tipo': feriados_nac[fk]['tipo'] if is_feriado else '',
+            'es_evento': is_evento,
+            'evento_desc': eventos.get(fk, ''),
+            'dot': dot_map.get(fk, _empty),
+        })
+    dias.sort(key=lambda x: x['fecha'])
 
     sum_b_tot = float(det_mes.get('b_tot') or 0)
     sum_b_rec = float(det_mes.get('b_rec') or 0)
@@ -463,8 +583,267 @@ def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metri
         'pct_rechazo_hl': round(sum_hl_rec / sum_hl_tot * 100, 1) if sum_hl_tot else 0,
         'pct_rechazo_pedidos': round(sum_p_rec / sum_p_tot * 100, 1) if sum_p_tot else 0,
     }
+    if not incluir_complementos:
+        kpis['objetivos'] = {}
+        return {
+            'mes': mes,
+            'sucursal': sucursal,
+            'metrica': metrica,
+            'umbral_pct': umbral,
+            'avg_mes': round(avg_mes, 1),
+            'avg_hist': round(avg_mes, 1),
+            'umbral_val': round(umbral_val, 1),
+            'dias': dias,
+            'kpis': kpis,
+            'picos_count': sum(1 for d in dias if d['es_pico']),
+            'proximo_feriado': None,
+            'proximos_eventos': [],
+            'kpis_anterior': None,
+            'dias_anterior': [],
+        }
+
     from app.services import kpi_objetivos_svc
     kpis['objetivos'] = kpi_objetivos_svc.evaluar(kpis, sucursal, fin)
+
+    # ── Datos del mismo mes año anterior ────────────────────────
+    kpis_anterior = None
+    dias_anterior = []
+    try:
+        ini_ant, fin_ant = _rango_mes(anio - 1, mes_num)
+        p_ant = {'ini': ini_ant, 'fin': fin_ant, 's': sucursal}
+        with pg_cursor() as cur:
+            cur.execute(f"""
+                SELECT v.fecha::text AS f,
+                    SUM(CASE WHEN {V_IS_REC} THEN COALESCE(v.bultos_rechazados, 0) ELSE 0 END) AS b_rec,
+                    SUM(CASE WHEN {V_IS_REC_PARCIAL} THEN COALESCE(v.bultos_rechazados, 0) ELSE 0 END) AS b_rec_parcial,
+                    SUM(CASE WHEN {V_IS_REC_TOTAL} THEN COALESCE(v.bultos_rechazados, 0) ELSE 0 END) AS b_rec_total,
+                    SUM(COALESCE(v.bultos, 0)) AS b_tot,
+                    SUM(CASE WHEN {V_IS_REC} THEN COALESCE(v.unidad_medida_rechazado, 0) ELSE 0 END) AS hl_rec,
+                    SUM(CASE WHEN {V_IS_REC_PARCIAL} THEN COALESCE(v.unidad_medida_rechazado, 0) ELSE 0 END) AS hl_rec_parcial,
+                    SUM(CASE WHEN {V_IS_REC_TOTAL} THEN COALESCE(v.unidad_medida_rechazado, 0) ELSE 0 END) AS hl_rec_total,
+                    SUM(COALESCE(v.unidad_medida, 0)) AS hl_tot,
+                    SUM(CASE WHEN {V_IS_RMCYO} THEN COALESCE(v.bultos, 0) ELSE 0 END) AS rmcyo_bultos,
+                    SUM(CASE WHEN {V_IS_RMCYO} THEN COALESCE(v.unidad_medida, 0) ELSE 0 END) AS rmcyo_hl,
+                    SUM(CASE WHEN {V_IS_RMCYO} AND {V_IS_REC} THEN COALESCE(v.bultos_rechazados, 0) ELSE 0 END) AS rmcyo_b_rec,
+                    SUM(CASE WHEN {V_IS_RMCYO} AND {V_IS_REC} THEN COALESCE(v.unidad_medida_rechazado, 0) ELSE 0 END) AS rmcyo_hl_rec,
+                    SUM(COALESCE(v.unidad_paquete, 0)) AS up_tot,
+                    SUM({V_PALLETS_EXPR}) AS pallets,
+                    SUM(COALESCE(v.importe_neto, 0)) AS importe,
+                    COUNT(DISTINCT CASE WHEN {V_IS_REC} THEN {V_PEDIDO_KEY} END) AS p_rec,
+                    COUNT(DISTINCT {V_PEDIDO_KEY}) AS p_tot,
+                    COUNT(DISTINCT CASE WHEN {V_IS_RMCYO} THEN {V_PEDIDO_KEY} END) AS rmcyo_pedidos,
+                    COUNT(DISTINCT CASE WHEN {V_IS_RMCYO} AND {V_IS_REC} THEN {V_PEDIDO_KEY} END) AS rmcyo_p_rec,
+                    COUNT(DISTINCT {V_CLIENT_KEY}) AS clientes_unicos,
+                    COUNT(DISTINCT {V_TRUCK_KEY}) AS camiones_salidos
+                FROM ventas_detalle v
+                LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+                {V_REC_JOIN}
+                WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
+                  AND {IS_MERCADERIA} AND {V_NOT_REMITO}
+                GROUP BY v.fecha
+            """, p_ant)
+            det_ant = {r['f']: dict(r) for r in cur.fetchall()}
+
+        anio_ant = anio - 1
+        mv_ant = []
+        for d in range(1, cal_mod.monthrange(anio_ant, mes_num)[1] + 1):
+            fk_ant = f"{anio_ant}-{mes_num:02d}-{d:02d}"
+            dt = det_ant.get(fk_ant, {})
+            if not dt:
+                continue
+            b = float(dt.get('b_tot') or 0)
+            hl = float(dt.get('hl_tot') or 0)
+            pallets = float(dt.get('pallets') or 0)
+            up = float(dt.get('up_tot') or 0)
+            p_tot = int(dt.get('p_tot') or 0)
+            p_rec = int(dt.get('p_rec') or 0)
+            clientes = int(dt.get('clientes_unicos') or 0)
+            b_rec = float(dt.get('b_rec') or 0)
+            b_rec_parcial = float(dt.get('b_rec_parcial') or 0)
+            b_rec_total = float(dt.get('b_rec_total') or 0)
+            hl_rec = float(dt.get('hl_rec') or 0)
+            hl_rec_parcial = float(dt.get('hl_rec_parcial') or 0)
+            hl_rec_total = float(dt.get('hl_rec_total') or 0)
+            rmcyo_bultos = float(dt.get('rmcyo_bultos') or 0)
+            rmcyo_hl = float(dt.get('rmcyo_hl') or 0)
+            rmcyo_b_rec = float(dt.get('rmcyo_b_rec') or 0)
+            rmcyo_hl_rec = float(dt.get('rmcyo_hl_rec') or 0)
+            rmcyo_pedidos = int(dt.get('rmcyo_pedidos') or 0)
+            rmcyo_p_rec = int(dt.get('rmcyo_p_rec') or 0)
+            nds = round((p_tot - p_rec) / p_tot * 100, 1) if p_tot else 100.0
+            mv = {
+                'bultos': b,
+                'pallets': pallets,
+                'up': up,
+                'pedidos': p_tot,
+                'hectolitros': hl,
+                'clientes': clientes,
+            }.get(metrica, b)
+            if mv > 0:
+                mv_ant.append(mv)
+            dias_anterior.append({
+                'dia': d,
+                'fecha_ant': fk_ant,
+                'bultos': round(b, 1),
+                'hectolitros': round(hl, 1),
+                'pallets': round(pallets, 2),
+                'up': round(up, 1),
+                'pedidos': p_tot,
+                'importe': round(float(dt.get('importe') or 0), 2),
+                'camiones_salidos': int(dt.get('camiones_salidos') or 0),
+                'rechazo_bultos': round(b_rec, 1),
+                'rechazo_bultos_parcial': round(b_rec_parcial, 1),
+                'rechazo_bultos_total': round(b_rec_total, 1),
+                'rechazo_hl': round(hl_rec, 1),
+                'rechazo_hl_parcial': round(hl_rec_parcial, 1),
+                'rechazo_hl_total': round(hl_rec_total, 1),
+                'rechazo_pedidos': p_rec,
+                'rmcyo_bultos': round(rmcyo_bultos, 1),
+                'rmcyo_hl': round(rmcyo_hl, 1),
+                'rmcyo_rechazo_bultos': round(rmcyo_b_rec, 1),
+                'rmcyo_rechazo_hl': round(rmcyo_hl_rec, 1),
+                'rmcyo_pedidos': rmcyo_pedidos,
+                'rmcyo_rechazo_pedidos': rmcyo_p_rec,
+                'pct_rechazo_bultos': round(b_rec / b * 100, 1) if b else 0,
+                'pct_rechazo_hl': round(hl_rec / hl * 100, 1) if hl else 0,
+                'pct_rechazo_pedidos': round(p_rec / p_tot * 100, 1) if p_tot else 0,
+                'nds': nds,
+                'clientes': clientes,
+                'metrica_val': round(mv, 1),
+            })
+
+        if mv_ant and dias_anterior:
+            avg_ant = sum(mv_ant) / len(mv_ant)
+            umbral_ant = avg_ant * umbral
+            for row in dias_anterior:
+                row['es_pico'] = row['metrica_val'] > 0 and row['metrica_val'] >= umbral_ant
+
+        if dias_anterior:
+            sum_b_ant = sum(d['bultos'] for d in dias_anterior)
+            sum_hl_ant = sum(d['hectolitros'] for d in dias_anterior)
+            sum_b_rec_ant = sum(d['rechazo_bultos'] for d in dias_anterior)
+            sum_hl_rec_ant = sum(d['rechazo_hl'] for d in dias_anterior)
+            sum_p_ant = sum(d['pedidos'] for d in dias_anterior)
+            sum_p_rec_ant = sum(d['rechazo_pedidos'] for d in dias_anterior)
+            sum_rmcyo_b_ant = sum(d['rmcyo_bultos'] for d in dias_anterior)
+            sum_rmcyo_hl_ant = sum(d['rmcyo_hl'] for d in dias_anterior)
+            sum_rmcyo_b_rec_ant = sum(d['rmcyo_rechazo_bultos'] for d in dias_anterior)
+            sum_rmcyo_hl_rec_ant = sum(d['rmcyo_rechazo_hl'] for d in dias_anterior)
+            sum_rmcyo_p_ant = sum(d['rmcyo_pedidos'] for d in dias_anterior)
+            sum_rmcyo_p_rec_ant = sum(d['rmcyo_rechazo_pedidos'] for d in dias_anterior)
+            kpis_anterior = {
+                'anio': anio_ant,
+                'mes': mes_num,
+                'bultos': round(sum_b_ant, 1),
+                'hectolitros': round(sum_hl_ant, 1),
+                'pallets': round(sum(d['pallets'] for d in dias_anterior), 2),
+                'up': round(sum(d['up'] for d in dias_anterior), 1),
+                'pedidos': sum_p_ant,
+                'importe': round(sum(d['importe'] for d in dias_anterior), 2),
+                'camiones': sum(d['camiones_salidos'] for d in dias_anterior),
+                'dias': len(dias_anterior),
+                'picos': sum(1 for d in dias_anterior if d.get('es_pico')),
+                'nds': round(sum(d['nds'] for d in dias_anterior) / len(dias_anterior), 1),
+                'clientes': max((d['clientes'] for d in dias_anterior), default=0),
+                'rechazo_bultos': round(sum_b_rec_ant, 1),
+                'rechazo_bultos_parcial': round(sum(d['rechazo_bultos_parcial'] for d in dias_anterior), 1),
+                'rechazo_bultos_total': round(sum(d['rechazo_bultos_total'] for d in dias_anterior), 1),
+                'rechazo_hl': round(sum_hl_rec_ant, 1),
+                'rechazo_hl_parcial': round(sum(d['rechazo_hl_parcial'] for d in dias_anterior), 1),
+                'rechazo_hl_total': round(sum(d['rechazo_hl_total'] for d in dias_anterior), 1),
+                'rechazo_pedidos': sum_p_rec_ant,
+                'rmcyo_bultos': round(sum_rmcyo_b_ant, 1),
+                'rmcyo_hl': round(sum_rmcyo_hl_ant, 1),
+                'rmcyo_rechazo_bultos': round(sum_rmcyo_b_rec_ant, 1),
+                'rmcyo_rechazo_hl': round(sum_rmcyo_hl_rec_ant, 1),
+                'rmcyo_pedidos': sum_rmcyo_p_ant,
+                'rmcyo_rechazo_pedidos': sum_rmcyo_p_rec_ant,
+                'rmcyo_pct_rechazo_bultos': round(sum_rmcyo_b_rec_ant / sum_rmcyo_b_ant * 100, 1) if sum_rmcyo_b_ant else 0,
+                'rmcyo_pct_rechazo_hl': round(sum_rmcyo_hl_rec_ant / sum_rmcyo_hl_ant * 100, 1) if sum_rmcyo_hl_ant else 0,
+                'rmcyo_pct_rechazo_pedidos': round(sum_rmcyo_p_rec_ant / sum_rmcyo_p_ant * 100, 1) if sum_rmcyo_p_ant else 0,
+                'pct_rechazo_bultos': round(sum_b_rec_ant / sum_b_ant * 100, 1) if sum_b_ant else 0,
+                'pct_rechazo_hl': round(sum_hl_rec_ant / sum_hl_ant * 100, 1) if sum_hl_ant else 0,
+                'pct_rechazo_pedidos': round(sum_p_rec_ant / sum_p_ant * 100, 1) if sum_p_ant else 0,
+                'objetivos': {},
+            }
+            try:
+                kpis_prev = get_kpis(sucursal, f"{anio_ant}-{mes_num:02d}")
+                if int(kpis_prev.get('dias') or 0) > 0:
+                    kpis_prev.update({
+                        'anio': anio_ant,
+                        'mes': mes_num,
+                        'picos': kpis_anterior['picos'],
+                        'nds': kpis_anterior['nds'],
+                    })
+                    kpis_anterior = kpis_prev
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # Próximos feriados/eventos desde hoy
+    proximos_eventos = []
+    try:
+        hoy = date.today()
+        with pg_cursor() as cur:
+            cur.execute("""
+                SELECT fecha::text, descripcion, LOWER(TRIM(COALESCE(tipo,''))) AS tipo
+                FROM feriados
+                WHERE fecha >= %(hoy)s
+                ORDER BY fecha
+                LIMIT 12
+            """, {'hoy': hoy})
+            feriados_prox = [dict(r) for r in cur.fetchall()]
+            try:
+                if sucursal == 'TODAS':
+                    cur.execute("""
+                        SELECT fecha::text, sucursal, descripcion
+                        FROM eventos_especiales
+                        WHERE fecha >= %(hoy)s
+                        ORDER BY fecha, sucursal
+                        LIMIT 12
+                    """, {'hoy': hoy})
+                else:
+                    cur.execute("""
+                        SELECT fecha::text, sucursal, descripcion
+                        FROM eventos_especiales
+                        WHERE fecha >= %(hoy)s
+                          AND (sucursal = %(s)s OR sucursal = 'TODAS')
+                        ORDER BY fecha, sucursal
+                        LIMIT 12
+                    """, {'hoy': hoy, 's': sucursal})
+                eventos_prox = [dict(r) for r in cur.fetchall()]
+            except Exception:
+                eventos_prox = []
+        items = []
+        for r in feriados_prox:
+            items.append({
+                'fecha': r['fecha'],
+                'descripcion': r.get('descripcion') or 'Feriado',
+                'tipo': r.get('tipo') or 'nacional',
+                'origen': 'feriado',
+                'sucursal': 'TODAS',
+            })
+        vistos_eventos = set()
+        for r in eventos_prox:
+            key = (r['fecha'], r.get('descripcion') or '', r.get('sucursal') or '')
+            if key in vistos_eventos:
+                continue
+            vistos_eventos.add(key)
+            items.append({
+                'fecha': r['fecha'],
+                'descripcion': r.get('descripcion') or 'Evento',
+                'tipo': 'evento',
+                'origen': 'evento',
+                'sucursal': r.get('sucursal') or 'TODAS',
+            })
+        items.sort(key=lambda x: (x['fecha'], 0 if x['origen'] == 'feriado' else 1, x['descripcion']))
+        for item in items[:3]:
+            item['dias_restantes'] = (date.fromisoformat(item['fecha']) - hoy).days
+            proximos_eventos.append(item)
+    except Exception:
+        pass
+    proximo_feriado = next((item for item in proximos_eventos if item.get('origen') == 'feriado'), None)
 
     return {
         'mes': mes,
@@ -477,6 +856,192 @@ def get_calendario(sucursal: str, mes: str, umbral_override: float | None, metri
         'dias': dias,
         'kpis': kpis,
         'picos_count': sum(1 for d in dias if d['es_pico']),
+        'proximo_feriado': proximo_feriado,
+        'proximos_eventos': proximos_eventos,
+        'kpis_anterior': kpis_anterior,
+        'dias_anterior': dias_anterior,
+    }
+
+
+def export_dias_detalle_periodo(
+    sucursal: str,
+    desde: str = '2025-01',
+    hasta: str | None = None,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+) -> tuple[BytesIO, str, str]:
+    hasta = hasta or date.today().strftime('%Y-%m')
+    meses = _iter_meses(desde, hasta)
+
+    wb = Workbook()
+    ws_res = wb.active
+    ws_res.title = 'Resumen mensual'
+    ws_det = wb.create_sheet('Detalle diario')
+
+    header_fill = PatternFill('solid', fgColor='1F2937')
+    header_font = Font(color='FFFFFF', bold=True)
+
+    def style_ws(ws, widths: list[int]) -> None:
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for row in ws.iter_rows(min_row=1, max_row=1):
+            for cell in row:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center')
+        for idx, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(idx)].width = width
+
+    resumen_headers = [
+        'Mes', 'Sucursal', 'Metrica pico', 'Umbral %', 'Promedio mes',
+        'Umbral pico', 'Dias con detalle', 'Dias pico', 'Bultos', 'HL',
+        'Pallets', 'UP', 'Pedidos / PDV atendidos', 'PDV unicos',
+        'Salidas', 'NDS %', '% rechazo PDV', '% rechazo bultos', '% rechazo HL',
+    ]
+    detalle_headers = [
+        'Mes', 'Fecha', 'Sucursal', 'Bultos', 'HL', 'Pallets', 'UP',
+        'Pedidos / PDV atendidos', 'PDV unicos', 'NDS %', 'Ausentismo',
+        '% rechazo PDV', '% rechazo bultos', '% rechazo HL', 'Salidas',
+        'Dot S1 personas', 'Dot S1 camiones', 'Dot S2 personas', 'Dot S2 camiones',
+        'Dot total personas', 'Dot total camiones', 'Pico', 'Feriado',
+        'Tipo feriado', 'Evento', 'Metrica pico', 'Valor metrica',
+        'Promedio mes', 'Umbral pico', 'Proyeccion',
+    ]
+    ws_res.append(resumen_headers)
+    ws_det.append(detalle_headers)
+
+    def detail_row(mes_key: str, cal: dict, d: dict) -> list:
+        dot = d.get('dot') or {}
+        s1 = dot.get('s1') or {}
+        s2 = dot.get('s2') or {}
+        return [
+            mes_key,
+            d.get('fecha'),
+            sucursal,
+            float(d.get('bultos') or 0),
+            float(d.get('hectolitros') or 0),
+            float(d.get('pallets') or 0),
+            float(d.get('up') or 0),
+            int(d.get('pedidos') or 0),
+            int(d.get('clientes_unicos') or 0),
+            float(d.get('nds') if d.get('nds') is not None else 100),
+            int(d.get('ausentismo') or 0),
+            float(d.get('pct_rechazo_pedidos') or 0),
+            float(d.get('pct_rechazo_bultos') or 0),
+            float(d.get('pct_rechazo_hl') or 0),
+            int(dot.get('total_camiones') if dot.get('tiene_datos') else (d.get('camiones_salidos') or 0)),
+            int(s1.get('personas') or 0) if s1 else None,
+            int(s1.get('camiones') or 0) if s1 else None,
+            int(s2.get('personas') or 0) if s2 else None,
+            int(s2.get('camiones') or 0) if s2 else None,
+            int(dot.get('total_personas') or 0) if dot.get('tiene_datos') else None,
+            int(dot.get('total_camiones') or 0) if dot.get('tiene_datos') else None,
+            'SI' if d.get('es_pico') else 'NO',
+            d.get('feriado_desc') or '',
+            d.get('feriado_tipo') or '',
+            d.get('evento_desc') or '',
+            cal.get('metrica'),
+            float(d.get('metrica_val') or 0),
+            float(cal.get('avg_mes') or 0),
+            float(cal.get('umbral_val') or 0),
+            'SI' if d.get('es_proyeccion') else 'NO',
+        ]
+
+    for mes_key in meses:
+        cal = get_calendario(sucursal, mes_key, umbral_override, metrica_override, incluir_complementos=False)
+        dias = cal.get('dias') or []
+        kpis = cal.get('kpis') or {}
+        ws_res.append([
+            mes_key,
+            sucursal,
+            cal.get('metrica'),
+            cal.get('umbral_pct'),
+            cal.get('avg_mes'),
+            cal.get('umbral_val'),
+            len(dias),
+            cal.get('picos_count') or sum(1 for d in dias if d.get('es_pico')),
+            kpis.get('bultos'),
+            kpis.get('hectolitros'),
+            kpis.get('pallets'),
+            kpis.get('up'),
+            kpis.get('pedidos'),
+            kpis.get('clientes'),
+            kpis.get('camiones'),
+            kpis.get('nds'),
+            kpis.get('pct_rechazo_pedidos'),
+            kpis.get('pct_rechazo_bultos'),
+            kpis.get('pct_rechazo_hl'),
+        ])
+
+        ws_mes = wb.create_sheet(mes_key)
+        ws_mes.append(detalle_headers)
+        for d in dias:
+            row = detail_row(mes_key, cal, d)
+            ws_det.append(row)
+            ws_mes.append(row)
+        style_ws(ws_mes, [10, 12, 12, 12, 10, 10, 10, 18, 12, 10, 12, 14, 16, 14, 10, 14, 14, 14, 14, 16, 16, 8, 24, 14, 24, 12, 12, 12, 12, 10])
+
+    style_ws(ws_res, [10, 12, 14, 10, 14, 12, 14, 10, 12, 10, 10, 10, 18, 12, 10, 10, 14, 16, 14])
+    style_ws(ws_det, [10, 12, 12, 12, 10, 10, 10, 18, 12, 10, 12, 14, 16, 14, 10, 14, 14, 14, 14, 16, 16, 8, 24, 14, 24, 12, 12, 12, 12, 10])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = f'dias_detalle_{sucursal}_{desde}_a_{hasta}.xlsx'.replace('/', '-')
+    return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def get_cobertura_picos(empresa_id: str, sucursal_id: str, anio: int, mes: int) -> dict:
+    """Cruza días pico del mes con dotación operativa. Devuelve semáforo por día pico."""
+    mes_str = f"{anio}-{mes:02d}"
+    cal = get_calendario(sucursal_id, mes_str, None, None)
+    dias_pico = [d for d in cal.get('dias', []) if d.get('es_pico')]
+
+    if not dias_pico:
+        return {'picos': [], 'resumen': {'total': 0, 'con_s2': 0, 'sin_s2': 0, 'sin_datos': 0, 'avg_personas': 0, 'pct_cobertura_s2': 0}}
+
+    personas_vals = [d['dot']['total_personas'] for d in dias_pico if d['dot'].get('tiene_datos') and d['dot']['total_personas'] > 0]
+    avg_personas = sum(personas_vals) / len(personas_vals) if personas_vals else 0
+
+    picos = []
+    for d in dias_pico:
+        dot = d.get('dot', {})
+        tiene_datos = dot.get('tiene_datos', False)
+        tiene_s2    = dot.get('tiene_s2', False)
+        total_p     = dot.get('total_personas', 0)
+
+        if not tiene_datos:
+            semaforo = 'rojo'
+        elif not tiene_s2:
+            semaforo = 'amarillo'
+        elif avg_personas > 0 and total_p < avg_personas * 0.8:
+            semaforo = 'rojo'
+        else:
+            semaforo = 'verde'
+
+        picos.append({
+            'fecha':       d['fecha'],
+            'bultos':      d['bultos'],
+            'hectolitros': d['hectolitros'],
+            'nds':         d['nds'],
+            'dot':         dot,
+            'semaforo':    semaforo,
+        })
+
+    con_s2    = sum(1 for p in picos if p['dot'].get('tiene_s2'))
+    sin_datos = sum(1 for p in picos if not p['dot'].get('tiene_datos'))
+    sin_s2    = len(picos) - con_s2 - sin_datos
+
+    return {
+        'picos': picos,
+        'resumen': {
+            'total':             len(picos),
+            'con_s2':            con_s2,
+            'sin_s2':            sin_s2,
+            'sin_datos':         sin_datos,
+            'avg_personas':      round(avg_personas, 1),
+            'pct_cobertura_s2':  round(con_s2 / len(picos) * 100, 1) if picos else 0,
+        },
     }
 
 
@@ -577,7 +1142,12 @@ def get_kpis(sucursal: str, mes: str) -> dict:
 
 # ── Histórico mensual ─────────────────────────────────────────
 
-def get_historico(sucursal: str, n_meses: int) -> dict:
+def get_historico(
+    sucursal: str,
+    n_meses: int,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+) -> dict:
     ensure_ventas_detalle_table()
 
     hoy = date.today()
@@ -589,6 +1159,17 @@ def get_historico(sucursal: str, n_meses: int) -> dict:
 
     swv = _suc_filter(sucursal, 'v')
     p   = {'ini': ini, 'fin': fin, 's': sucursal}
+    params_db = get_params(sucursal)
+    umbral = umbral_override if umbral_override is not None else float(params_db['umbral_pct'])
+    metrica = metrica_override if metrica_override is not None else params_db['metrica']
+    metrica_expr = {
+        'bultos': 'SUM(COALESCE(v.bultos, 0))',
+        'hectolitros': 'SUM(COALESCE(v.unidad_medida, 0))',
+        'pallets': f'SUM({V_PALLETS_EXPR})',
+        'up': 'SUM(COALESCE(v.unidad_paquete, 0))',
+        'pedidos': f'COUNT(DISTINCT {V_PEDIDO_KEY})',
+        'clientes': f'COUNT(DISTINCT {V_CLIENT_KEY})',
+    }.get(metrica, 'SUM(COALESCE(v.bultos, 0))')
 
     with pg_cursor() as cur:
         cur.execute(f"""
@@ -625,9 +1206,53 @@ def get_historico(sucursal: str, n_meses: int) -> dict:
         """, p)
         dm = {r['mes']: dict(r) for r in cur.fetchall()}
 
+        # Salidas reales desde operacion_camiones (solo camiones del sheet)
+        where_suc_oc = "" if sucursal == 'TODAS' else "AND sucursal_id = %(s)s"
+        try:
+            cur.execute(f"""
+                SELECT TO_CHAR(fecha,'YYYY-MM') AS mes, COUNT(*) AS total_salidas
+                FROM operacion_camiones
+                WHERE empresa_id = '1'
+                  AND fecha BETWEEN %(ini)s AND %(fin)s
+                  {where_suc_oc}
+                GROUP BY 1
+            """, p)
+            dm_sheets = {r['mes']: int(r['total_salidas']) for r in cur.fetchall()}
+        except Exception:
+            dm_sheets = {}
+
+        cur.execute(f"""
+            SELECT TO_CHAR(v.fecha,'YYYY-MM') AS mes,
+                v.fecha::text AS fecha,
+                {metrica_expr} AS metrica_val
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            {V_REC_JOIN}
+            WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
+              AND {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+            GROUP BY 1, v.fecha
+        """, p)
+        valores_dia = {}
+        for row in cur.fetchall():
+            val = float(row.get('metrica_val') or 0)
+            if val > 0:
+                valores_dia.setdefault(row['mes'], []).append(val)
+
+    picos_mes = {}
+    for mk, vals in valores_dia.items():
+        avg = sum(vals) / len(vals) if vals else 0
+        umbral_val = avg * umbral
+        picos_mes[mk] = {
+            'dias_pico': sum(1 for val in vals if val >= umbral_val),
+            'promedio_pico': round(avg, 1),
+            'umbral_pico': round(umbral_val, 1),
+        }
+
     result = []
     for mk in sorted(dm):
         d  = dm.get(mk, {})
+        pico_info = picos_mes.get(mk, {'dias_pico': 0, 'promedio_pico': 0, 'umbral_pico': 0})
         br = float(d.get('b_rec') or 0)
         brp = float(d.get('b_rec_parcial') or 0)
         brt = float(d.get('b_rec_total') or 0)
@@ -654,8 +1279,14 @@ def get_historico(sucursal: str, n_meses: int) -> dict:
             'up':          round(up, 1),
             'hectolitros': round(ht, 1),
             'importe':     round(float(d.get('importe') or 0), 2),
-            'camiones':    int(d.get('camiones') or 0),
+            'camiones':        int(d.get('camiones') or 0),
+            'camiones_sheets': dm_sheets.get(mk, 0),
             'dias':        int(d.get('dias') or 0),
+            'dias_pico':   pico_info['dias_pico'],
+            'promedio_pico': pico_info['promedio_pico'],
+            'umbral_pico': pico_info['umbral_pico'],
+            'metrica_pico': metrica,
+            'umbral_pct': umbral,
             'rechazo_bultos': round(br, 1),
             'rechazo_bultos_parcial': round(brp, 1),
             'rechazo_bultos_total': round(brt, 1),
@@ -1074,7 +1705,15 @@ def get_ausentismo_mensual(empresa_id: str, sucursal_id: str, anio: int) -> list
             ORDER BY mes
         """, {'e': empresa_id, 's': sucursal_id, 'a': anio})
         rows = [dict(r) for r in cur.fetchall()]
-    # Completar meses faltantes con None
+        # Sin datos específicos → usar TODAS como proxy
+        if not rows and sucursal_id != 'TODAS':
+            cur.execute("""
+                SELECT mes, pct_ausentismo
+                FROM ausentismo_mensual
+                WHERE empresa_id = %(e)s AND sucursal_id = 'TODAS' AND anio = %(a)s
+                ORDER BY mes
+            """, {'e': empresa_id, 'a': anio})
+            rows = [dict(r) for r in cur.fetchall()]
     by_mes = {r['mes']: float(r['pct_ausentismo']) for r in rows}
     return [
         {'mes': m, 'nombre': NOMBRES_MES[m - 1], 'pct_ausentismo': by_mes.get(m)}
@@ -1110,17 +1749,20 @@ def guardar_ausentismo_mensual(data: dict) -> dict:
 
 
 def _aus_mensual_by_mes(empresa_id: str, sucursal_id: str, anio: int) -> dict[int, float]:
-    """Devuelve {mes: pct} para el año indicado. Si no hay datos, intenta el año anterior."""
+    """Devuelve {mes: pct}. Fallback a TODAS si no hay datos por sucursal, luego al año anterior."""
     _ensure_ausentismo_mensual_table()
+    # Orden de búsqueda: sucursal específica → TODAS → mismo orden en año anterior
+    candidatos = [sucursal_id] if sucursal_id == 'TODAS' else [sucursal_id, 'TODAS']
     for a in (anio, anio - 1):
-        with pg_cursor() as cur:
-            cur.execute("""
-                SELECT mes, pct_ausentismo FROM ausentismo_mensual
-                WHERE empresa_id = %(e)s AND sucursal_id = %(s)s AND anio = %(a)s
-            """, {'e': empresa_id, 's': sucursal_id, 'a': a})
-            rows = cur.fetchall()
-        if rows:
-            return {r['mes']: float(r['pct_ausentismo']) for r in rows}
+        for suc in candidatos:
+            with pg_cursor() as cur:
+                cur.execute("""
+                    SELECT mes, pct_ausentismo FROM ausentismo_mensual
+                    WHERE empresa_id = %(e)s AND sucursal_id = %(s)s AND anio = %(a)s
+                """, {'e': empresa_id, 's': suc, 'a': a})
+                rows = cur.fetchall()
+            if rows:
+                return {r['mes']: float(r['pct_ausentismo']) for r in rows}
     return {}
 
 
@@ -1231,21 +1873,7 @@ def sugerir_periodos_criticos(sucursal: str, anio: int) -> list[dict]:
     # --- A) Ausentismo mensual histórico (tabla PostgreSQL) ---
     aus_hist = _aus_mensual_by_mes(empresa_id, sucursal, anio)
 
-    # --- Ausentismo diario desde MySQL (si está disponible) ---
     aus_diario: dict[str, int] = {}
-    try:
-        from app.services import ausentismo_svc
-        suc_param = None if sucursal == 'TODAS' else sucursal
-        for mes_num in range(1, 13):
-            mes_str = f"{anio}-{mes_num:02d}"
-            result = ausentismo_svc.get_ausentismo(sucursal=suc_param, mes=mes_str)
-            if result.get('disponible'):
-                for row in (result.get('data') or []):
-                    fk = str(row.get('fecha') or '')[:10]
-                    if fk:
-                        aus_diario[fk] = int(row.get('ausentes') or 0)
-    except Exception:
-        pass
 
     vols = [float(d.get('b_tot') or 0) for d in dias_raw.values() if float(d.get('b_tot') or 0) > 0]
     avg_vol = sum(vols) / len(vols) if vols else 1.0
@@ -1469,33 +2097,54 @@ def get_dotacion_mensual(empresa_id: str, anio: int, anio_base: int) -> dict:
 
     with pg_cursor() as cur:
         cur.execute("""
-            WITH daily AS (
+            WITH by_salida AS (
                 SELECT
                     EXTRACT(YEAR  FROM fecha)::int AS anio,
                     EXTRACT(MONTH FROM fecha)::int AS mes,
-                    sucursal_id,
-                    fecha,
-                    COUNT(*)                                              AS n_salidas,
-                    COUNT(chofer)                                         AS n_choferes,
-                    COUNT(ayudante_1) FILTER (WHERE ayudante_1 IS NOT NULL
-                                              AND   ayudante_1 != '')    AS n_ayu1,
-                    COUNT(ayudante_2) FILTER (WHERE ayudante_2 IS NOT NULL
-                                              AND   ayudante_2 != '')    AS n_ayu2
+                    sucursal_id, fecha, nro_salida,
+                    COUNT(*)                                                          AS n_chof,
+                    COUNT(ayudante_1) FILTER (WHERE ayudante_1 IS NOT NULL AND ayudante_1 != '') AS n_ayu1,
+                    COUNT(ayudante_2) FILTER (WHERE ayudante_2 IS NOT NULL AND ayudante_2 != '') AS n_ayu2
                 FROM operacion_camiones
                 WHERE empresa_id = %(e)s
                   AND fecha BETWEEN %(ini)s AND %(fin)s
-                GROUP BY 1, 2, 3, 4
+                GROUP BY 1,2,3,4,5
+            ),
+            combined AS (
+                SELECT anio, mes, sucursal_id, fecha,
+                    SUM(n_chof) AS n_chof, SUM(n_ayu1) AS n_ayu1, SUM(n_ayu2) AS n_ayu2
+                FROM by_salida GROUP BY 1,2,3,4
             )
-            SELECT anio, mes, sucursal_id,
-                   COUNT(DISTINCT fecha)          AS dias,
-                   ROUND(AVG(n_salidas),  1)      AS avg_salidas,
-                   ROUND(AVG(n_choferes), 1)      AS avg_choferes,
-                   ROUND(AVG(n_ayu1),     1)      AS avg_ayu1,
-                   ROUND(AVG(n_ayu2),     1)      AS avg_ayu2,
-                   ROUND(AVG(n_choferes + n_ayu1 + n_ayu2), 1) AS avg_personas
-            FROM daily
-            GROUP BY 1, 2, 3
-            ORDER BY 1, 2, 3
+            SELECT
+                c.anio, c.mes, c.sucursal_id,
+                -- Combinado (S1 + S2)
+                COUNT(DISTINCT c.fecha)                                               AS dias,
+                SUM(c.n_chof)                                                         AS total_salidas,
+                ROUND(AVG(c.n_chof), 1)                                               AS avg_choferes,
+                ROUND(AVG(c.n_ayu1), 1)                                               AS avg_ayu1,
+                ROUND(AVG(c.n_ayu2), 1)                                               AS avg_ayu2,
+                ROUND(AVG(c.n_chof + c.n_ayu1 + c.n_ayu2), 1)                       AS avg_personas,
+                -- S1 (reparto)
+                COUNT(DISTINCT s1.fecha)                                               AS s1_dias,
+                COALESCE(SUM(s1.n_chof), 0)                                           AS s1_total,
+                ROUND(AVG(s1.n_chof), 1)                                              AS s1_avg_chof,
+                ROUND(AVG(s1.n_ayu1), 1)                                              AS s1_avg_ayu1,
+                ROUND(AVG(s1.n_ayu2), 1)                                              AS s1_avg_ayu2,
+                ROUND(AVG(s1.n_chof + s1.n_ayu1 + s1.n_ayu2), 1)                    AS s1_avg_pers,
+                -- S2 (recargas)
+                COUNT(DISTINCT s2.fecha)                                               AS s2_dias,
+                COALESCE(SUM(s2.n_chof), 0)                                           AS s2_total,
+                ROUND(AVG(s2.n_chof), 1)                                              AS s2_avg_chof,
+                ROUND(AVG(s2.n_ayu1), 1)                                              AS s2_avg_ayu1,
+                ROUND(AVG(s2.n_ayu2), 1)                                              AS s2_avg_ayu2,
+                ROUND(AVG(s2.n_chof + s2.n_ayu1 + s2.n_ayu2), 1)                    AS s2_avg_pers
+            FROM combined c
+            LEFT JOIN by_salida s1 ON s1.anio=c.anio AND s1.mes=c.mes
+                AND s1.sucursal_id=c.sucursal_id AND s1.fecha=c.fecha AND s1.nro_salida=1
+            LEFT JOIN by_salida s2 ON s2.anio=c.anio AND s2.mes=c.mes
+                AND s2.sucursal_id=c.sucursal_id AND s2.fecha=c.fecha AND s2.nro_salida=2
+            GROUP BY c.anio, c.mes, c.sucursal_id
+            ORDER BY 1,2,3
         """, p)
         rows = [dict(r) for r in cur.fetchall()]
 
@@ -1504,45 +2153,100 @@ def get_dotacion_mensual(empresa_id: str, anio: int, anio_base: int) -> dict:
     for r in rows:
         by_key[(r['anio'], r['mes'], r['sucursal_id'])] = r
 
+    def _s_block(d, prefix):
+        dias = int(d.get(f'{prefix}_dias') or 0)
+        return {
+            'dias':     dias,
+            'total':    int(d.get(f'{prefix}_total')    or 0),
+            'avg_chof': float(d.get(f'{prefix}_avg_chof') or 0) if dias else None,
+            'avg_ayu1': float(d.get(f'{prefix}_avg_ayu1') or 0) if dias else None,
+            'avg_ayu2': float(d.get(f'{prefix}_avg_ayu2') or 0) if dias else None,
+            'avg_pers': float(d.get(f'{prefix}_avg_pers') or 0) if dias else None,
+            'tiene_datos': dias > 0,
+        }
+
     # Calcular totals empresa (CC + Dolores) por año+mes
     from collections import defaultdict
     total_tmp: dict = defaultdict(lambda: {
-        'dias': 0, 'avg_salidas': 0.0, 'avg_choferes': 0.0,
-        'avg_ayu1': 0.0, 'avg_ayu2': 0.0, 'avg_personas': 0.0, '_n': 0,
+        'dias': 0, 'total_salidas': 0, 'avg_choferes': 0.0,
+        'avg_ayu1': 0.0, 'avg_ayu2': 0.0, 'avg_personas': 0.0,
+        's1_dias': 0, 's1_total': 0, 's1_avg_chof': 0.0, 's1_avg_ayu1': 0.0, 's1_avg_ayu2': 0.0, 's1_avg_pers': 0.0,
+        's2_dias': 0, 's2_total': 0, 's2_avg_chof': 0.0, 's2_avg_ayu1': 0.0, 's2_avg_ayu2': 0.0, 's2_avg_pers': 0.0,
     })
     for r in rows:
         k = (r['anio'], r['mes'])
         t = total_tmp[k]
-        t['avg_salidas']  += float(r['avg_salidas']  or 0)
-        t['avg_choferes'] += float(r['avg_choferes'] or 0)
-        t['avg_ayu1']     += float(r['avg_ayu1']     or 0)
-        t['avg_ayu2']     += float(r['avg_ayu2']     or 0)
-        t['avg_personas'] += float(r['avg_personas'] or 0)
-        t['dias']          = max(t['dias'], int(r['dias'] or 0))
-        t['_n']           += 1
+        t['total_salidas'] += int(r['total_salidas'] or 0)
+        t['avg_choferes']  += float(r['avg_choferes'] or 0)
+        t['avg_ayu1']      += float(r['avg_ayu1']     or 0)
+        t['avg_ayu2']      += float(r['avg_ayu2']     or 0)
+        t['avg_personas']  += float(r['avg_personas'] or 0)
+        t['dias']           = max(t['dias'], int(r['dias'] or 0))
+        t['s1_dias']       += int(r['s1_dias']  or 0)
+        t['s1_total']      += int(r['s1_total'] or 0)
+        t['s1_avg_chof']   += float(r['s1_avg_chof'] or 0) if r['s1_dias'] else 0
+        t['s1_avg_ayu1']   += float(r['s1_avg_ayu1'] or 0) if r['s1_dias'] else 0
+        t['s1_avg_ayu2']   += float(r['s1_avg_ayu2'] or 0) if r['s1_dias'] else 0
+        t['s1_avg_pers']   += float(r['s1_avg_pers']  or 0) if r['s1_dias'] else 0
+        t['s2_dias']       += int(r['s2_dias']  or 0)
+        t['s2_total']      += int(r['s2_total'] or 0)
+        t['s2_avg_chof']   += float(r['s2_avg_chof'] or 0) if r['s2_dias'] else 0
+        t['s2_avg_ayu1']   += float(r['s2_avg_ayu1'] or 0) if r['s2_dias'] else 0
+        t['s2_avg_ayu2']   += float(r['s2_avg_ayu2'] or 0) if r['s2_dias'] else 0
+        t['s2_avg_pers']   += float(r['s2_avg_pers']  or 0) if r['s2_dias'] else 0
 
     def _row(anio, mes, suc):
         d = by_key.get((anio, mes, suc)) or {}
+        if not d:
+            return {'total_salidas': 0, 'avg_choferes': 0, 'avg_ayu1': 0, 'avg_ayu2': 0,
+                    'avg_personas': 0, 'dias': 0, 'tiene_datos': False,
+                    's1': {'dias':0,'total':0,'avg_chof':None,'avg_ayu1':None,'avg_ayu2':None,'avg_pers':None,'tiene_datos':False},
+                    's2': {'dias':0,'total':0,'avg_chof':None,'avg_ayu1':None,'avg_ayu2':None,'avg_pers':None,'tiene_datos':False}}
         return {
-            'avg_salidas':  float(d.get('avg_salidas')  or 0),
-            'avg_choferes': float(d.get('avg_choferes') or 0),
-            'avg_ayu1':     float(d.get('avg_ayu1')     or 0),
-            'avg_ayu2':     float(d.get('avg_ayu2')     or 0),
-            'avg_personas': float(d.get('avg_personas') or 0),
-            'dias':         int(d.get('dias')            or 0),
-            'tiene_datos':  bool(d),
+            'total_salidas': int(d.get('total_salidas') or 0),
+            'avg_choferes':  float(d.get('avg_choferes') or 0),
+            'avg_ayu1':      float(d.get('avg_ayu1')     or 0),
+            'avg_ayu2':      float(d.get('avg_ayu2')     or 0),
+            'avg_personas':  float(d.get('avg_personas') or 0),
+            'dias':          int(d.get('dias')            or 0),
+            'tiene_datos':   True,
+            's1':            _s_block(d, 's1'),
+            's2':            _s_block(d, 's2'),
         }
 
     def _total_row(anio, mes):
         t = total_tmp.get((anio, mes), {})
+        if not t:
+            return {'total_salidas': 0, 'avg_choferes': 0, 'avg_ayu1': 0, 'avg_ayu2': 0,
+                    'avg_personas': 0, 'dias': 0, 'tiene_datos': False,
+                    's1': {'dias':0,'total':0,'avg_chof':None,'avg_ayu1':None,'avg_ayu2':None,'avg_pers':None,'tiene_datos':False},
+                    's2': {'dias':0,'total':0,'avg_chof':None,'avg_ayu1':None,'avg_ayu2':None,'avg_pers':None,'tiene_datos':False}}
+        s1_tiene = t['s1_dias'] > 0
+        s2_tiene = t['s2_dias'] > 0
         return {
-            'avg_salidas':  round(float(t.get('avg_salidas')  or 0), 1),
-            'avg_choferes': round(float(t.get('avg_choferes') or 0), 1),
-            'avg_ayu1':     round(float(t.get('avg_ayu1')     or 0), 1),
-            'avg_ayu2':     round(float(t.get('avg_ayu2')     or 0), 1),
-            'avg_personas': round(float(t.get('avg_personas') or 0), 1),
-            'dias':         int(t.get('dias')                  or 0),
-            'tiene_datos':  bool(t),
+            'total_salidas': int(t.get('total_salidas')   or 0),
+            'avg_choferes':  round(float(t.get('avg_choferes') or 0), 1),
+            'avg_ayu1':      round(float(t.get('avg_ayu1')     or 0), 1),
+            'avg_ayu2':      round(float(t.get('avg_ayu2')     or 0), 1),
+            'avg_personas':  round(float(t.get('avg_personas') or 0), 1),
+            'dias':          int(t.get('dias') or 0),
+            'tiene_datos':   bool(t.get('total_salidas')),
+            's1': {
+                'dias': t['s1_dias'], 'total': t['s1_total'],
+                'avg_chof': round(t['s1_avg_chof'], 1) if s1_tiene else None,
+                'avg_ayu1': round(t['s1_avg_ayu1'], 1) if s1_tiene else None,
+                'avg_ayu2': round(t['s1_avg_ayu2'], 1) if s1_tiene else None,
+                'avg_pers':  round(t['s1_avg_pers'],  1) if s1_tiene else None,
+                'tiene_datos': s1_tiene,
+            },
+            's2': {
+                'dias': t['s2_dias'], 'total': t['s2_total'],
+                'avg_chof': round(t['s2_avg_chof'], 1) if s2_tiene else None,
+                'avg_ayu1': round(t['s2_avg_ayu1'], 1) if s2_tiene else None,
+                'avg_ayu2': round(t['s2_avg_ayu2'], 1) if s2_tiene else None,
+                'avg_pers':  round(t['s2_avg_pers'],  1) if s2_tiene else None,
+                'tiene_datos': s2_tiene,
+            },
         }
 
     meses = []
@@ -1584,6 +2288,7 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
                 EXTRACT(MONTH FROM v.fecha)::int AS mes,
                 SUM(COALESCE(v.bultos, 0))                                           AS b_tot,
                 SUM(COALESCE(v.unidad_medida, 0))                                    AS hl_tot,
+                SUM({V_PALLETS_EXPR})                                                AS pallets_tot,
                 COUNT(DISTINCT {V_CLIENT_KEY})                                        AS pdv_unicos,
                 COUNT(DISTINCT {V_TRUCK_DAY_KEY})                                     AS salidas,
                 COUNT(DISTINCT {V_PEDIDO_KEY})                                        AS p_tot,
@@ -1647,6 +2352,7 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
             return None
         b_tot  = float(v.get('b_tot')  or 0)
         hl_tot = float(v.get('hl_tot') or 0)
+        pallets_tot = float(v.get('pallets_tot') or 0)
         p_tot  = int(v.get('p_tot')    or 0)
         p_rec  = int(v.get('p_rec')    or 0)
         b_rec  = float(v.get('b_rec')  or 0)
@@ -1655,8 +2361,14 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
         return {
             'bultos':       round(b_tot,  0),
             'hl':           round(hl_tot, 1),
+            'pallets':      round(pallets_tot, 2),
             'pdv_unicos':   int(v.get('pdv_unicos') or 0),
-            'salidas':      int(v.get('salidas')    or 0),
+            'salidas':      int(v.get('salidas')    or 0),  # ventas (fallback)
+            'salidas_sheets': (
+                dot_m.get('cc',    {}) if sucursal == '1' else
+                dot_m.get('dl',    {}) if sucursal == '2' else
+                dot_m.get('total', {})
+            ).get('total_salidas', 0),
             'p_tot':        p_tot,
             'pct_rec_hl':   round(hl_rec / hl_tot * 100, 2) if hl_tot else 0,
             'pct_rec_blt':  round(b_rec  / b_tot  * 100, 2) if b_tot  else 0,
