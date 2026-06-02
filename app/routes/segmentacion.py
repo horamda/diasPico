@@ -682,6 +682,21 @@ def auditoria():
 # Recálculo
 # ─────────────────────────────────────────────────────────────
 
+@bp.post('/historico/recalcular')
+def recalcular_historico():
+    try:
+        body = request.get_json(silent=True) or {}
+        return _ok(svc.recalcular_historico_mensual(
+            desde_anio=int(body.get('desde_anio', 2025)),
+            desde_mes=int(body.get('desde_mes', 1)),
+            hasta_anio=int(body['hasta_anio']) if body.get('hasta_anio') else None,
+            hasta_mes=int(body['hasta_mes']) if body.get('hasta_mes') else None,
+            ejecutado_por=str(body.get('ejecutado_por', 'api_historico')),
+        ))
+    except Exception as e:
+        return _err(e, 500)
+
+
 @bp.post('/recalcular')
 def recalcular():
     """

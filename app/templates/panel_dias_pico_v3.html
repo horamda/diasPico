@@ -268,6 +268,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   <span class="badge">OPS</span>
   <h1>Panel de Días Pico</h1>
   <div class="right">
+    <a class="btn sm" href="/portal" title="Volver al dashboard general">Dashboard</a>
     <label style="font-size:11px;color:var(--muted)">Sucursal</label>
     <select id="selSucursal" onchange="onSucursalChange()"><option value="TODAS">Todas</option></select>
     <label style="font-size:11px;color:var(--muted)">Métrica</label>
@@ -1031,6 +1032,42 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div id="sucList"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
     </div>
 
+    <div class="box" style="margin-bottom:14px">
+      <div class="sec" style="margin-bottom:12px">Ausentismo mensual</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
+        Cargá el porcentaje mensual para que impacte en el dashboard general, el histórico y la planificación de días pico. Si se carga en <strong>Todas</strong>, se usa como fallback para las sucursales sin dato propio.
+      </div>
+      <div class="objective-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="ausSucursal"><option value="TODAS">Todas</option></select>
+        </div>
+        <div class="filter-field">
+          <label>Año</label>
+          <input type="number" id="ausAnio" min="2020" max="2035" step="1">
+        </div>
+        <div class="filter-field">
+          <label>Mes</label>
+          <select id="ausMes">
+            <option value="1">Enero</option><option value="2">Febrero</option>
+            <option value="3">Marzo</option><option value="4">Abril</option>
+            <option value="5">Mayo</option><option value="6">Junio</option>
+            <option value="7">Julio</option><option value="8">Agosto</option>
+            <option value="9">Septiembre</option><option value="10">Octubre</option>
+            <option value="11">Noviembre</option><option value="12">Diciembre</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Ausentismo %</label>
+          <input type="number" id="ausPct" min="0" max="100" step="0.01" placeholder="Ej: 7.5">
+        </div>
+        <button class="btn" onclick="loadAusentismoMensual()">Cargar</button>
+        <button class="btn primary" onclick="saveAusentismoMensual()">Guardar</button>
+      </div>
+      <div id="ausMsg" style="font-size:11px;min-height:16px;margin-top:8px"></div>
+      <div id="ausResumen" style="margin-top:10px"></div>
+    </div>
+
     <div class="box">
       <div class="sec" style="margin-bottom:12px">Motivos de rechazo</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
@@ -1515,7 +1552,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="/static/app.js?v=20260524-1"></script>
+<script src="/static/app.js?v=20260602-1"></script>
 <script src="/static/simulador_logistico.js?v=20260524-1"></script>
 
 </body>

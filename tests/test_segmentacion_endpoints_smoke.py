@@ -98,6 +98,40 @@ def test_get_resumen_activos_localidad_smoke(client, monkeypatch):
     assert payload["data"][0]["clientes_activos_localidad"] == 12
 
 
+def test_post_historico_recalcular_dispara_servicio(client, monkeypatch):
+    captured = {}
+
+    def fake_recalcular(**kwargs):
+        captured.update(kwargs)
+        return {
+            "periodos_solicitados": 2,
+            "periodos_procesados": 2,
+            "errores": [],
+        }
+
+    monkeypatch.setattr(segmentacion.svc, "recalcular_historico_mensual", fake_recalcular)
+
+    res = client.post("/api/segmentacion/historico/recalcular", json={
+        "desde_anio": 2025,
+        "desde_mes": 1,
+        "hasta_anio": 2025,
+        "hasta_mes": 2,
+        "ejecutado_por": "pytest",
+    })
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["periodos_procesados"] == 2
+    assert captured == {
+        "desde_anio": 2025,
+        "desde_mes": 1,
+        "hasta_anio": 2025,
+        "hasta_mes": 2,
+        "ejecutado_por": "pytest",
+    }
+
+
 def test_post_autoelevador_import_smoke(client, monkeypatch):
     monkeypatch.setattr(segmentacion.svc, "bulk_upsert_autoelevador", lambda registros, fuente="api": len(registros))
 

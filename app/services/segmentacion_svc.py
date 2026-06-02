@@ -15,7 +15,7 @@ import time
 from calendar import monthrange
 from datetime import date, datetime
 from threading import Lock
-from typing import Any
+from typing import Any, Iterable
 
 import psycopg2.extras
 
@@ -1090,6 +1090,10 @@ def build_periodo_payload(data: dict | None = None, today: date | None = None) -
         raise ValueError('fecha_desde no puede ser posterior a fecha_hasta')
     if fecha_base_desde > fecha_base_hasta:
         raise ValueError('fecha_base_desde no puede ser posterior a fecha_base_hasta')
+
+    if periodo_mes and data.get('fecha_hasta') not in (None, ''):
+        periodo_anio = fecha_hasta.year
+        periodo_mes = fecha_hasta.month
 
     return {
         'empresa_id': str(data.get('empresa_id') or '1'),
@@ -2654,25 +2658,8 @@ def _get_plan_servicio_light_rows() -> list[dict]:
     def _load() -> list[dict]:
         with pg_conn() as conn:
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-                cur.execute("""
-                    SELECT
-                        cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
-                        autoelevador, cluster_dpo, subcluster_logistico,
-                        ingreso, ventas_anio_actual, ventas_anio_anterior,
-                        venta_anio_base, venta_base_mismo_per, venta_ytd, hl_ytd,
-                        bultos_ytd, pallets_ytd, up_ytd, pedidos_ytd,
-                        dropsize_bultos_ytd, ticket_promedio_ytd, rechazos_ytd,
-                        pct_rechazo_pedidos, crecimiento_pct, nps_valor, rmd_valor,
-                        costo_entrega, costo_almacen, costo_logistico_total,
-                        margen_logistico_proxy, ratio_costo_logistico_pct,
-                        p25_ingresos, p50_ingresos, p75_ingresos,
-                        p25_crecimiento, p50_crecimiento, p75_crecimiento,
-                        umbral_venta_alta, umbral_venta_baja, umbral_crecimiento,
-                        score_total, dim_negocio, dim_productividad, dim_servicio,
-                        dim_rentabilidad, dim_geo, pts_venta, pts_hl, pts_crecimiento,
-                        pts_dropsize, pts_rechazos, pts_rmd, pts_nps,
-                        plan_servicio, accion_prioritaria, alerta_operativa,
-                        prioridad_gestion
+                cur.execute(f"""
+                    SELECT {_DPO_CACHE_SELECT}
                     FROM seg_cliente_dpo_cache
                     ORDER BY venta_ytd DESC NULLS LAST
                 """)
@@ -3536,6 +3523,112 @@ def get_auditoria(limit: int = 50) -> list[dict]:
 # ─────────────────────────────────────────────────────────────
 # Recalcular y guardar histórico
 # ─────────────────────────────────────────────────────────────
+
+def _iter_months(
+    desde_anio: int,
+    desde_mes: int,
+    hasta_anio: int,
+    hasta_mes: int,
+) -> Iterable[tuple[int, int]]:
+    if not 1 <= desde_mes <= 12 or not 1 <= hasta_mes <= 12:
+        raise ValueError('desde_mes y hasta_mes deben estar entre 1 y 12')
+    current = date(int(desde_anio), int(desde_mes), 1)
+    end = date(int(hasta_anio), int(hasta_mes), 1)
+    if current > end:
+        raise ValueError('El periodo desde no puede ser posterior al periodo hasta')
+    while current <= end:
+        yield current.year, current.month
+        if current.month == 12:
+            current = date(current.year + 1, 1, 1)
+        else:
+            current = date(current.year, current.month + 1, 1)
+
+
+def _periodo_mensual_payload(anio: int, mes: int, empresa_id: str = '1') -> dict:
+    fecha_hasta = date(anio, mes, monthrange(anio, mes)[1])
+    return {
+        'empresa_id': empresa_id,
+        'periodo_anio': anio,
+        'periodo_mes': mes,
+        'fecha_desde': date(anio, 1, 1),
+        'fecha_hasta': fecha_hasta,
+        'fecha_base_desde': date(anio - 1, 1, 1),
+        'fecha_base_hasta': _same_month_day_previous_year(fecha_hasta),
+    }
+
+
+def _period_end_from_payload(periodo: dict) -> tuple[int, int]:
+    fecha_hasta = periodo.get('fecha_hasta')
+    if isinstance(fecha_hasta, datetime):
+        return fecha_hasta.year, fecha_hasta.month
+    if isinstance(fecha_hasta, date):
+        return fecha_hasta.year, fecha_hasta.month
+    if fecha_hasta:
+        parsed = date.fromisoformat(str(fecha_hasta)[:10])
+        return parsed.year, parsed.month
+    anio = int(periodo.get('periodo_anio') or date.today().year)
+    mes = int(periodo.get('periodo_mes') or date.today().month)
+    return anio, max(1, min(12, mes))
+
+
+def recalcular_historico_mensual(
+    desde_anio: int = 2025,
+    desde_mes: int = 1,
+    hasta_anio: int | None = None,
+    hasta_mes: int | None = None,
+    ejecutado_por: str = 'dashboard_historico',
+) -> dict:
+    ensure_tables()
+    original_periodo = get_periodo_activo()
+    empresa_id = str(original_periodo.get('empresa_id') or '1')
+    default_hasta_anio, default_hasta_mes = _period_end_from_payload(original_periodo)
+    hasta_anio = int(hasta_anio or default_hasta_anio)
+    hasta_mes = int(hasta_mes or default_hasta_mes)
+
+    periodos = list(_iter_months(int(desde_anio), int(desde_mes), hasta_anio, hasta_mes))
+    resultados: list[dict] = []
+    errores: list[dict] = []
+    t0 = time.time()
+
+    try:
+        for anio, mes in periodos:
+            payload = _periodo_mensual_payload(anio, mes, empresa_id)
+            try:
+                result = recalcular_clusters(
+                    anio,
+                    mes,
+                    f'{ejecutado_por}:{anio}-{mes:02d}',
+                    periodo_data=payload,
+                )
+                resultados.append({
+                    'periodo_anio': anio,
+                    'periodo_mes': mes,
+                    'procesados': result.get('procesados', 0),
+                    'por_cluster': result.get('por_cluster', {}),
+                    'duracion_ms': result.get('duracion_ms', 0),
+                })
+            except Exception as exc:
+                errores.append({
+                    'periodo_anio': anio,
+                    'periodo_mes': mes,
+                    'error': str(exc),
+                })
+    finally:
+        set_periodo_calculo(original_periodo)
+        refresh_segmentacion_cache(f'{ejecutado_por}:restore')
+
+    return {
+        'desde_anio': int(desde_anio),
+        'desde_mes': int(desde_mes),
+        'hasta_anio': hasta_anio,
+        'hasta_mes': hasta_mes,
+        'periodos_solicitados': len(periodos),
+        'periodos_procesados': len(resultados),
+        'errores': errores,
+        'resultados': resultados,
+        'duracion_ms': int((time.time() - t0) * 1000),
+    }
+
 
 def recalcular_clusters(
     periodo_anio: int | None = None,

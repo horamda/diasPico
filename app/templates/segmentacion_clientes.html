@@ -838,10 +838,13 @@
           <article class="panel">
             <div class="panel-head">
               <div class="panel-title"><i data-lucide="activity"></i>Evolucion mensual</div>
-              <select class="control" id="yearFilter" style="width: 120px;">
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-              </select>
+              <div class="inline-filters">
+                <select class="control" id="yearFilter" style="width: 120px;">
+                  <option value="2026">2026</option>
+                  <option value="2025">2025</option>
+                </select>
+                <button class="btn" id="backfillHistoryBtn" title="Recalcular historico mensual desde enero 2025"><i data-lucide="history"></i>Historico</button>
+              </div>
             </div>
             <div class="panel-body"><div class="chart-box tall"><canvas id="evolutionChart"></canvas></div></div>
           </article>
@@ -1087,6 +1090,7 @@
       state.loading = on;
       $("recalcBtn").disabled = on;
       $("reloadBtn").disabled = on;
+      if ($("backfillHistoryBtn")) $("backfillHistoryBtn").disabled = on;
       if ($("autoUploadBtn")) $("autoUploadBtn").disabled = on;
       if ($("serviceUploadBtn")) $("serviceUploadBtn").disabled = on;
     }
@@ -1231,10 +1235,11 @@
       const avgScore = total ? scoreWeight / total : 0;
       const autoPct = Number(state.autoResumen.pct_clientes_autoelevador || 0);
       const avgOtif = avgPlanMetric("otif_valor");
+      const hasOtif = avgOtif !== null && avgOtif !== undefined;
       const items = [
         { label: "Clientes", value: num(total), sub: `${money(venta)} venta YTD`, icon: "users", color: "var(--violet)" },
         { label: "Ganador", value: countCluster("Ganador"), sub: shareCluster("Ganador"), icon: "trophy", color: "var(--green)" },
-        { label: "OTIF prom.", value: pct(avgOtif, 1), sub: "entrega en fecha y completa", icon: "check-circle-2", color: avgOtif >= 90 ? "var(--green)" : "var(--amber)" },
+        { label: "OTIF prom.", value: hasOtif ? pct(avgOtif, 1) : "Sin datos", sub: hasOtif ? "entrega en fecha y completa" : "cargar CSV OTIF / RMD / NPS", icon: "check-circle-2", color: hasOtif && avgOtif >= 90 ? "var(--green)" : "var(--amber)" },
         { label: "Autoelevador", value: pct(autoPct, 1), sub: `${num(state.autoResumen.clientes_autoelevador || 0)} clientes`, icon: "forklift", color: "var(--blue)" },
         { label: "Costo logistico", value: money(costo), sub: `${pct(venta ? costo / venta * 100 : 0)} sobre venta`, icon: "truck", color: "var(--amber)" },
         { label: "Score prom.", value: num(avgScore, 1), sub: "escala 0-100", icon: "gauge", color: scoreColor(avgScore) }
@@ -1896,6 +1901,46 @@
       }
     }
 
+    function activeHistoryEnd() {
+      const p = state.params.periodo || {};
+      const endDate = dateInputValue(p.fecha_hasta);
+      if (endDate) {
+        const parts = endDate.split("-").map(Number);
+        return { anio: parts[0], mes: parts[1] };
+      }
+      return {
+        anio: Number(p.periodo_anio || state.params.anio_ytd || new Date().getFullYear()),
+        mes: Number(p.periodo_mes || (new Date().getMonth() + 1))
+      };
+    }
+
+    async function backfillHistory() {
+      const end = activeHistoryEnd();
+      if (!confirm(`Recalcular historico mensual desde enero 2025 hasta ${String(end.mes).padStart(2, "0")}/${end.anio}?`)) return;
+      setLoading(true);
+      try {
+        const result = await api("/api/segmentacion/historico/recalcular", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            desde_anio: 2025,
+            desde_mes: 1,
+            hasta_anio: end.anio,
+            hasta_mes: end.mes,
+            ejecutado_por: "dashboard_historico"
+          })
+        }, 600000);
+        await loadData();
+        if (state.activeTab === "evolution") await loadEvolution();
+        const errores = Array.isArray(result.errores) ? result.errores.length : 0;
+        alert(`Historico recalculado: ${num(result.periodos_procesados)} periodos procesados${errores ? `, ${errores} con error` : ""}.`);
+      } catch (error) {
+        alert(error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
     function setUploadStatus(message, tone = "") {
       const el = $("autoUploadStatus");
       if (!el) return;
@@ -2106,6 +2151,7 @@
       $("yearFilter").addEventListener("change", loadEvolution);
       $("reloadBtn").addEventListener("click", loadData);
       $("recalcBtn").addEventListener("click", handleRecalculate);
+      if ($("backfillHistoryBtn")) $("backfillHistoryBtn").addEventListener("click", backfillHistory);
       $("autoUploadBtn").addEventListener("click", uploadAutoelevador);
       if ($("serviceUploadBtn")) $("serviceUploadBtn").addEventListener("click", uploadServicio);
       $("drawerOverlay").addEventListener("click", closeDrawer);

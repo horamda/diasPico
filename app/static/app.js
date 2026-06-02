@@ -160,6 +160,7 @@ window.onload = async () => {
   initDropsizeFilters();
   initKpiObjetivosDefaults();
   initPlanificacionDefaults();
+  initAusentismoDefaults();
   await loadSucursales();
   await loadParams();
   renderCal();
@@ -195,6 +196,15 @@ function initPlanificacionDefaults() {
   if (anioBase && !anioBase.value) anioBase.value = hoy.getFullYear() - 1;
 }
 
+function initAusentismoDefaults() {
+  const anio = document.getElementById('ausAnio');
+  const mes = document.getElementById('ausMes');
+  const suc = document.getElementById('ausSucursal');
+  if (anio && !anio.value) anio.value = vY;
+  if (mes && !mes.value) mes.value = vM + 1;
+  if (suc && !suc.value) suc.value = 'TODAS';
+}
+
 async function loadSucursales() {
   const selUp  = document.getElementById('uploadSucursal');
   const sel    = document.getElementById('selSucursal');
@@ -204,6 +214,7 @@ async function loadSucursales() {
   const selDropObj = document.getElementById('dropObjSucursal');
   const selKpiObj = document.getElementById('kpiObjSucursal');
   const selPlan = document.getElementById('planSucursal');
+  const selAus = document.getElementById('ausSucursal');
   try {
     const data = await api('/api/sucursales'); // [{value, label}, ...]
     data.forEach(({ value, label }) => {
@@ -216,6 +227,7 @@ async function loadSucursales() {
       if (selDropObj) selDropObj.add(new Option(txt, value));
       if (selKpiObj) selKpiObj.add(new Option(txt, value));
       if (selPlan) selPlan.add(new Option(txt, value));
+      if (selAus && !selAus.querySelector(`option[value="${value}"]`)) selAus.add(new Option(txt, value));
       const selFlota = document.getElementById('flotaSucursal');
       if (selFlota && !selFlota.querySelector(`option[value="${value}"]`)) selFlota.add(new Option(txt, value));
     });
@@ -2998,7 +3010,7 @@ function switchTab(t, el) {
     loadDropsize();
   }
   if (t === 'upload')    { loadArticulosCount(); loadEventos(); loadFeriados(); }
-  if (t === 'config')    { loadSucursalesConfig(); loadRechazos(); loadKpiObjetivos(); loadDropsizeObjetivos(); }
+  if (t === 'config')    { initAusentismoDefaults(); loadAusentismoMensual(); loadSucursalesConfig(); loadRechazos(); loadKpiObjetivos(); loadDropsizeObjetivos(); }
   if (t === 'planificacion') {
     // Sync mes/año con el calendario principal
     const anioEl = document.getElementById('planAnio');
@@ -3264,6 +3276,75 @@ async function guardarSucursal() {
 }
 
 // ── FLOTA ──────────────────────────────────────────────────────────────────
+
+async function loadAusentismoMensual() {
+  const anio = Number(document.getElementById('ausAnio')?.value || vY);
+  const mes = Number(document.getElementById('ausMes')?.value || (vM + 1));
+  const sucursal = document.getElementById('ausSucursal')?.value || 'TODAS';
+  const pctInput = document.getElementById('ausPct');
+  const msg = document.getElementById('ausMsg');
+  const resumen = document.getElementById('ausResumen');
+  if (!anio || !mes) return;
+  if (msg) { msg.textContent = 'Cargando...'; msg.style.color = 'var(--muted)'; }
+  try {
+    const qs = new URLSearchParams({ empresa_id: '1', sucursal_id: sucursal, anio: String(anio) });
+    const data = await api('/api/picos/ausentismo-mensual?' + qs.toString());
+    const meses = data.meses || [];
+    const row = meses.find(item => Number(item.mes) === mes);
+    if (pctInput) pctInput.value = row && row.pct_ausentismo != null ? row.pct_ausentismo : '';
+    if (resumen) {
+      resumen.innerHTML = `<table class="rtbl" style="width:100%">
+        <thead><tr><th>Mes</th><th style="text-align:right">Ausentismo %</th></tr></thead>
+        <tbody>${meses.map(item => `
+          <tr>
+            <td>${esc(item.nombre || MESES[Number(item.mes || 1) - 1] || item.mes)}</td>
+            <td style="font-family:var(--mono);text-align:right;color:${item.pct_ausentismo == null ? 'var(--muted)' : Number(item.pct_ausentismo) >= 10 ? 'var(--red)' : Number(item.pct_ausentismo) >= 5 ? 'var(--acc)' : 'var(--grn)'}">${item.pct_ausentismo == null ? 'Sin dato' : fmtPct1(item.pct_ausentismo)}</td>
+          </tr>
+        `).join('')}</tbody>
+      </table>`;
+    }
+    if (msg) {
+      msg.textContent = row && row.pct_ausentismo != null ? `Dato cargado: ${fmtPct1(row.pct_ausentismo)}` : 'Mes sin dato cargado';
+      msg.style.color = 'var(--muted)';
+    }
+  } catch(e) {
+    if (msg) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
+  }
+}
+
+async function saveAusentismoMensual() {
+  const anio = Number(document.getElementById('ausAnio')?.value || vY);
+  const mes = Number(document.getElementById('ausMes')?.value || (vM + 1));
+  const sucursal = document.getElementById('ausSucursal')?.value || 'TODAS';
+  const pct = Number(document.getElementById('ausPct')?.value || 0);
+  const msg = document.getElementById('ausMsg');
+  if (!anio || mes < 1 || mes > 12) {
+    if (msg) { msg.textContent = 'Año y mes requeridos'; msg.style.color = 'var(--red)'; }
+    return;
+  }
+  if (pct < 0 || pct > 100) {
+    if (msg) { msg.textContent = 'El ausentismo debe estar entre 0 y 100%'; msg.style.color = 'var(--red)'; }
+    return;
+  }
+  if (msg) { msg.textContent = 'Guardando...'; msg.style.color = 'var(--muted)'; }
+  try {
+    await api('/api/picos/ausentismo-mensual', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        empresa_id: '1',
+        sucursal_id: sucursal,
+        anio,
+        filas: [{ mes, pct_ausentismo: pct }],
+      }),
+    });
+    if (msg) { msg.textContent = `Ausentismo de ${MESES[mes - 1]} ${anio} guardado: ${fmtPct1(pct)}`; msg.style.color = 'var(--grn)'; }
+    await loadAusentismoMensual();
+    loadHistorico();
+  } catch(e) {
+    if (msg) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
+  }
+}
 
 let _flotaData = [];
 let _camionesTodos = [];

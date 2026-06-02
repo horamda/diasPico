@@ -44,6 +44,19 @@ def test_periodo_explicito_respeta_fechas_base():
     assert periodo["fecha_base_hasta"] == date(2025, 5, 15)
 
 
+def test_periodo_con_fecha_fin_corrige_mes_snapshot():
+    periodo = build_periodo_payload({
+        "periodo_anio": 2026,
+        "periodo_mes": 4,
+        "fecha_desde": "2026-01-01",
+        "fecha_hasta": "2026-05-31",
+    })
+
+    assert periodo["periodo_anio"] == 2026
+    assert periodo["periodo_mes"] == 5
+    assert periodo["fecha_hasta"] == date(2026, 5, 31)
+
+
 def test_periodo_rechaza_mes_invalido():
     with pytest.raises(ValueError, match="periodo_mes"):
         build_periodo_payload({"periodo_mes": 13})
