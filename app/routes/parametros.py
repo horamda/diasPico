@@ -46,6 +46,7 @@ def set_parametros():
     try:
         pico_svc.save_params(sucursal, umbral_pct, metrica)
         cache_svc.clear('picos:')
+        cache_svc.clear('portal:')
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

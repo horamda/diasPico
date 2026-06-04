@@ -796,7 +796,7 @@ def load_ventas_detalle(file_bytes: bytes, force: bool = False,
 
 
 _CLI_COLS = [
-    'cliente', 'sucursal', 'razon_social', 'nombre_fantasia', 'telefonos', 'movil',
+    'cliente', 'descripcion', 'sucursal', 'razon_social', 'nombre_fantasia', 'telefonos', 'movil',
     'email', 'domicilio', 'calle', 'altura', 'depto', 'calle_1', 'calle_2',
     'comentario', 'coord_x', 'coord_y', 'lugar_entrega', 'calle_entrega',
     'altura_entrega', 'depto_entrega', 'calle_1_entrega', 'calle_2_entrega',
@@ -814,6 +814,7 @@ _CLI_COLS = [
 
 _CLI_CONFLICT = """
 ON CONFLICT (cliente) DO UPDATE SET
+    descripcion = EXCLUDED.descripcion,
     sucursal = EXCLUDED.sucursal,
     razon_social = EXCLUDED.razon_social,
     nombre_fantasia = EXCLUDED.nombre_fantasia,
@@ -986,6 +987,7 @@ def _sync_cliente_geografia_from_rows(cur, rows: list[dict]) -> int:
 def _cli_row(r: dict, imported_at: datetime) -> tuple:
     return (
         str(r.get('cliente') or '')[:50],
+        str(r.get('descripcion') or '')[:255],
         str(r.get('sucursal') or '')[:50],
         str(r.get('razon_social') or '')[:255],
         str(r.get('nombre_fantasia') or '')[:255],
@@ -1074,6 +1076,7 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
     with pg_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("CREATE TABLE IF NOT EXISTS clientes (cliente VARCHAR(50) PRIMARY KEY)")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS descripcion VARCHAR(255)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS sucursal VARCHAR(50)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS razon_social VARCHAR(255)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre_fantasia VARCHAR(255)")

@@ -11,6 +11,7 @@ PROTECTED_TABLES = {
     'parametros',
     'seg_parametros',
     'seg_clientes_atributos',
+    'seg_cliente_metricas_servicio_historico',
     'seg_periodos_calculo',
     'seg_score_pesos',
     'seg_cliente_cluster_historico',

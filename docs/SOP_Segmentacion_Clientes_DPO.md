@@ -1,223 +1,571 @@
 # SOP Segmentacion de Clientes DPO
 
-## 1. Alcance
+Version: 2.0
+Enfoque: auditoria DPO, circuito completo
+Sistema: Dashboard Dias Pico / Modulo Segmentacion de Clientes
 
-Este SOP define como se ejecuta la segmentacion logistica-comercial de clientes DPO en el sistema actual, con foco operativo y trazabilidad. Cubre:
+## 1. Objetivo
 
-- calculo de metricas comerciales y logisticas por cliente
-- filtro operativo de clientes activos
-- clasificacion DPO en 4 clusters oficiales
-- score 0-100 parametrizable
-- subclasificacion operativa con autoelevador
-- comparacion de servicio por cluster con OTIF y RMD
-- georreferenciacion para mapa
-- guardado historico mensual y auditoria
+Este SOP define el proceso oficial para agrupar clientes en los 4 clusters DPO, mantener la informacion trazable en el sistema, comparar el desempeno logistico por cluster y convertir el analisis en un plan de servicio operativo.
 
-No cubre cambios de modelo fuera del esquema actual ni rediseno funcional de modulos externos.
+El procedimiento cubre el circuito completo:
 
-## 2. Fuentes de datos y objetos base
+- carga y validacion de datos fuente
+- definicion de clientes activos
+- calculo de ventas, crecimiento, volumen, rechazos, costos y servicio
+- ajuste de crecimiento por IPC
+- identificacion de clientes refrigerados
+- clasificacion en clusters DPO
+- calculo del score 0-100
+- analisis de RMD, OTIF y NPS
+- reporte de clientes costosos de atender
+- exportacion de evidencia por cliente, cluster y periodo
+- recalculo mensual, historico y auditoria
 
-### 2.1 Fuentes transaccionales
+## 2. Alcance DPO y relacion con auditoria R4.2
 
-- `ventas_detalle`: ventas, volumen, rutas, rechazos y fechas.
-- `articulos`: enriquecimiento de tipo de producto y conversion a pallets.
-- `rechazos`: normalizacion de motivos para marcar rechazo valido.
-- `clientes`: estado de cliente (`anulado`), localidad y sucursal.
+Este SOP responde al requisito "4.2 Plan de agrupacion de clientes".
 
-### 2.2 Tablas de configuracion y gobierno
+### 2.1 R4.2.1 - Definicion de clientes por cluster
 
-- `seg_parametros`: costos por HL, percentiles, anios base/YTD.
-- `seg_periodos_calculo`: rango de periodo YTD y base.
-- `seg_score_pesos`: pesos por variable del score.
-- `seg_clientes_atributos`: atributos de cliente (OTIF, NPS, RMD, autoelevador, etc.).
-- `cliente_autoelevador`: fuente externa/importada de autoelevador.
-- `cliente_geografia`: latitud/longitud por cliente.
+El distribuidor define 4 clusters oficiales:
 
-### 2.3 Tablas de salida historica
+- Ganador
+- En crecimiento
+- Basico
+- Ventas bajas
 
-- `seg_cliente_cluster_historico`: snapshot por cliente y periodo.
-- `seg_auditoria`: log de ejecuciones del recalculo.
+La regla base usa ingresos y crecimiento. Adicionalmente, los clientes con condicion refrigerada (`clientes.descripcion = REF`, `Refrigerado` o `Refrigerados`) se mantienen como prioridad operativa dentro de `Ganador`, con subcluster `Refrigerado`, por criticidad de cadena de frio.
 
-## 3. Filtro de clientes activos (obligatorio para DPO)
+Evidencia esperada:
 
-El modelo DPO opera solo sobre `vw_clientes_activos_dpo`.
+- distribucion por cluster en el panel
+- vista `vw_cliente_cluster_dpo`
+- cache `seg_cliente_dpo_cache`
+- historico `seg_cliente_cluster_historico`
+- PDF SOP descargable desde `GET /api/segmentacion/sop/pdf`
 
-Reglas de exclusion:
+### 2.2 R4.2.2 - SOP y conexion con equipos/sistema
 
-1. Cliente inactivo:
-   - `clientes.anulado` equivalente a SI/TRUE.
-   - o cliente sin venta YTD y con venta en base comparable.
-2. Estado anulado:
-   - solo `estado_anulado = 'No'`.
-3. Ruta temporal:
-   - excluir cuando `ruta_venta_descripcion ILIKE '%temp%'`.
-   - aplica a `temp`, `Temp`, `TEMP` y combinaciones.
+El SOP documenta como se calculan, revisan y publican los clusters. La informacion queda disponible para ventas, operaciones y ruteo mediante panel, vistas, API y exportables.
 
-Campos operativos de la vista:
+Evidencia esperada:
 
-- `cliente_id`, `cliente_nombre`, `sucursal`, `localidad`
-- `ruta_venta`
-- `estado_cliente`, `estado_anulado`, `activo`
+- este SOP vigente
+- captura del modulo Segmentacion de Clientes
+- log de recalculo en `seg_auditoria`
+- exportables por cliente, cluster o reporte operativo
+- constancia de actualizacion del ruteador cuando aplique
 
-## 4. Metricas calculadas por cliente
+Si el ruteador no se alimenta automaticamente desde la base, el responsable operativo debe exportar la salida aprobada y conservar evidencia de la carga manual.
 
-La vista base es `vw_cliente_metricas`. Calcula, entre otros:
+### 2.3 R4.2.3 - Comparacion contra OTIF y RMD
 
-- `venta_anio_base`
-- `venta_ytd`
-- `venta_base_mismo_per` (base del mismo rango temporal)
-- `crecimiento_pct`
-- `hl_ytd`, `bultos_ytd`, `pallets_ytd`, `up_ytd`
-- `pedidos_ytd`
-- `dropsize_bultos_ytd`
-- `ticket_promedio_ytd`
-- `rechazos_ytd`, `pct_rechazo_pedidos`
-- `nps_valor`, `rmd_valor`, `otif_valor`
-- `costo_entrega`, `costo_almacen`
-- `costo_logistico_total`
-- `margen_logistico_proxy`
-- `ratio_costo_logistico_pct`
+El sistema permite comparar los clusters contra RMD, OTIF y NPS por cliente, sucursal, localidad y periodo. La auditoria requiere ejecutar el analisis al menos 2 veces al ano; el sistema soporta recalculo mensual e historico.
 
-Definiciones clave:
+Evidencia esperada:
 
-- `dropsize_bultos_ytd = bultos_ytd / pedidos_ytd`
-- `ticket_promedio_ytd = venta_ytd / pedidos_ytd`
-- `costo_entrega = hl_ytd * costo_entrega_hl`
-- `costo_almacen = hl_ytd * costo_almacen_hl`
-- `ratio_costo_logistico_pct = (costo_logistico_total / venta_ytd) * 100`
-- `otif_valor = entregas a tiempo y completas / entregas evaluadas * 100`
+- historico mensual en `seg_cliente_cluster_historico`
+- resumen por cluster con `rmd_prom`, `otif_prom` y `nps_prom`
+- reporte por cliente con PDF/Excel
+- archivo importado de RMD/OTIF/NPS historico
 
-## 5. Clusters DPO oficiales (4)
+### 2.4 R4.2.4 - Plan de servicio logistico
 
-Vista: `vw_cliente_cluster_dpo`.
+El sistema genera un plan de servicio por cliente y cluster. El plan orienta:
 
-Se usa matriz ingreso vs crecimiento con umbrales dinamicos:
+- priorizacion de inventario
+- frecuencia de visita y entrega
+- ventanas horarias
+- ruteo y consolidacion
+- atencion de clientes refrigerados
+- acciones sobre clientes costosos de atender
+- seguimiento de rechazos, RMD, OTIF y NPS
 
-- venta alta: percentil configurado (default 0.70)
-- venta baja: percentil configurado (default 0.30)
-- crecimiento: umbral parametrico o mediana
+Evidencia esperada:
 
-Reglas:
+- vista `vw_cliente_plan_servicio`
+- reporte de costos de atencion
+- mapa de clientes
+- exportables operativos
+- evidencia de acciones tomadas por ventas/operaciones
 
-- `Ganador`: venta alta y crecimiento alto.
-- `En crecimiento`: crecimiento alto sin cumplir Ganador.
-- `Basico`: venta media/alta con crecimiento bajo.
-- `Ventas bajas`: resto de clientes.
+## 3. Responsables y frecuencia
 
-Nota: el cluster se calcula solo para clientes de `vw_clientes_activos_dpo`.
+Responsable del proceso:
 
-## 6. Score 0-100 y subclasificacion operativa
+- Operaciones logisticas DPO.
 
-### 6.1 Score base
+Responsables de datos:
 
-Vista: `vw_cliente_score`. Normaliza variables por min-max y aplica pesos desde `seg_score_pesos`.
+- Ventas: clientes, promotores, sucursales y actividad comercial.
+- Operaciones: entregas, ruteo, autoelevador, rechazos y costos logisticos.
+- Servicio/Experiencia: RMD, OTIF, NPS y subdrivers.
+- Administracion/BI: IPC, parametros, recalculo, historico y evidencia.
 
-Distribucion objetivo:
+Frecuencia minima:
 
-- Negocio: 35 puntos (venta, HL, crecimiento)
-- Productividad: 20 puntos (drop size, pallets/pedido, autoelevador)
-- Servicio: 20 puntos (rechazos, RMD, NPS)
-- Rentabilidad: 15 puntos (ratio costo, margen)
-- Geo/frecuencia: 10 puntos (pedidos, localidad, sucursal)
+- Recalculo operativo: mensual.
+- Revision DPO auditada: al menos 2 veces por ano.
+- Actualizacion de RMD/OTIF/NPS: mensual o cuando se reciba nueva medicion.
+- Actualizacion IPC: cuando se publique un nuevo dato oficial.
+- Revision de clientes refrigerados/autoelevador: mensual o con cada alta/modificacion de padron.
 
-Direccion de mejora:
+## 4. Fuentes de datos
 
-- Menor es mejor: rechazos, ratio de costo.
-- Mayor es mejor: venta, HL, crecimiento, drop size, NPS, RMD, OTIF.
+### 4.1 Fuentes transaccionales
 
-OTIF significa On Time In Full: porcentaje de entregas que llegaron en la fecha/ventana acordada y completas, sin faltantes. En este modulo se usa como KPI auditable por cliente y por cluster. Si no esta cargado, queda nulo; no se infiere desde repartos porque para calcularlo correctamente se requiere fecha/ventana prometida y confirmacion de entrega completa.
+- `ventas_detalle`: ventas, volumen, fechas, rutas, pedidos y lineas.
+- `articulos`: conversion operativa de productos y pallets.
+- `rechazos`: criterios de rechazo validos para el calculo.
+- `clientes`: padron, sucursal, localidad, anulacion y descripcion.
 
-### 6.2 Autoelevador y costo diferencial
+### 4.2 Configuracion del modelo
 
-Vistas:
+- `seg_parametros`: percentiles, costos por HL, anio base, anio analisis y parametros generales.
+- `seg_periodos_calculo`: periodo actual y periodo base comparable.
+- `seg_score_pesos`: pesos de variables del score.
+- `seg_inflacion_mensual`: IPC mensual.
+- `seg_clientes_atributos`: atributos vigentes por cliente.
+- `seg_cliente_metricas_servicio_historico`: RMD, OTIF y NPS historicos por periodo.
+- `seg_cliente_nps_encuestas`: encuestas NPS detalladas.
+- `seg_cliente_nps_drivers`: drivers y subdrivers NPS.
+- `seg_cliente_nps_mensual`: resumen mensual NPS por cliente.
+- `cliente_autoelevador`: clientes con autoelevador.
+- `cliente_geografia`: latitud y longitud por cliente.
 
-- `vw_cliente_autoelevador`
-- `vw_cliente_costo_operativo`
-- `vw_cliente_eficiencia_operativa`
+### 4.3 Salidas auditables
 
-Reglas operativas:
-
-- con autoelevador: `factor_operativo = 1`
-- sin autoelevador: `factor_operativo = 3`
-
-Formulas:
-
-- `costo_servir_ajustado = costo_entrega * factor_operativo`
-- `costo_logistico_ajustado_total = costo_servir_ajustado + costo_almacen`
-- `margen_logistico_ajustado = venta - costo_logistico_ajustado_total`
-- `ratio_costo_logistico_ajustado_pct = costo_logistico_ajustado_total / venta * 100`
-- `indice_eficiencia_operativa = HL / (pedidos * factor_operativo)`
-
-Score operativo:
-
-- `score_total_operativo = min(100, score_total_base + bonus_autoelevador)`
-- bonus autoelevador actual: `+15`.
-
-### 6.3 Subclasificacion logistica extendida
-
-Vista: `vw_cliente_cluster_logistico`.
-
-Etiquetas:
-
-- `GANADOR EFICIENTE`
-- `GANADOR AUTOELEVADOR`
-- `ALTO VALOR CARO DE SERVIR`
-- `ALTO VOLUMEN BAJA COMPLEJIDAD`
-- `ALTO COSTO OPERATIVO`
-
-Si no aplica ninguna regla extendida, se conserva subcluster logistico base.
-
-## 7. Georreferenciacion y mapa
-
-Tabla: `cliente_geografia(cliente_id, latitud, longitud, localidad, sucursal, updated_at)`.
-
-Vista: `vw_clientes_mapa`.
-
-Campos de salida:
-
-- `cliente_id`, `cliente_nombre`
-- `latitud`, `longitud`
-- `hl`, `venta`, `pallets`, `bultos`
-- `cluster_dpo`, `tiene_autoelevador`
-- `sucursal`, `localidad`
-- `ratio_costo_logistico_pct`, `costo_logistico_total`, `margen_logistico_proxy`
-
-Pesos de visualizacion soportados por API:
-
-- `hl` (default)
-- `pallets`
-- `venta`
-- `bultos`
-
-## 8. Vistas y salidas para consumo
-
-### 8.1 Vistas principales
-
-- `vw_cliente_metricas`
 - `vw_clientes_activos_dpo`
+- `vw_cliente_metricas`
 - `vw_cliente_cluster_dpo`
 - `vw_cliente_score`
 - `vw_cliente_plan_servicio`
+- `vw_clientes_mapa`
 - `resumen_cluster_sucursal`
 - `resumen_cluster_localidad`
+- `seg_cliente_dpo_cache`
+- `seg_cliente_cluster_historico`
+- `seg_auditoria`
 
-### 8.2 Vistas operativas adicionales
+## 5. Formatos de carga
 
-- `vw_cliente_autoelevador`
-- `vw_cliente_costo_operativo`
-- `vw_cliente_eficiencia_operativa`
-- `vw_cliente_cluster_logistico`
-- `vw_clientes_mapa`
+Los archivos se cargan desde la pestania `Carga` del modulo Segmentacion de Clientes o por los endpoints indicados.
 
-### 8.3 Cache para panel
+### 5.1 RMD vigente
 
-- `seg_cliente_dpo_cache` (tabla cache del panel)
+Plantilla:
 
-La cache incluye `rmd_valor`, `otif_valor` y `nps_valor` para comparar clusters contra indicadores de servicio.
+- `GET /api/segmentacion/plantillas/servicio/rmd/vigente`
 
-## 9. Recalculo mensual, historico y auditoria
+Formato CSV separado por punto y coma:
 
-### 9.1 Recalculo
+```csv
+cliente;RMD;fecha_rmd
+100001;4,50;2026-05-31
+100002;4,10;2026-05-31
+```
+
+Reglas:
+
+- `cliente` es obligatorio.
+- `RMD` es una escala decimal de 1 a 5. No es porcentaje.
+- `RMD` acepta punto o coma decimal.
+- `fecha_rmd` es opcional, pero recomendada.
+
+### 5.2 RMD historico
+
+Plantilla:
+
+- `GET /api/segmentacion/plantillas/servicio/rmd/historico`
+
+Formato:
+
+```csv
+cliente;anio;mes;RMD;fecha_rmd
+100001;2025;1;4,10;2025-01-31
+100001;2026;5;4,50;2026-05-31
+```
+
+Reglas:
+
+- `anio` y `mes` son obligatorios.
+- `RMD` debe estar entre 1 y 5, con decimales si corresponde.
+- Para dato anual consolidado se puede usar `mes = 0`.
+
+### 5.3 OTIF vigente e historico
+
+Plantillas:
+
+- `GET /api/segmentacion/plantillas/servicio/otif/vigente`
+- `GET /api/segmentacion/plantillas/servicio/otif/historico`
+
+Columnas equivalentes:
+
+- vigente: `cliente;OTIF;fecha_otif`
+- historico: `cliente;anio;mes;OTIF;fecha_otif`
+
+Definicion OTIF:
+
+- OTIF significa `On Time In Full`.
+- Mide entregas realizadas en fecha/ventana prometida y completas.
+- Formula: `entregas a tiempo y completas / entregas evaluadas * 100`.
+
+El sistema no infiere OTIF desde ventas porque se necesita fecha/ventana comprometida y confirmacion de entrega completa.
+
+### 5.4 NPS vigente e historico
+
+Plantillas:
+
+- `GET /api/segmentacion/plantillas/servicio/nps/vigente`
+- `GET /api/segmentacion/plantillas/servicio/nps/historico`
+
+Columnas equivalentes:
+
+- vigente: `cliente;NPS;fecha_nps`
+- historico: `cliente;anio;mes;NPS;fecha_nps`
+
+Este archivo guarda el valor sintetico de NPS por cliente. Para analisis detallado de promotores, pasivos, detractores y subdrivers se debe cargar NPS detallado.
+
+### 5.5 NPS detallado con drivers
+
+Plantilla:
+
+- `GET /api/segmentacion/plantillas/nps-detallado`
+
+Formato CSV, XLSX o XLSM:
+
+```csv
+id_cliente;FECHA ENC;SCORE;CATEGORIA;DRIVER PRIMARIO;DRIVER SECUNDARIO;COMENTARIO;NOMBRE CLIENTE;DESC LOCALIDAD
+100001;2026-05-15 10:30:00;10;Promoter;Experiencia de entrega;Entrega en la fecha acordada;Entrega correcta;Cliente demo;La Plata
+```
+
+Reglas:
+
+- `id_cliente`, `FECHA ENC` y `SCORE` son obligatorios.
+- `SCORE` debe estar entre 0 y 10.
+- `Promoter`: score 9 o 10.
+- `Passive`: score 7 u 8.
+- `Detractor`: score 0 a 6.
+- NPS indice: porcentaje de promotores menos porcentaje de detractores.
+- El subdriver `Delivery` y el driver/subdriver `General` se calculan de forma separada para logistica.
+
+### 5.6 IPC inflacion
+
+Plantilla:
+
+- `GET /api/segmentacion/plantillas/inflacion`
+
+Formato:
+
+```csv
+anio;mes;inflacion_pct
+2025;1;2,20
+2025;2;2,40
+2026;4;2,60
+```
+
+Reglas:
+
+- `inflacion_pct` es la variacion mensual de IPC.
+- Se usa para calcular crecimiento real entre periodo base y periodo actual.
+- Los decimales pueden venir con coma o punto.
+
+### 5.7 Autoelevador
+
+Formato CSV:
+
+```csv
+cliente;autoelevador
+100001;SI
+100002;NO
+```
+
+Reglas:
+
+- `cliente` o `is_cliente` es obligatorio.
+- Si no se informa la columna `autoelevador`, el cliente importado se toma como `SI`.
+
+### 5.8 Geografia
+
+Campos esperados:
+
+- `cliente`
+- `latitud`
+- `longitud`
+- `localidad`
+- `sucursal`
+
+Uso:
+
+- mapa de clientes
+- analisis territorial
+- evidencia visual por cluster
+
+## 6. Periodos e IPC
+
+El calculo compara un periodo actual contra un periodo base equivalente.
+
+Ejemplo:
+
+- actual: 2026-01-01 a 2026-05-31
+- base: 2025-01-01 a 2025-05-31
+
+El crecimiento nominal se calcula como:
+
+```text
+crecimiento_nominal_pct = (venta_actual / venta_base_comparable - 1) * 100
+```
+
+El crecimiento real ajustado por IPC se calcula con un factor acumulado:
+
+```text
+inflacion_factor = producto mensual de (1 + inflacion_pct / 100)
+crecimiento_real_pct = ((venta_actual / venta_base_comparable) / inflacion_factor - 1) * 100
+```
+
+Regla de uso:
+
+- Si existe IPC completo para el periodo, `crecimiento_pct` usa crecimiento real.
+- Si no existe IPC, `crecimiento_pct` usa crecimiento nominal y debe quedar advertido como limitacion.
+
+La venta que se ajusta es la venta del periodo base, para llevarla a moneda comparable contra el periodo actual.
+
+## 7. Clientes activos DPO
+
+El modelo solo calcula clientes de `vw_clientes_activos_dpo`.
+
+Reglas de exclusion:
+
+1. Cliente anulado:
+   - excluir si `estado_anulado` no es `No`.
+2. Ruta temporal:
+   - excluir si `ruta_venta_descripcion` contiene `temp`.
+3. Cliente sin actividad relevante:
+   - excluir si no tiene actividad YTD ni base comparable.
+
+El objetivo es evitar que bajas, rutas temporales o registros no operativos distorsionen la matriz de clientes.
+
+## 8. Metricas calculadas por cliente
+
+La vista base es `vw_cliente_metricas`.
+
+Metricas comerciales:
+
+- `venta_anio_base`
+- `venta_ytd`
+- `venta_base_mismo_per`
+- `crecimiento_nominal_pct`
+- `crecimiento_real_pct`
+- `crecimiento_pct`
+- `inflacion_factor`
+
+Metricas operativas:
+
+- `hl_ytd`
+- `bultos_ytd`
+- `pallets_ytd`
+- `up_ytd`
+- `pedidos_ytd`
+- `dropsize_bultos_ytd`
+- `ticket_promedio_ytd`
+
+Metricas de rechazos:
+
+- `rechazos_ytd`
+- `pedidos_rechazo_ytd`
+- `lineas_rechazo_ytd`
+- `hl_rechazado_ytd`
+- `hl_rechazado_parcial_ytd`
+- `hl_rechazado_total_ytd`
+- `pct_rechazo_pedidos`
+- `pct_rechazo_hl`
+
+Regla de rechazos:
+
+- Solo se consideran los motivos habilitados en la tabla de criterios de rechazo.
+- El porcentaje operativo principal para score es `pct_rechazo_hl` cuando esta disponible.
+- `pct_rechazo_pedidos` queda como indicador complementario de pedidos afectados.
+
+Metricas de servicio:
+
+- `rmd_valor`
+- `otif_valor`
+- `nps_valor`
+- NPS logistico detallado por Delivery y General
+
+Metricas de costo:
+
+- `costo_entrega = hl_ytd * costo_entrega_hl`
+- `costo_almacen = hl_ytd * costo_almacen_hl`
+- `costo_logistico_total = costo_entrega + costo_almacen`
+- `margen_logistico_proxy = venta_ytd - costo_logistico_total`
+- `ratio_costo_logistico_pct = costo_logistico_total / venta_ytd * 100`
+
+## 9. Reglas de clusterizacion
+
+Vista oficial:
+
+- `vw_cliente_cluster_dpo`
+
+La matriz usa ingresos y crecimiento:
+
+- ingreso: `venta_ytd`
+- venta alta: percentil alto configurado, default 0.75
+- venta baja: percentil bajo configurado, default 0.25
+- crecimiento: percentiles dinamicos sobre `crecimiento_pct`
+
+Reglas:
+
+1. Ganador:
+   - cliente refrigerado, o
+   - `venta_ytd >= p75_ingresos` y `crecimiento_pct >= p50_crecimiento`.
+2. En crecimiento:
+   - `venta_ytd < p75_ingresos` y `crecimiento_pct >= p75_crecimiento`.
+3. Ventas bajas:
+   - `venta_ytd <= p25_ingresos` y `crecimiento_pct <= p25_crecimiento`.
+4. Basico:
+   - todos los clientes activos que no cumplen reglas anteriores.
+
+Regla especial de clientes refrigerados:
+
+- Si `clientes.descripcion` normalizada es `REF`, `Refrigerado` o `Refrigerados`, entonces `cliente_refrigerado = true`.
+- El cliente se clasifica como `Ganador`.
+- El subcluster queda `Refrigerado`.
+- El plan de servicio exige prioridad de cadena de frio, inventario protegido y seguimiento de OTIF.
+
+Esta regla se documenta como criterio operativo adicional por criticidad logistica. Las variables de ingreso y crecimiento se siguen calculando y quedan visibles para auditoria.
+
+## 10. Score 0-100
+
+Vista:
+
+- `vw_cliente_score`
+
+El score normaliza variables por min-max y aplica pesos de `seg_score_pesos`.
+
+Dimensiones:
+
+- Negocio: venta, HL y crecimiento.
+- Productividad: dropsize, pallets por pedido y autoelevador.
+- Servicio: rechazos, RMD y NPS.
+- Rentabilidad: ratio de costo y margen logistico proxy.
+- Geo/frecuencia: pedidos, localidad y sucursal.
+
+Direccion de mejora:
+
+- Mayor es mejor: venta, HL, crecimiento, dropsize, pallets por pedido, autoelevador, RMD, NPS, margen y frecuencia saludable.
+- Menor es mejor: rechazos y ratio de costo logistico.
+
+Tratamiento de servicio:
+
+- RMD suma en score si esta cargado.
+- NPS suma en score si esta cargado.
+- OTIF se monitorea como KPI y alerta operativa; en la regla actual no suma puntos al score porque no tiene peso activo en `seg_score_pesos`.
+- Si RMD o NPS faltan para un cliente, el modelo usa la mediana del universo activo para no castigar por ausencia de dato, pero la ausencia debe quedar visible como brecha de calidad.
+
+## 11. NPS logistico
+
+El NPS detallado permite ver como evalua cada cliente al distribuidor y que parte de la experiencia esta afectando el servicio.
+
+Tablas:
+
+- `seg_cliente_nps_encuestas`
+- `seg_cliente_nps_drivers`
+- `seg_cliente_nps_mensual`
+
+Calculos:
+
+- Score promedio por cliente y mes.
+- Cantidad de promotores, pasivos y detractores.
+- NPS indice general.
+- NPS Delivery.
+- NPS General.
+- NPS logistico normalizado para uso operativo.
+- Top subdrivers por cliente.
+
+Uso en el modulo:
+
+- tarjeta del cliente
+- detalle mensual de respuestas
+- listado de evaluaciones
+- comparacion por cluster
+- aporte al score mediante `nps_valor`
+
+El subdriver Delivery es prioritario para logistica porque refleja entrega, cumplimiento, completitud y experiencia de recepcion.
+
+## 12. Costo de atender un cliente
+
+El reporte de costos de atencion identifica clientes costosos y explica el motivo.
+
+Endpoint:
+
+- `GET /api/segmentacion/reporte/costos-atencion`
+
+Criterios considerados:
+
+- ratio de costo logistico alto
+- margen logistico proxy negativo
+- bajo dropsize
+- alto porcentaje de rechazo HL
+- baja venta con alta complejidad operativa
+- cliente sin autoelevador cuando el volumen o frecuencia lo justifican
+- RMD, OTIF o NPS bajos
+
+El reporte devuelve:
+
+- ranking principal de clientes costosos
+- motivo principal
+- explicacion operativa
+- score de costo
+- recomendacion
+- resumen por cluster/sucursal
+- excluidos por baja venta con margen logistico proxy negativo
+
+Regla de excluidos:
+
+- Los clientes con baja venta y margen logistico proxy negativo pueden quedar fuera del ranking principal para no mezclar segmentos incomparables.
+- Deben mostrarse debajo del reporte como alerta separada.
+- El texto obligatorio es: "Clientes excluidos del ranking principal por baja venta, pero con margen logistico proxy negativo".
+
+## 13. Plan de servicio logistico
+
+Vista:
+
+- `vw_cliente_plan_servicio`
+
+Reglas de accion:
+
+- Ganador: prioridad de inventario, ventanas horarias precisas, mejor seguimiento OTIF y evaluacion de servicio flexible.
+- En crecimiento: acompanamiento comercial-logistico, mejora de frecuencia, seguimiento de experiencia y proteccion de crecimiento.
+- Basico: servicio estandar, costo controlado, frecuencia optima y consolidacion cuando aplique.
+- Ventas bajas: optimizar frecuencia, consolidar pedidos, revisar rentabilidad y evitar sobre-servicio.
+- Refrigerado: prioridad cadena de frio, inventario protegido, ventanas cortas, seguimiento OTIF y validacion de condiciones de entrega.
+
+Alertas:
+
+- refrigerado con OTIF menor a 90
+- OTIF menor a 85
+- margen logistico proxy negativo
+- rechazo HL alto
+- Ganador con caida YTD
+- NPS o RMD bajo
+
+## 14. Recalculo, cache e historico
+
+### 14.1 Refresco de cache
+
+Endpoint:
+
+- `POST /api/segmentacion/cache/refresh`
+
+Uso:
+
+- despues de cargar datos
+- despues de cambiar parametros
+- antes de revisar paneles
+
+### 14.2 Recalculo oficial
 
 Endpoint:
 
@@ -235,103 +583,196 @@ Body minimo:
 
 Resultado:
 
-- refresca cache de segmentacion
-- recalcula cluster/score sobre periodo activo
-- guarda snapshot por cliente en historico
-- registra auditoria de ejecucion
+- recalcula metricas
+- recalcula clusters
+- recalcula score
+- refresca cache
+- guarda snapshot historico
+- registra auditoria
 
-### 9.2 Historico
+### 14.3 Historico mensual
 
-Tabla: `seg_cliente_cluster_historico`.
+Tabla:
 
-Llave de unicidad:
+- `seg_cliente_cluster_historico`
 
-- `(cliente, periodo_anio, periodo_mes)`
+Clave:
 
-Permite analizar migracion de cluster por mes y por sucursal.
+- `cliente`
+- `periodo_anio`
+- `periodo_mes`
 
-### 9.3 Auditoria
+Uso:
 
-Tabla: `seg_auditoria`.
+- evolucion de clusters
+- comparacion semestral DPO
+- soporte para auditoria
+- trazabilidad de cambios por cliente
 
-Registra:
+### 14.4 Auditoria tecnica
 
-- accion ejecutada
+Tabla:
+
+- `seg_auditoria`
+
+Debe registrar:
+
+- accion
 - periodo
-- volumen de clientes procesados
+- usuario/proceso
+- cantidad de clientes procesados
 - distribucion por cluster
 - version de regla
 - parametros usados
-- usuario/proceso ejecutor
-- duracion y error (si aplica)
+- duracion
+- error, si existio
 
-## 10. Controles de calidad (QC)
-
-Ejecutar en cada recalculo:
-
-1. Integridad de datos:
-   - clientes sin `cliente_id` nulo.
-   - ventas/HL no negativas.
-2. Cobertura de filtros:
-   - validacion de exclusion por `ruta_venta_descripcion ILIKE '%temp%'`.
-   - validacion de exclusiones por `anulado`/inactividad.
-3. Umbrales dinamicos:
-   - verificar `percentil_alta > percentil_baja`.
-4. Score:
-   - `0 <= score_total <= 100`.
-   - `0 <= score_total_operativo <= 100`.
-5. Geografia:
-   - latitud en `[-90, 90]`.
-   - longitud en `[-180, 180]`.
-6. Trazabilidad:
-   - fila de auditoria creada por corrida.
-   - snapshot historico con periodo correcto.
-
-## 11. Procedimiento operativo paso a paso
+## 15. Procedimiento operativo paso a paso
 
 1. Confirmar periodo activo:
-   - consultar `GET /api/segmentacion/periodo`.
-   - si corresponde, actualizar con `PUT /api/segmentacion/periodo`.
-2. Cargar o actualizar parametros:
-   - `PUT /api/segmentacion/parametros`.
-3. Cargar clientes autoelevador:
-   - desde el panel `/segmentacion-clientes`, pestania `Carga`.
-   - `POST /api/segmentacion/autoelevador/import` con CSV o JSON.
-4. Cargar metricas de servicio:
-   - desde el panel `/segmentacion-clientes`, pestania `Carga`.
-   - `POST /api/segmentacion/servicio/import` con CSV o JSON.
-   - columnas esperadas: `cliente` y al menos una de `OTIF`, `RMD` o `NPS`.
-5. Cargar geografia de clientes:
-   - `POST /api/segmentacion/geografia/bulk`.
-6. Validar padron activo:
-   - `GET /api/segmentacion/clientes-activos`.
+   - revisar `GET /api/segmentacion/periodo`.
+2. Actualizar parametros:
+   - percentiles, costos por HL, anios y fechas.
+3. Cargar IPC:
+   - usar plantilla IPC.
+   - validar que cubra desde el inicio del periodo base hasta el ultimo mes publicado.
+4. Cargar datos de servicio:
+   - RMD vigente e historico.
+   - OTIF vigente e historico.
+   - NPS vigente e historico.
+   - NPS detallado con drivers y subdrivers.
+5. Cargar atributos:
+   - autoelevador.
+   - geografia.
+   - clientes refrigerados deben venir identificados como `REF` en `clientes.descripcion`.
+6. Validar clientes activos:
+   - excluir anulados, temporales e inactivos no comparables.
 7. Refrescar cache:
-   - `POST /api/segmentacion/cache/refresh`.
+   - ejecutar `POST /api/segmentacion/cache/refresh`.
 8. Ejecutar recalculo oficial:
-   - `POST /api/segmentacion/recalcular`.
-9. Verificar resultados:
-   - `GET /api/segmentacion/clusters`
-   - `GET /api/segmentacion/cluster-logistico`
-   - `GET /api/segmentacion/mapa/clientes`
-   - `GET /api/segmentacion/resumen/sucursal`
-   - `GET /api/segmentacion/resumen/localidad`
-10. Revisar trazabilidad:
-   - `GET /api/segmentacion/auditoria`.
-11. Publicar en panel:
-   - validar que el dashboard consuma vistas y endpoints actualizados.
+   - ejecutar `POST /api/segmentacion/recalcular`.
+9. Revisar resultados:
+   - clusters por sucursal.
+   - clusters por localidad.
+   - score.
+   - NPS/RMD/OTIF.
+   - rechazos HL.
+   - costo de atencion.
+10. Generar evidencia:
+   - descargar SOP PDF.
+   - exportar reporte de clientes.
+   - exportar cliente individual en PDF/Excel cuando aplique.
+   - guardar capturas del panel.
+11. Publicar plan operativo:
+   - compartir con ventas y operaciones.
+   - cargar o actualizar ruteador si corresponde.
+   - conservar evidencia de la publicacion.
 
-## 12. Anexo: descarga del SOP en PDF
+## 16. Evidencia y exportables
 
-Archivo esperado:
+SOP:
 
+- `docs/SOP_Segmentacion_Clientes_DPO.md`
 - `docs/SOP_Segmentacion_Clientes_DPO.pdf`
-
-Endpoint disponible:
-
 - `GET /api/segmentacion/sop/pdf`
 
-Generacion local reproducible:
+Cliente individual:
+
+- `GET /api/segmentacion/cliente/<cliente>/export?formato=pdf`
+- `GET /api/segmentacion/cliente/<cliente>/export?formato=xlsx`
+
+Datos NPS del cliente:
+
+- `GET /api/segmentacion/cliente/<cliente>/nps`
+
+Costos de atencion:
+
+- `GET /api/segmentacion/reporte/costos-atencion`
+
+Resumenes:
+
+- `GET /api/segmentacion/resumen/sucursal`
+- `GET /api/segmentacion/resumen/localidad`
+- `GET /api/segmentacion/clusters`
+- `GET /api/segmentacion/cluster-logistico`
+- `GET /api/segmentacion/mapa/clientes`
+
+Auditoria:
+
+- `GET /api/segmentacion/auditoria`
+
+## 17. Controles de calidad obligatorios
+
+Antes de aprobar un recalculo:
+
+1. Periodo:
+   - actual y base deben tener fechas coherentes.
+   - el periodo base debe ser comparable.
+2. IPC:
+   - validar meses cargados.
+   - revisar factor acumulado.
+3. Ventas:
+   - no deben existir ventas negativas no justificadas.
+   - clientes sin identificador deben excluirse o corregirse.
+4. Clientes activos:
+   - anulados excluidos.
+   - rutas temporales excluidas.
+5. Refrigerados:
+   - clientes `REF` identificados.
+   - todos deben tener `cliente_refrigerado = true`.
+6. Rechazos:
+   - criterios de rechazo validados.
+   - `pct_rechazo_hl` no debe calcularse sobre HL nulo.
+7. Servicio:
+   - cobertura RMD, OTIF y NPS revisada.
+   - clientes sin datos deben quedar visibles.
+8. Score:
+   - `0 <= score_total <= 100`.
+   - pesos activos deben sumar 100 puntos.
+9. Geografia:
+   - latitud entre -90 y 90.
+   - longitud entre -180 y 180.
+10. Historico:
+   - snapshot creado para el periodo.
+   - no duplicar `(cliente, anio, mes)`.
+11. Auditoria:
+   - corrida registrada en `seg_auditoria`.
+   - si hay error, debe quedar registrado.
+
+## 18. Paquete minimo de auditoria
+
+Para responder auditoria DPO, conservar:
+
+1. SOP vigente en PDF.
+2. Captura de parametros del modelo.
+3. Captura de distribucion de clusters.
+4. Archivo de RMD/OTIF/NPS importado.
+5. Archivo de IPC importado o evidencia de fuente.
+6. Captura de comparacion cluster vs RMD/OTIF/NPS.
+7. Reporte de costos de atencion.
+8. Reporte/export de clientes refrigerados.
+9. Log de recalculo.
+10. Evidencia de plan de servicio enviado a ventas/operaciones.
+11. Evidencia de carga o actualizacion en ruteador, si aplica.
+
+## 19. Limitaciones conocidas
+
+- OTIF requiere fuente especifica de entregas prometidas y completas; no se debe inferir desde ventas.
+- El margen logistico proxy es una aproximacion basada en costo por HL; no reemplaza rentabilidad contable completa.
+- La regla de refrigerados es una prioridad operativa documentada, no una conclusion estadistica de ingresos/crecimiento.
+- Si falta IPC, el crecimiento queda nominal y debe informarse como limitacion.
+- Si falta RMD o NPS, el score usa mediana para no penalizar por ausencia, pero la cobertura debe corregirse.
+
+## 20. Generacion local del PDF
+
+Comando:
 
 ```bash
 python scripts/generar_sop_pdf.py
 ```
+
+Archivo generado:
+
+- `docs/SOP_Segmentacion_Clientes_DPO.pdf`
+
+El boton `SOP PDF` del modulo descarga este archivo.

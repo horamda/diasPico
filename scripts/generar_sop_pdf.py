@@ -120,7 +120,7 @@ def md_to_story(md_text: str):
             continue
 
         if stripped.startswith("- "):
-            story.append(Paragraph(inline_md_to_rl(stripped[2:]), bullet, bulletText="•"))
+            story.append(Paragraph(inline_md_to_rl(stripped[2:]), bullet, bulletText="-"))
             continue
 
         num_match = re.match(r"^(\d+)\.\s+(.*)$", stripped)

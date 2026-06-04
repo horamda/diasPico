@@ -4,7 +4,9 @@ All heavy SQL lives here; routes stay thin.
 """
 
 from __future__ import annotations
-from io import BytesIO
+import csv
+import re
+from io import BytesIO, StringIO
 from datetime import date, timedelta
 import calendar as cal_mod
 import threading
@@ -1690,6 +1692,27 @@ def get_detalle_dia(sucursal: str, fecha: date) -> dict:
 NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun',
                'Jul','Ago','Sep','Oct','Nov','Dic']
 
+_AUS_META_KEYS = {
+    'empresa', 'empresaid', 'empresa_id',
+    'sucursal', 'sucursalid', 'sucursal_id', 'branch',
+    'anio', 'ano', 'year',
+}
+
+_AUS_MONTH_ALIASES = {
+    'ene': 1, 'enero': 1, 'jan': 1, 'january': 1,
+    'feb': 2, 'febrero': 2, 'february': 2,
+    'mar': 3, 'marzo': 3, 'march': 3,
+    'abr': 4, 'abril': 4, 'apr': 4, 'april': 4,
+    'may': 5, 'mayo': 5,
+    'jun': 6, 'junio': 6, 'june': 6,
+    'jul': 7, 'julio': 7, 'july': 7,
+    'ago': 8, 'agosto': 8, 'aug': 8, 'august': 8,
+    'sep': 9, 'sept': 9, 'septiembre': 9, 'set': 9, 'setiembre': 9, 'september': 9,
+    'oct': 10, 'octubre': 10, 'october': 10,
+    'nov': 11, 'noviembre': 11, 'november': 11,
+    'dic': 12, 'diciembre': 12, 'dec': 12, 'december': 12,
+}
+
 # Umbral a partir del cual se considera ausentismo alto (boost al score)
 AUS_UMBRAL_ALTO = 10.0   # >= 10% → boost fuerte
 AUS_UMBRAL_MEDIO = 5.0   # >= 5%  → boost moderado
@@ -1746,6 +1769,140 @@ def guardar_ausentismo_mensual(data: dict) -> dict:
                               actualizado = NOW()
             """, {'e': empresa_id, 's': sucursal_id, 'a': anio, 'm': mes, 'p': pct})
     return get_ausentismo_mensual(empresa_id, sucursal_id, anio)
+
+
+def _norm_aus_key(value: object) -> str:
+    text = str(value or '').strip().lower()
+    repl = str.maketrans('áéíóúüñ', 'aeiouun')
+    text = text.translate(repl)
+    return re.sub(r'[^a-z0-9]+', '', text)
+
+
+def _parse_aus_pct(value: object) -> float | None:
+    if value in (None, ''):
+        return None
+    text = str(value).strip()
+    if not text or text in {'-', '--'}:
+        return None
+    text = text.replace('%', '').replace(' ', '')
+    if ',' in text and '.' in text:
+        text = text.replace('.', '').replace(',', '.')
+    elif ',' in text:
+        text = text.replace(',', '.')
+    try:
+        pct = float(text)
+    except ValueError:
+        return None
+    if pct < 0 or pct > 100:
+        raise ValueError(f'Ausentismo fuera de rango: {value}')
+    return pct
+
+
+def _parse_aus_year(value: object) -> int | None:
+    if value in (None, ''):
+        return None
+    match = re.search(r'(20\d{2}|19\d{2})', str(value))
+    if not match:
+        return None
+    return int(match.group(1))
+
+
+def _month_year_from_header(header: object) -> tuple[int, int | None] | None:
+    raw = str(header or '').strip()
+    if not raw:
+        return None
+    key = _norm_aus_key(raw)
+    if key in _AUS_META_KEYS:
+        return None
+    if key.isdigit() and 1 <= int(key) <= 12:
+        return int(key), None
+    if re.fullmatch(r'm(0?[1-9]|1[0-2])', key):
+        return int(key[1:]), None
+
+    year = _parse_aus_year(raw)
+    m = re.search(r'(?:^|[^0-9])(0?[1-9]|1[0-2])(?:[^0-9]|$)', raw)
+    if m and year:
+        return int(m.group(1)), year
+
+    for alias, month in _AUS_MONTH_ALIASES.items():
+        if alias in key:
+            if not year:
+                short_year = re.search(r'(?:^|[^0-9])(\d{2})$', raw)
+                if short_year:
+                    year = 2000 + int(short_year.group(1))
+            return month, year
+    return None
+
+
+def _read_aus_csv(text: str) -> list[dict]:
+    cleaned = (text or '').strip('\ufeff\r\n ')
+    if not cleaned:
+        return []
+    sample = cleaned[:4096]
+    try:
+        dialect = csv.Sniffer().sniff(sample, delimiters=';\t,')
+    except csv.Error:
+        return list(csv.DictReader(StringIO(cleaned), delimiter=';'))
+    return list(csv.DictReader(StringIO(cleaned), dialect=dialect))
+
+
+def importar_ausentismo_historico(data: dict) -> dict:
+    _ensure_ausentismo_mensual_table()
+    empresa_default = str(data.get('empresa_id') or '1')
+    sucursal_default = str(data.get('sucursal_id') or data.get('sucursal') or 'TODAS')
+    rows = data.get('filas') or data.get('rows') or []
+    if not rows:
+        rows = _read_aus_csv(str(data.get('texto') or data.get('csv') or ''))
+    if not rows:
+        raise ValueError('No se recibieron filas para importar')
+
+    batch: list[dict] = []
+    omitidas = 0
+    for row in rows:
+        normalized = {_norm_aus_key(k): v for k, v in dict(row).items()}
+        empresa_id = str(normalized.get('empresaid') or normalized.get('empresa') or normalized.get('empresa_id') or empresa_default)
+        sucursal_id = str(normalized.get('sucursalid') or normalized.get('sucursal') or normalized.get('sucursal_id') or sucursal_default)
+        row_year = (
+            _parse_aus_year(normalized.get('anio'))
+            or _parse_aus_year(normalized.get('ano'))
+            or _parse_aus_year(normalized.get('year'))
+        )
+        for header, value in dict(row).items():
+            parsed = _month_year_from_header(header)
+            if not parsed:
+                continue
+            mes, header_year = parsed
+            anio = header_year or row_year
+            pct = _parse_aus_pct(value)
+            if not anio or pct is None:
+                omitidas += 1
+                continue
+            batch.append({
+                'e': empresa_id,
+                's': sucursal_id or 'TODAS',
+                'a': int(anio),
+                'm': int(mes),
+                'p': round(float(pct), 2),
+            })
+    if not batch:
+        raise ValueError('No se detectaron meses validos. Usar columnas Ene..Dic con columna Anio, o columnas 2025-01, 2025-02, etc.')
+
+    with pg_cursor() as cur:
+        for item in batch:
+            cur.execute("""
+                INSERT INTO ausentismo_mensual
+                    (empresa_id, sucursal_id, anio, mes, pct_ausentismo)
+                VALUES (%(e)s, %(s)s, %(a)s, %(m)s, %(p)s)
+                ON CONFLICT (empresa_id, sucursal_id, anio, mes)
+                DO UPDATE SET pct_ausentismo = EXCLUDED.pct_ausentismo,
+                              actualizado = NOW()
+            """, item)
+    return {
+        'registros': len(batch),
+        'omitidas': omitidas,
+        'anios': sorted({item['a'] for item in batch}),
+        'sucursales': sorted({item['s'] for item in batch}),
+    }
 
 
 def _aus_mensual_by_mes(empresa_id: str, sucursal_id: str, anio: int) -> dict[int, float]:
@@ -2278,7 +2435,18 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
     ini = date(min(anio, anio_base), 1, 1)
     fin = date(max(anio, anio_base), 12, 31)
     swv = _suc_filter(sucursal, 'v')
-    p = {'ini': ini, 'fin': fin, 's': sucursal}
+    params_db = get_params(sucursal)
+    umbral = float(params_db['umbral_pct'])
+    metrica = params_db['metrica']
+    metrica_expr = {
+        'bultos': 'SUM(COALESCE(v.bultos, 0))',
+        'hectolitros': 'SUM(COALESCE(v.unidad_medida, 0))',
+        'pallets': f'SUM({V_PALLETS_EXPR})',
+        'up': 'SUM(COALESCE(v.unidad_paquete, 0))',
+        'pedidos': f'COUNT(DISTINCT {V_PEDIDO_KEY})',
+        'clientes': f'COUNT(DISTINCT {V_CLIENT_KEY})',
+    }.get(metrica, 'SUM(COALESCE(v.bultos, 0))')
+    p = {'ini': ini, 'fin': fin, 's': sucursal, 'umbral': umbral}
 
     with pg_cursor() as cur:
         # KPIs mensuales de ventas (ambos años)
@@ -2306,13 +2474,13 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
         """, p)
         ventas_rows = {(r['anio'], r['mes']): dict(r) for r in cur.fetchall()}
 
-        # Días pico por mes (volume > monthly avg * 1.20)
+        # Dias pico por mes con la misma metrica y umbral configurados.
         cur.execute(f"""
             WITH daily AS (
                 SELECT EXTRACT(YEAR FROM v.fecha)::int  AS anio,
                        EXTRACT(MONTH FROM v.fecha)::int AS mes,
                        v.fecha,
-                       SUM(COALESCE(v.bultos, 0)) AS b_dia
+                       {metrica_expr} AS metrica_dia
                 FROM ventas_detalle v
                 LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
                 WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
@@ -2320,11 +2488,11 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
                 GROUP BY 1, 2, 3
             ),
             mavg AS (
-                SELECT anio, mes, AVG(b_dia) AS avg_b FROM daily GROUP BY 1, 2
+                SELECT anio, mes, AVG(metrica_dia) AS avg_metrica FROM daily GROUP BY 1, 2
             )
             SELECT d.anio, d.mes, COUNT(*) AS dias_pico
             FROM daily d JOIN mavg m ON d.anio = m.anio AND d.mes = m.mes
-            WHERE d.b_dia > m.avg_b * 1.20
+            WHERE d.metrica_dia >= m.avg_metrica * %(umbral)s
             GROUP BY 1, 2
         """, p)
         picos_map = {(r['anio'], r['mes']): int(r['dias_pico']) for r in cur.fetchall()}

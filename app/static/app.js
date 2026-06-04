@@ -58,11 +58,15 @@ const chartValueLabels = {
       const meta = chart.getDatasetMeta(dsIndex);
       if (!meta || meta.hidden) return;
       const color = ds.labelColor || ds.borderColor || '#e8eaf0';
-      ctx.fillStyle = color;
+      const totalPoints = Array.isArray(ds.data) ? ds.data.length : 0;
+      const maxLabels = Number(opts.maxLabelsPerDataset || ds.maxLabelsPerDataset || 0);
+      const step = maxLabels > 0 && totalPoints > maxLabels ? Math.ceil(totalPoints / maxLabels) : 1;
       meta.data.forEach((element, index) => {
         const raw = ds.data?.[index];
         if (raw == null || Number.isNaN(Number(raw))) return;
         if (opts.hideZero && Number(raw) === 0) return;
+        if (step > 1 && index % step !== 0 && index !== totalPoints - 1) return;
+        ctx.fillStyle = Array.isArray(color) ? color[index] : color;
         const pos = element.tooltipPosition();
         const isBar = ds.type === 'bar';
         const y = isBar ? pos.y - 8 : (pos.y <= 18 ? pos.y + 14 : pos.y - 12);
@@ -88,6 +92,22 @@ function metricSummaryLabel(metric) {
 function metricSummaryValue(kpis, metric) {
   if (metric === 'pedidos' || metric === 'clientes') return fmtN(kpis?.[metric] ?? 0);
   return fmtN(Math.round(kpis?.[metric] ?? 0));
+}
+
+function isTabVisible(id) {
+  const el = document.getElementById(id);
+  return !!el && el.style.display !== 'none';
+}
+
+async function refreshPicoDependentViews() {
+  await loadMes();
+  loadHistorico();
+  if (isTabVisible('tab-comparativo')) loadComparativo();
+  if (isTabVisible('tab-dotacion')) loadDotacion();
+  if (isTabVisible('tab-analisis')) loadAnalisisHl();
+  if (isTabVisible('tab-dropsize')) loadDropsize();
+  if (isTabVisible('tab-planificacion')) loadPlanificacion();
+  if (isTabVisible('tab-config')) loadKpiObjetivos();
 }
 
 function _kpiProyeccion(kAnt) {
@@ -719,34 +739,36 @@ async function loadHistorico() {
     historicoPicosChart = null;
   }
   load('barHistorico'); load('picosAnualHistorico'); load('tablaHistorico');
-  const n = document.getElementById('selPeriodoHist').value;
+  const n = Number(document.getElementById('selPeriodoHist').value || 0);
   const suc = getSuc();
   const m = document.getElementById('selMetrica').value;
   const u = document.getElementById('sliderUmbral').value;
   try {
-    const data  = await api(`/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=${n}&umbral=${u}&metrica=${m}`, { signal: _histAbort.signal });
+    const fetchMonths = Math.max(24, n || 0);
+    const data  = await api(`/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=${fetchMonths}&umbral=${u}&metrica=${m}`, { signal: _histAbort.signal });
     if (seq !== _loadHistSeq || suc !== getSuc() || n !== document.getElementById('selPeriodoHist').value || m !== document.getElementById('selMetrica').value || u !== document.getElementById('sliderUmbral').value) return;
     const meses = data.meses || [];
+    const visibles = n > 0 && n < meses.length ? meses.slice(-n) : meses;
     if (!meses.length) {
       document.getElementById('barHistorico').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos históricos</div>';
       document.getElementById('tablaHistorico').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin datos para la tabla</div>';
-      await loadHistoricoPicosAnual(seq, suc, m, u);
+      await loadHistoricoPicosAnual(seq, suc, m, u, meses);
       return;
     }
     document.getElementById('barHistorico').innerHTML = '<div class="chart-wrap" style="height:280px"><canvas id="histChart"></canvas></div>';
     historicoChart = renderHistoricoChart(
-      meses.map(x => x.mes.slice(2)),
-      meses.map(x => Number(x[m] || 0)),
+      visibles.map(x => x.mes.slice(2)),
+      visibles.map(x => Number(x[m] || 0)),
       m,
-      meses.map(x => Number(x.dias_pico || 0))
+      visibles.map(x => Number(x.dias_pico || 0))
     );
-    await loadHistoricoPicosAnual(seq, suc, m, u);
+    await loadHistoricoPicosAnual(seq, suc, m, u, meses);
 
     let html = `<table class="rtbl"><thead><tr>
       <th>Mes</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
       <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th><th>Días</th><th>Días pico</th>
     </tr></thead><tbody>`;
-    meses.forEach(x => {
+    visibles.forEach(x => {
       const picoTitle = `Metrica: ${metricSummaryLabel(x.metrica_pico || m)} | Prom.: ${fmtN(Math.round(x.promedio_pico || 0))} | Umbral: ${fmtN(Math.round(x.umbral_pico || 0))}`;
       html += `<tr>
         <td style="font-family:var(--mono)">${x.mes}</td>
@@ -851,22 +873,23 @@ function renderHistoricoChart(labels, values, metric, picos = []) {
   });
 }
 
-async function loadHistoricoPicosAnual(seq, suc, metric, umbralValue) {
+async function loadHistoricoPicosAnual(seq, suc, metric, umbralValue, mesesBase = null) {
   const cont = document.getElementById('picosAnualHistorico');
   if (!cont) return;
   cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando comparación anual…</div>';
   try {
-    const data = await api(
-      `/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=24&umbral=${umbralValue}&metrica=${metric}`,
-      { signal: _histAbort.signal }
-    );
+    const meses = Array.isArray(mesesBase)
+      ? mesesBase
+      : (await api(
+          `/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=24&umbral=${umbralValue}&metrica=${metric}`,
+          { signal: _histAbort.signal }
+        )).meses || [];
     if (
       seq !== _loadHistSeq ||
       suc !== getSuc() ||
       metric !== document.getElementById('selMetrica').value ||
       umbralValue !== document.getElementById('sliderUmbral').value
     ) return;
-    const meses = data.meses || [];
     if (!meses.length) {
       cont.innerHTML = '<div class="empty"><div class="icon">📈</div>Sin datos para comparar años</div>';
       return;
@@ -1187,14 +1210,28 @@ function renderDropChart(canvasId, currentChart, labels, datasets) {
   const el = document.getElementById(canvasId);
   if (!el) return currentChart;
   if (currentChart) currentChart.destroy();
+  const labelLimit = labels.length > 18 ? 14 : 99;
+  const labelledDatasets = datasets.map(ds => ({
+    ...ds,
+    pointRadius: ds.pointRadius ?? 3,
+    pointHoverRadius: ds.pointHoverRadius ?? 5,
+    labelColor: ds.labelColor || ds.borderColor,
+    valueFormatter: ds.valueFormatter || (raw => fmtDrop(raw || 0)),
+    maxLabelsPerDataset: labelLimit,
+  }));
   return new Chart(el.getContext('2d'), {
     type: 'line',
-    data: { labels, datasets },
+    data: { labels, datasets: labelledDatasets },
+    plugins: [chartValueLabels],
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 22 } },
       interaction: { mode: 'index', intersect: false },
-      plugins: { legend: { labels: { color: '#e8eaf0', boxWidth: 10 } } },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: true, maxLabelsPerDataset: labelLimit },
+      },
       scales: {
         x: { ticks: { color: '#6b7080', maxRotation: 0 }, grid: { color: 'rgba(42,46,58,.35)' } },
         y: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
@@ -1679,8 +1716,7 @@ function onUmbralChange(v) {
 function setUmbral(v) {
   document.getElementById('sliderUmbral').value = v;
   onUmbralChange(v);
-  loadMes();
-  loadHistorico();
+  refreshPicoDependentViews();
 }
 
 async function guardarUmbral() {
@@ -1696,8 +1732,7 @@ async function guardarUmbral() {
     el.style.color  = 'var(--grn)';
     el.textContent  = '✓ Guardado';
     setTimeout(() => el.textContent = '', 2000);
-    await loadMes();
-    loadHistorico();
+    await refreshPicoDependentViews();
   } catch (e) {
     el.style.color = 'var(--red)';
     el.textContent = 'Error';
@@ -1706,9 +1741,7 @@ async function guardarUmbral() {
 
 async function onMetricaChange() {
   metrica = document.getElementById('selMetrica').value;
-  await loadMes();
-  loadHistorico();
-  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsizePicos();
+  await refreshPicoDependentViews();
 }
 
 async function onSucursalChange() {
@@ -1716,12 +1749,7 @@ async function onSucursalChange() {
   if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();
   if (document.getElementById('planSucursal')) document.getElementById('planSucursal').value = getSuc();
   await loadParams(false);
-  await loadMes();
-  loadHistorico();
-  if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
-  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsize();
-  if (document.getElementById('tab-planificacion')?.style.display !== 'none') loadPlanificacion();
-  if (document.getElementById('tab-config')?.style.display !== 'none') loadKpiObjetivos();
+  await refreshPicoDependentViews();
   loadArticulosCount();
 }
 
@@ -1803,9 +1831,7 @@ async function uploadFile(tipo, force = false) {
     st.className   = 'upload-status ok';
     if (tipo === 'articulos') loadArticulosCount();
     else {
-      await loadMes();
-      loadHistorico();
-      if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
+      await refreshPicoDependentViews();
       loadArticulosCount();
     }
   } catch (e) { st.textContent = '✗ ' + e.message; st.className = 'upload-status err'; }
@@ -1980,13 +2006,15 @@ async function addEvento() {
       body: JSON.stringify({ fecha, sucursal: suc, descripcion: desc }),
     });
     inp.value = '';
-    await loadEventos(); await loadMes();
+    await loadEventos();
+    await refreshPicoDependentViews();
   } catch (e) { alert('Error al guardar evento'); }
 }
 
 async function deleteEvento(id) {
   await fetch(`${API}/api/eventos/${id}`, { method: 'DELETE' });
-  await loadEventos(); await loadMes();
+  await loadEventos();
+  await refreshPicoDependentViews();
 }
 
 // ─── RECHAZOS ─────────────────────────────────────────────────
@@ -2089,7 +2117,7 @@ async function saveParams() {
       document.getElementById('selMetrica').value   = met;
       onUmbralChange(u);
       metrica = met;
-      await loadMes();
+      await refreshPicoDependentViews();
     }
   } catch (e) {
     document.getElementById('paramsMsg').style.color  = 'var(--red)';
@@ -2187,7 +2215,7 @@ async function deleteKpiObjetivo(id) {
     const r = await fetch(API + '/api/kpi-objetivos/' + id, { method: 'DELETE' });
     if (!r.ok) throw new Error('Error al eliminar');
     await loadKpiObjetivos();
-    await loadMes();
+    await refreshPicoDependentViews();
   } catch (e) {
     alert('Error: ' + e.message);
   }
@@ -2219,7 +2247,7 @@ async function saveKpiObjetivo() {
     msg.textContent = 'Objetivo KPI guardado';
     document.getElementById('kpiObjId').value = '';
     await loadKpiObjetivos();
-    await loadMes();
+    await refreshPicoDependentViews();
   } catch (e) {
     msg.style.color = 'var(--red)';
     msg.textContent = e.message;
@@ -2746,10 +2774,12 @@ async function toggleFlotaMes(vehiculoId, activo) {
         motivo,
       }),
     });
-    await loadFlotaPlanificacion();
+    if (isTabVisible('tab-planificacion')) await loadPlanificacion();
+    else await loadFlotaPlanificacion();
   } catch (e) {
     setPlanMsg(e.message, true);
-    await loadFlotaPlanificacion();
+    if (isTabVisible('tab-planificacion')) await loadPlanificacion();
+    else await loadFlotaPlanificacion();
   }
 }
 
@@ -2767,12 +2797,25 @@ function renderPlanBar(canvasId, label, planVal, realVal, color = '#f5a623') {
     type: 'bar',
     data: {
       labels: ['Plan', 'Real'],
-      datasets: [{ label, data: [Number(planVal || 0), Number(realVal || 0)], backgroundColor: [color + 'aa', '#5b8deeaa'], borderColor: [color, '#5b8dee'], borderWidth: 1 }]
+      datasets: [{
+        label,
+        data: [Number(planVal || 0), Number(realVal || 0)],
+        backgroundColor: [color + 'aa', '#5b8deeaa'],
+        borderColor: [color, '#5b8dee'],
+        borderWidth: 1,
+        labelColor: [color, '#5b8dee'],
+        valueFormatter: raw => fmtDrop(raw || 0),
+      }]
     },
+    plugins: [chartValueLabels],
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { labels: { color: '#e8eaf0' } } },
+      layout: { padding: { top: 22 } },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0' } },
+        chartValueLabels: { hideZero: true },
+      },
       scales: {
         x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
         y: { beginAtZero: true, ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
@@ -2942,6 +2985,8 @@ async function guardarConfigPlanificacion() {
     });
     msg.style.color = 'var(--grn)';
     msg.textContent = 'Configuración guardada';
+    if (isTabVisible('tab-planificacion')) await loadPlanificacion();
+    else await loadConfigPlanificacion();
   } catch (e) {
     msg.style.color = 'var(--red)';
     msg.textContent = e.message;
@@ -3340,7 +3385,50 @@ async function saveAusentismoMensual() {
     });
     if (msg) { msg.textContent = `Ausentismo de ${MESES[mes - 1]} ${anio} guardado: ${fmtPct1(pct)}`; msg.style.color = 'var(--grn)'; }
     await loadAusentismoMensual();
-    loadHistorico();
+    await refreshPicoDependentViews();
+  } catch(e) {
+    if (msg) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
+  }
+}
+
+async function importAusentismoHistorico() {
+  const msg = document.getElementById('ausImportMsg');
+  const file = document.getElementById('ausImportFile')?.files?.[0];
+  const text = document.getElementById('ausImportTexto')?.value || '';
+  const sucursal = document.getElementById('ausSucursal')?.value || 'TODAS';
+  if (!file && !text.trim()) {
+    if (msg) { msg.textContent = 'Pegá una tabla o seleccioná un CSV.'; msg.style.color = 'var(--red)'; }
+    return;
+  }
+  if (msg) { msg.textContent = 'Importando histórico...'; msg.style.color = 'var(--muted)'; }
+  try {
+    let result;
+    if (file) {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('empresa_id', '1');
+      form.append('sucursal_id', sucursal);
+      result = await api('/api/picos/ausentismo-mensual/import', {
+        method: 'POST',
+        body: form,
+        timeout: 120000,
+      });
+    } else {
+      result = await api('/api/picos/ausentismo-mensual/import', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ empresa_id: '1', sucursal_id: sucursal, texto: text }),
+        timeout: 120000,
+      });
+    }
+    if (msg) {
+      const anios = (result.anios || []).join(', ');
+      const sucursales = (result.sucursales || []).join(', ');
+      msg.textContent = `Importado: ${fmtN(result.registros)} valores${result.omitidas ? `, ${fmtN(result.omitidas)} celdas omitidas` : ''}. Años: ${anios || '-'} | Sucursales: ${sucursales || '-'}`;
+      msg.style.color = 'var(--grn)';
+    }
+    await loadAusentismoMensual();
+    await refreshPicoDependentViews();
   } catch(e) {
     if (msg) { msg.textContent = e.message; msg.style.color = 'var(--red)'; }
   }
@@ -3563,11 +3651,7 @@ async function reload() {
   const drawerOpen = document.getElementById('drawer').classList.contains('open');
   picoSet = new Set(); diasData = [];
   renderCal();
-  await loadMes();
-  loadHistorico();
-  if (document.getElementById('tab-analisis').style.display !== 'none') loadAnalisisHl();
-  if (document.getElementById('tab-dropsize')?.style.display !== 'none') loadDropsize();
-  if (document.getElementById('tab-planificacion')?.style.display !== 'none') loadPlanificacion();
+  await refreshPicoDependentViews();
   loadArticulosCount();
   if (drawerOpen && selDay) await loadDayDetail(selDay);
 }
@@ -3752,6 +3836,7 @@ async function syncYCargarPlanilla() {
     } catch(_) {}
 
     await cargarPlanillaOperativa();
+    await refreshPicoDependentViews();
   } catch(e) {
     clearTimeout(timeoutId);
     clearInterval(timer);
@@ -4129,6 +4214,7 @@ async function guardarPeriodoCritico() {
       }),
     });
     await loadPeriodosCriticos();
+    await refreshPicoDependentViews();
   } catch (e) {
     if (errEl) errEl.textContent = e.message || 'Error al guardar';
   }
@@ -4139,6 +4225,7 @@ async function eliminarPeriodoCritico(id) {
   try {
     await fetch(API + `/api/picos/periodos-criticos/${id}`, { method: 'DELETE' });
     await loadPeriodosCriticos();
+    await refreshPicoDependentViews();
   } catch (e) {
     alert('Error al eliminar: ' + e.message);
   }

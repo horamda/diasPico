@@ -11,13 +11,25 @@ Tablas propias: seg_parametros, seg_clientes_atributos,
 from __future__ import annotations
 
 import json
+import unicodedata
 import time
 from calendar import monthrange
 from datetime import date, datetime
+from decimal import Decimal
+from io import BytesIO
 from threading import Lock
 from typing import Any, Iterable
 
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 import psycopg2.extras
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.database import pg_conn, pg_cursor
 from app.services import cache_svc
@@ -25,7 +37,7 @@ from app.services import cache_svc
 _TABLES_READY = False
 _TABLES_LOCK = Lock()
 _PLAN_SOURCE_CACHE: str | None = None
-_SCHEMA_VERSION = '20260531_segmentacion_dpo_cache_otif_v1'
+_SCHEMA_VERSION = '20260603_segmentacion_rmd_escala_1_5'
 
 _DDL_SCHEMA_VERSION = """
 CREATE TABLE IF NOT EXISTS seg_schema_version (
@@ -33,6 +45,61 @@ CREATE TABLE IF NOT EXISTS seg_schema_version (
     version        VARCHAR(120) NOT NULL,
     applied_at     TIMESTAMP NOT NULL DEFAULT NOW()
 );"""
+
+_SQL_RMD_ESCALA_1_5 = """
+UPDATE seg_clientes_atributos
+   SET rmd_valor = NULL,
+       rmd_fecha = NULL,
+       updated_at = NOW()
+ WHERE rmd_valor IS NOT NULL
+   AND (rmd_valor < 1 OR rmd_valor > 5);
+
+UPDATE seg_cliente_metricas_servicio_historico
+   SET rmd_valor = NULL,
+       rmd_fecha = NULL,
+       updated_at = NOW()
+ WHERE rmd_valor IS NOT NULL
+   AND (rmd_valor < 1 OR rmd_valor > 5);
+
+UPDATE seg_cliente_cluster_historico
+   SET rmd_valor = NULL
+ WHERE rmd_valor IS NOT NULL
+   AND (rmd_valor < 1 OR rmd_valor > 5);
+
+UPDATE seg_cliente_dpo_cache
+   SET rmd_valor = NULL,
+       updated_at = NOW(),
+       payload = CASE
+           WHEN payload ? 'rmd_valor' THEN jsonb_set(payload, '{rmd_valor}', 'null'::jsonb, true)
+           ELSE payload
+       END
+ WHERE rmd_valor IS NOT NULL
+   AND (rmd_valor < 1 OR rmd_valor > 5);
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_seg_atributos_rmd_escala'
+          AND conrelid = 'seg_clientes_atributos'::regclass
+    ) THEN
+        ALTER TABLE seg_clientes_atributos
+        ADD CONSTRAINT chk_seg_atributos_rmd_escala
+        CHECK (rmd_valor IS NULL OR (rmd_valor BETWEEN 1 AND 5));
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conname = 'chk_seg_serv_hist_rmd_escala'
+          AND conrelid = 'seg_cliente_metricas_servicio_historico'::regclass
+    ) THEN
+        ALTER TABLE seg_cliente_metricas_servicio_historico
+        ADD CONSTRAINT chk_seg_serv_hist_rmd_escala
+        CHECK (rmd_valor IS NULL OR (rmd_valor BETWEEN 1 AND 5));
+    END IF;
+END $$;
+"""
 
 # ─────────────────────────────────────────────────────────────
 # DDL — tablas de soporte
@@ -81,6 +148,91 @@ CREATE TABLE IF NOT EXISTS seg_clientes_atributos (
     updated_at      TIMESTAMP   NOT NULL DEFAULT NOW()
 );"""
 
+_DDL_SERVICIO_HISTORICO = """
+CREATE TABLE IF NOT EXISTS seg_cliente_metricas_servicio_historico (
+    id              BIGSERIAL PRIMARY KEY,
+    cliente         VARCHAR(50) NOT NULL,
+    periodo_anio    SMALLINT    NOT NULL,
+    periodo_mes     SMALLINT    NOT NULL DEFAULT 0,
+    nps_valor       NUMERIC(6,2),
+    nps_fecha       DATE,
+    rmd_valor       NUMERIC(6,2),
+    rmd_fecha       DATE,
+    otif_valor      NUMERIC(6,2),
+    otif_fecha      DATE,
+    fuente          VARCHAR(120) NOT NULL DEFAULT 'import',
+    updated_at      TIMESTAMP   NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_seg_servicio_hist_mes CHECK (periodo_mes BETWEEN 0 AND 12),
+    CONSTRAINT uq_seg_servicio_hist_cliente_periodo UNIQUE (cliente, periodo_anio, periodo_mes)
+);"""
+
+_DDL_NPS_DETALLADO = """
+CREATE TABLE IF NOT EXISTS seg_cliente_nps_encuestas (
+    id                    BIGSERIAL PRIMARY KEY,
+    encuesta_key          VARCHAR(180) NOT NULL UNIQUE,
+    cliente               VARCHAR(50)  NOT NULL,
+    fecha_encuesta        TIMESTAMP    NOT NULL,
+    periodo_anio          SMALLINT     NOT NULL,
+    periodo_mes           SMALLINT     NOT NULL,
+    score                 NUMERIC(5,2) NOT NULL,
+    categoria_nps         VARCHAR(20)  NOT NULL,
+    comentario            TEXT,
+    cod_cliente_distribuidor VARCHAR(50),
+    nombre_cliente        TEXT,
+    localidad             TEXT,
+    segmento_mkt          TEXT,
+    segmento_venta        TEXT,
+    cod_distribuidor      VARCHAR(50),
+    ddc_name              TEXT,
+    fuente                VARCHAR(120) NOT NULL DEFAULT 'nps_detallado',
+    updated_at            TIMESTAMP    NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_seg_nps_score CHECK (score BETWEEN 0 AND 10),
+    CONSTRAINT chk_seg_nps_mes CHECK (periodo_mes BETWEEN 1 AND 12)
+);
+
+CREATE TABLE IF NOT EXISTS seg_cliente_nps_drivers (
+    id                BIGSERIAL PRIMARY KEY,
+    encuesta_id       BIGINT NOT NULL REFERENCES seg_cliente_nps_encuestas(id) ON DELETE CASCADE,
+    driver_primario   TEXT,
+    driver_secundario TEXT,
+    es_delivery       BOOLEAN NOT NULL DEFAULT FALSE,
+    es_general        BOOLEAN NOT NULL DEFAULT FALSE,
+    updated_at        TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_seg_nps_driver UNIQUE (encuesta_id, driver_primario, driver_secundario)
+);
+
+CREATE TABLE IF NOT EXISTS seg_cliente_nps_mensual (
+    cliente                  VARCHAR(50) NOT NULL,
+    periodo_anio             SMALLINT    NOT NULL,
+    periodo_mes              SMALLINT    NOT NULL,
+    ultima_fecha             TIMESTAMP,
+    respuestas               INTEGER     NOT NULL DEFAULT 0,
+    score_promedio           NUMERIC(6,2),
+    promotores               INTEGER     NOT NULL DEFAULT 0,
+    pasivos                  INTEGER     NOT NULL DEFAULT 0,
+    detractores              INTEGER     NOT NULL DEFAULT 0,
+    nps_indice               NUMERIC(7,2),
+    delivery_respuestas      INTEGER     NOT NULL DEFAULT 0,
+    delivery_score_promedio  NUMERIC(6,2),
+    delivery_promotores      INTEGER     NOT NULL DEFAULT 0,
+    delivery_pasivos         INTEGER     NOT NULL DEFAULT 0,
+    delivery_detractores     INTEGER     NOT NULL DEFAULT 0,
+    delivery_nps_indice      NUMERIC(7,2),
+    general_respuestas       INTEGER     NOT NULL DEFAULT 0,
+    general_score_promedio   NUMERIC(6,2),
+    general_promotores       INTEGER     NOT NULL DEFAULT 0,
+    general_pasivos          INTEGER     NOT NULL DEFAULT 0,
+    general_detractores      INTEGER     NOT NULL DEFAULT 0,
+    general_nps_indice       NUMERIC(7,2),
+    nps_logistico_indice     NUMERIC(7,2),
+    nps_logistico_norm       NUMERIC(6,2),
+    top_subdrivers           JSONB       NOT NULL DEFAULT '[]'::jsonb,
+    fuente                   VARCHAR(120) NOT NULL DEFAULT 'nps_detallado',
+    updated_at               TIMESTAMP    NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_seg_nps_mensual_mes CHECK (periodo_mes BETWEEN 1 AND 12),
+    CONSTRAINT uq_seg_nps_mensual_cliente_periodo UNIQUE (cliente, periodo_anio, periodo_mes)
+);"""
+
 _DDL_CLIENTE_GEO = """
 CREATE TABLE IF NOT EXISTS cliente_geografia (
     cliente_id   VARCHAR(100) PRIMARY KEY,
@@ -123,6 +275,19 @@ CREATE TABLE IF NOT EXISTS seg_periodos_calculo (
     )
 );"""
 
+_DDL_INFLACION = """
+CREATE TABLE IF NOT EXISTS seg_inflacion_mensual (
+    periodo_anio  SMALLINT NOT NULL,
+    periodo_mes   SMALLINT NOT NULL,
+    inflacion_pct NUMERIC(12,6) NOT NULL,
+    indice_ipc    NUMERIC(18,6),
+    fuente        VARCHAR(120) NOT NULL DEFAULT 'import',
+    updated_at    TIMESTAMP NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (periodo_anio, periodo_mes),
+    CONSTRAINT chk_seg_inflacion_mes CHECK (periodo_mes BETWEEN 1 AND 12),
+    CONSTRAINT chk_seg_inflacion_pct CHECK (inflacion_pct > -99.999999)
+);"""
+
 _DDL_SCORE_PESOS = """
 CREATE TABLE IF NOT EXISTS seg_score_pesos (
     variable        VARCHAR(50) PRIMARY KEY,
@@ -141,6 +306,7 @@ CREATE TABLE IF NOT EXISTS seg_cliente_dpo_cache (
     sucursal_nombre TEXT,
     localidad    VARCHAR(100),
     autoelevador BOOLEAN DEFAULT FALSE,
+    cliente_refrigerado BOOLEAN DEFAULT FALSE,
     cluster_dpo  VARCHAR(50),
     subcluster_logistico VARCHAR(80),
     ingreso NUMERIC(18,2),
@@ -157,8 +323,17 @@ CREATE TABLE IF NOT EXISTS seg_cliente_dpo_cache (
     dropsize_bultos_ytd NUMERIC(18,4),
     ticket_promedio_ytd NUMERIC(18,2),
     rechazos_ytd NUMERIC(18,4),
+    pedidos_rechazo_ytd INTEGER,
+    lineas_rechazo_ytd NUMERIC(18,4),
+    hl_rechazado_ytd NUMERIC(18,4),
+    hl_rechazado_parcial_ytd NUMERIC(18,4),
+    hl_rechazado_total_ytd NUMERIC(18,4),
     pct_rechazo_pedidos NUMERIC(8,2),
+    pct_rechazo_hl NUMERIC(8,2),
     crecimiento_pct NUMERIC(10,2),
+    crecimiento_nominal_pct NUMERIC(10,2),
+    crecimiento_real_pct NUMERIC(10,2),
+    inflacion_factor NUMERIC(18,8),
     nps_valor NUMERIC(6,2),
     rmd_valor NUMERIC(6,2),
     otif_valor NUMERIC(6,2),
@@ -208,6 +383,7 @@ CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     periodo_mes             SMALLINT     NOT NULL DEFAULT 0,
     cluster_dpo             VARCHAR(50),
     subcluster_logistico    VARCHAR(80),
+    cliente_refrigerado     BOOLEAN DEFAULT FALSE,
     score_total             NUMERIC(6,2),
     dim_negocio             NUMERIC(6,2),
     dim_productividad       NUMERIC(6,2),
@@ -221,6 +397,11 @@ CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     up_ytd                  NUMERIC(18,4),
     hl_ytd                  NUMERIC(18,4),
     rechazos_ytd            NUMERIC(18,4),
+    pedidos_rechazo_ytd     INTEGER,
+    lineas_rechazo_ytd      NUMERIC(18,4),
+    hl_rechazado_ytd        NUMERIC(18,4),
+    hl_rechazado_parcial_ytd NUMERIC(18,4),
+    hl_rechazado_total_ytd  NUMERIC(18,4),
     nps_valor               NUMERIC(6,2),
     rmd_valor               NUMERIC(6,2),
     otif_valor              NUMERIC(6,2),
@@ -228,11 +409,15 @@ CREATE TABLE IF NOT EXISTS seg_cliente_cluster_historico (
     costo_almacen           NUMERIC(18,2),
     margen_logistico_proxy  NUMERIC(18,2),
     crecimiento_pct         NUMERIC(14,4),
+    crecimiento_nominal_pct NUMERIC(14,4),
+    crecimiento_real_pct    NUMERIC(14,4),
+    inflacion_factor        NUMERIC(18,8),
     costo_logistico_total   NUMERIC(18,2),
     ratio_costo_logistico   NUMERIC(14,4),
     pedidos_ytd             INTEGER,
     dropsize_ytd            NUMERIC(14,4),
     pct_rechazo_pedidos     NUMERIC(12,4),
+    pct_rechazo_hl          NUMERIC(12,4),
     fecha_calculo           TIMESTAMP    NOT NULL DEFAULT NOW(),
     version_regla           SMALLINT     NOT NULL DEFAULT 1,
     proceso                 VARCHAR(100) NOT NULL DEFAULT 'sistema',
@@ -274,6 +459,26 @@ _DEFAULT_SCORE_PESOS = (
     ('localidad', 'geo', 2.0, True),
     ('sucursal', 'geo', 1.0, True),
 )
+
+_IPC_OFICIAL_SEED = (
+    (2025, 1, 2.211048),
+    (2025, 2, 2.401627),
+    (2025, 3, 3.729335),
+    (2025, 4, 2.780836),
+    (2025, 5, 1.501109),
+    (2025, 6, 1.618925),
+    (2025, 7, 1.901684),
+    (2025, 8, 1.875794),
+    (2025, 9, 2.075960),
+    (2025, 10, 2.341943),
+    (2025, 11, 2.472920),
+    (2025, 12, 2.845272),
+    (2026, 1, 2.881619),
+    (2026, 2, 2.896319),
+    (2026, 3, 3.382622),
+    (2026, 4, 2.582180),
+)
+_IPC_SEED_SOURCE = 'Datos Argentina / INDEC IPC nacional hasta abril 2026'
 
 # ─────────────────────────────────────────────────────────────
 # DDL — vistas (CREATE OR REPLACE)
@@ -339,11 +544,15 @@ base AS (
            COALESCE(v.unidad_paquete,0) AS up,
            CASE WHEN COALESCE(a.bultos_por_pallet,0)>0
                 THEN COALESCE(v.bultos,0)/a.bultos_por_pallet ELSE 0 END AS pallets,
+           COALESCE(v.unidad_medida_rechazado,0) AS hl_rechazado,
            CASE WHEN COALESCE(rz.tomar,FALSE) AND (
                     COALESCE(v.bultos_rechazados,0)>0
                  OR COALESCE(v.unidad_medida_rechazado,0)>0
                  OR COALESCE(v.unidad_paquete_rechazado,0)>0)
                 THEN 1 ELSE 0 END AS es_rechazo,
+           CASE WHEN LOWER(TRIM(COALESCE(v.rechazo_total,''))) IN
+                     ('si','s','yes','y','true','1','x')
+                THEN TRUE ELSE FALSE END AS es_rechazo_total_flag,
            CASE WHEN LOWER(TRIM(COALESCE(v.descripcion_ruta,''))) LIKE '%temp%'
                   OR LOWER(TRIM(COALESCE(v.descripcion_detallada_ruta,''))) LIKE '%temp%'
                 THEN TRUE ELSE FALSE END AS es_ruta_temp_line,
@@ -379,7 +588,12 @@ ytd AS (
     SELECT b.cliente,b.sucursal,
            SUM(b.importe) AS venta,SUM(b.hl) AS hl,SUM(b.bultos) AS blt,
            SUM(b.pallets) AS pal,SUM(b.up) AS up,
-           COUNT(DISTINCT b.pedido_key) AS ped,SUM(b.es_rechazo) AS rec,
+           COUNT(DISTINCT b.pedido_key) AS ped,
+           COUNT(DISTINCT CASE WHEN b.es_rechazo=1 THEN b.pedido_key END) AS ped_rec,
+           SUM(b.es_rechazo) AS lineas_rec,
+           SUM(CASE WHEN b.es_rechazo=1 THEN b.hl_rechazado ELSE 0 END) AS hl_rec,
+           SUM(CASE WHEN b.es_rechazo=1 AND NOT b.es_rechazo_total_flag THEN b.hl_rechazado ELSE 0 END) AS hl_rec_parcial,
+           SUM(CASE WHEN b.es_rechazo=1 AND b.es_rechazo_total_flag THEN b.hl_rechazado ELSE 0 END) AS hl_rec_total,
            BOOL_OR(COALESCE(b.es_ruta_temp_line,FALSE)) AS es_ruta_temp
     FROM base b CROSS JOIN params p
     WHERE b.fecha BETWEEN p.fecha_desde AND p.fecha_hasta
@@ -390,6 +604,30 @@ bmp AS (
     FROM base b CROSS JOIN params p
     WHERE b.fecha BETWEEN p.fecha_base_desde AND p.fecha_base_hasta
     GROUP BY b.cliente,b.sucursal
+),
+inflacion AS (
+    SELECT
+        e.expected_months,
+        COUNT(i.*)::INT AS meses_ipc,
+        CASE
+            WHEN COUNT(i.*)::INT > 0
+                THEN ROUND(EXP(SUM(LN(1 + (i.inflacion_pct / 100.0))))::NUMERIC, 8)
+            ELSE NULL
+        END AS inflacion_factor
+    FROM params p
+    CROSS JOIN LATERAL (
+        SELECT COUNT(*)::INT AS expected_months
+        FROM generate_series(
+            (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date,
+            date_trunc('month', p.fecha_hasta)::date,
+            interval '1 month'
+        ) m
+    ) e
+    LEFT JOIN seg_inflacion_mensual i
+      ON make_date(i.periodo_anio, i.periodo_mes, 1)
+         BETWEEN (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date
+             AND date_trunc('month', p.fecha_hasta)::date
+    GROUP BY e.expected_months
 )
 SELECT COALESCE(y.cliente,ab.cliente) AS cliente,
        COALESCE(NULLIF(TRIM(cli.sucursal),''), COALESCE(y.sucursal,ab.sucursal)) AS sucursal,
@@ -406,7 +644,19 @@ SELECT COALESCE(y.cliente,ab.cliente) AS cliente,
        COALESCE(bmp.venta,0) AS venta_base_mismo_per,
        CASE WHEN COALESCE(bmp.venta,0)>0
             THEN ROUND(((COALESCE(y.venta,0)-bmp.venta)/bmp.venta*100)::NUMERIC,2)
-            ELSE NULL END AS crecimiento_pct,
+            ELSE NULL END AS crecimiento_nominal_pct,
+       CASE WHEN COALESCE(bmp.venta,0)>0 AND inf.inflacion_factor IS NOT NULL
+            THEN ROUND((((1 + ((COALESCE(y.venta,0)-bmp.venta)/bmp.venta)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+            ELSE NULL END AS crecimiento_real_pct,
+       COALESCE(
+           CASE WHEN COALESCE(bmp.venta,0)>0 AND inf.inflacion_factor IS NOT NULL
+                THEN ROUND((((1 + ((COALESCE(y.venta,0)-bmp.venta)/bmp.venta)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+                ELSE NULL END,
+           CASE WHEN COALESCE(bmp.venta,0)>0
+                THEN ROUND(((COALESCE(y.venta,0)-bmp.venta)/bmp.venta*100)::NUMERIC,2)
+                ELSE NULL END
+       ) AS crecimiento_pct,
+       inf.inflacion_factor,
        COALESCE(ab.hl,0) AS hl_anio_base, COALESCE(y.hl,0) AS hl_ytd,
        COALESCE(ab.blt,0) AS bultos_anio_base, COALESCE(y.blt,0) AS bultos_ytd,
        COALESCE(ab.pal,0) AS pallets_anio_base, COALESCE(y.pal,0) AS pallets_ytd,
@@ -415,14 +665,24 @@ SELECT COALESCE(y.cliente,ab.cliente) AS cliente,
        CASE WHEN COALESCE(y.ped,0)>0 THEN ROUND((y.blt/y.ped)::NUMERIC,2) ELSE 0 END AS dropsize_bultos_ytd,
        CASE WHEN COALESCE(y.ped,0)>0 THEN ROUND((y.hl /y.ped)::NUMERIC,4) ELSE 0 END AS dropsize_hl_ytd,
        CASE WHEN COALESCE(y.ped,0)>0 THEN ROUND((y.venta/y.ped)::NUMERIC,2) ELSE 0 END AS ticket_promedio_ytd,
-       COALESCE(y.rec,0) AS rechazos_ytd,
+       COALESCE(y.ped_rec,0) AS rechazos_ytd,
+       COALESCE(y.ped_rec,0) AS pedidos_rechazo_ytd,
+       COALESCE(y.lineas_rec,0) AS lineas_rechazo_ytd,
+       COALESCE(y.hl_rec,0) AS hl_rechazado_ytd,
+       COALESCE(y.hl_rec_parcial,0) AS hl_rechazado_parcial_ytd,
+       COALESCE(y.hl_rec_total,0) AS hl_rechazado_total_ytd,
        CASE WHEN COALESCE(y.ped,0)>0
-            THEN ROUND((COALESCE(y.rec,0)::NUMERIC/y.ped*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+            THEN ROUND((COALESCE(y.ped_rec,0)::NUMERIC/y.ped*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+       CASE WHEN COALESCE(y.hl,0)>0
+            THEN ROUND((COALESCE(y.hl_rec,0)::NUMERIC/y.hl*100),2) ELSE 0 END AS pct_rechazo_hl,
        COALESCE(NULLIF(TRIM(cli.localidad),''), NULLIF(TRIM(ca.localidad),''), '') AS localidad,
        COALESCE(cae.autoelevador,ca.autoelevador,FALSE) AS autoelevador,
+       COALESCE(LOWER(TRIM(cli.descripcion)) IN ('ref','refrigerado','refrigerados'), FALSE) AS cliente_refrigerado,
        COALESCE(y.es_ruta_temp,FALSE) AS es_ruta_temp,
        CASE WHEN COALESCE(y.venta,0)<=0 AND COALESCE(bmp.venta,0)>0 THEN TRUE ELSE FALSE END AS es_inactivo,
-       ca.nps_valor, ca.rmd_valor, ca.otif_valor,
+       COALESCE(mh.nps_valor, ca.nps_valor) AS nps_valor,
+       COALESCE(mh.rmd_valor, ca.rmd_valor) AS rmd_valor,
+       COALESCE(mh.otif_valor, ca.otif_valor) AS otif_valor,
        ROUND((COALESCE(y.hl,0)*p.costo_entrega_hl)::NUMERIC,2) AS costo_entrega,
        ROUND((COALESCE(y.hl,0)*p.costo_almacen_hl)::NUMERIC,2) AS costo_almacen,
        ROUND((COALESCE(y.hl,0)*(p.costo_entrega_hl+p.costo_almacen_hl))::NUMERIC,2) AS costo_logistico_total,
@@ -432,14 +692,26 @@ SELECT COALESCE(y.cliente,ab.cliente) AS cliente,
             ELSE 0 END AS ratio_costo_logistico_pct
 FROM ytd y
 FULL OUTER JOIN ab ON ab.cliente=y.cliente AND ab.sucursal=y.sucursal
+CROSS JOIN params p
+CROSS JOIN inflacion inf
 LEFT JOIN bmp ON bmp.cliente=COALESCE(y.cliente,ab.cliente)
              AND bmp.sucursal=COALESCE(y.sucursal,ab.sucursal)
 LEFT JOIN seg_clientes_atributos ca ON ca.cliente=COALESCE(y.cliente,ab.cliente)
+LEFT JOIN LATERAL (
+    SELECT h.nps_valor, h.rmd_valor, h.otif_valor
+    FROM seg_cliente_metricas_servicio_historico h
+    WHERE h.cliente=COALESCE(y.cliente,ab.cliente)
+      AND h.periodo_anio=p.periodo_anio
+      AND h.periodo_mes IN (p.periodo_mes, 0)
+    ORDER BY CASE WHEN h.periodo_mes=p.periodo_mes THEN 0 ELSE 1 END,
+             h.updated_at DESC
+    LIMIT 1
+) mh ON TRUE
 LEFT JOIN cliente_autoelevador cae ON cae.is_cliente=COALESCE(y.cliente,ab.cliente)
 LEFT JOIN clientes cli ON cli.cliente=COALESCE(y.cliente,ab.cliente)
                       AND COALESCE(NULLIF(TRIM(cli.sucursal),''), COALESCE(y.sucursal,ab.sucursal))=COALESCE(y.sucursal,ab.sucursal)
 LEFT JOIN sucursales suc ON suc.id=COALESCE(NULLIF(TRIM(cli.sucursal),''), COALESCE(y.sucursal,ab.sucursal))
-CROSS JOIN params p;
+;
 
 -- vw_clientes_activos_dpo -----------------------------------
 DROP VIEW IF EXISTS vw_clientes_activos_dpo CASCADE;
@@ -558,6 +830,8 @@ SELECT m.*,
        u.p25_ingresos AS umbral_venta_baja,
        u.p50_crecimiento AS umbral_crecimiento,
        CASE
+            WHEN COALESCE(m.cliente_refrigerado,FALSE)
+                THEN 'Ganador'
             WHEN m.venta_ytd >= u.p75_ingresos
              AND COALESCE(m.crecimiento_pct,0) >= u.p50_crecimiento
                 THEN 'Ganador'
@@ -569,7 +843,8 @@ SELECT m.*,
                 THEN 'Ventas bajas'
             ELSE 'Basico'
        END AS cluster_dpo,
-       CASE WHEN COALESCE(m.ratio_costo_logistico_pct,0)>u.p75rc AND m.dropsize_bultos_ytd<u.p25ds THEN 'Caro de servir'
+       CASE WHEN COALESCE(m.cliente_refrigerado,FALSE) THEN 'Refrigerado'
+            WHEN COALESCE(m.ratio_costo_logistico_pct,0)>u.p75rc AND m.dropsize_bultos_ytd<u.p25ds THEN 'Caro de servir'
             WHEN COALESCE(m.pct_rechazo_pedidos,0)>20 THEN 'Complejo'
             WHEN COALESCE(m.crecimiento_pct,0)>15 AND COALESCE(m.pct_rechazo_pedidos,0)<5 THEN 'Alto potencial'
             WHEN COALESCE(m.ratio_costo_logistico_pct,0)<=20 AND m.dropsize_bultos_ytd>=u.p50ds THEN 'Eficiente'
@@ -614,6 +889,7 @@ cl AS (
            GREATEST(-100,LEAST(300,COALESCE(m.crecimiento_pct,md.mcrec))) AS cc,
            COALESCE(m.rmd_valor,md.mrmd) AS ri, COALESCE(m.nps_valor,md.mnps) AS ni,
            CASE WHEN m.pedidos_ytd>0 THEN m.pallets_ytd/m.pedidos_ytd ELSE 0 END AS ppp,
+           COALESCE(m.pct_rechazo_hl,m.pct_rechazo_pedidos,0) AS rechazo_score_pct,
            GREATEST(0,m.ratio_costo_logistico_pct) AS rcp
     FROM m CROSS JOIN md
 ),
@@ -624,7 +900,7 @@ rn AS (
            MIN(cc)        OVER() AS mnc,MAX(cc)        OVER() AS mxc,
            MIN(dropsize_bultos_ytd) OVER() AS mnd,MAX(dropsize_bultos_ytd) OVER() AS mxd,
            MIN(ppp)       OVER() AS mnp,MAX(ppp)       OVER() AS mxp,
-           MIN(pct_rechazo_pedidos) OVER() AS mnr,MAX(pct_rechazo_pedidos) OVER() AS mxr,
+           MIN(rechazo_score_pct) OVER() AS mnr,MAX(rechazo_score_pct) OVER() AS mxr,
            MIN(ri)        OVER() AS mnrmd,MAX(ri) OVER() AS mxrmd,
            MIN(ni)        OVER() AS mnnps,MAX(ni) OVER() AS mxnps,
            MIN(rcp)       OVER() AS mnrc,MAX(rcp)       OVER() AS mxrc,
@@ -639,7 +915,7 @@ nr AS (
            CASE WHEN mxc>mnc THEN (cc-mnc)/(mxc-mnc)          ELSE 0.5 END AS nc,
            CASE WHEN mxd>mnd THEN (dropsize_bultos_ytd-mnd)/(mxd-mnd) ELSE 0.5 END AS nd,
            CASE WHEN mxp>mnp THEN (ppp-mnp)/(mxp-mnp)         ELSE 0.5 END AS np,
-           CASE WHEN mxr>mnr THEN 1-(pct_rechazo_pedidos-mnr)/(mxr-mnr) ELSE 0.5 END AS nr_,
+           CASE WHEN mxr>mnr THEN 1-(rechazo_score_pct-mnr)/(mxr-mnr) ELSE 0.5 END AS nr_,
            CASE WHEN mxrmd>mnrmd THEN (ri-mnrmd)/(mxrmd-mnrmd) ELSE 0.5 END AS nrmd,
            CASE WHEN mxnps>mnnps THEN (ni-mnnps)/(mxnps-mnnps) ELSE 0.5 END AS nnps,
            CASE WHEN mxrc>mnrc  THEN 1-(rcp-mnrc)/(mxrc-mnrc)  ELSE 0.5 END AS nrc,
@@ -678,44 +954,54 @@ FROM nr n CROSS JOIN w;
 DROP VIEW IF EXISTS vw_cliente_plan_servicio CASCADE;
 CREATE VIEW vw_cliente_plan_servicio AS
 SELECT c.cliente,c.descripcion_cliente,c.sucursal,c.sucursal_nombre,c.localidad,c.autoelevador,
+       c.cliente_refrigerado,
        c.cluster_dpo,c.subcluster_logistico,
        c.ingreso,c.ventas_anio_actual,c.ventas_anio_anterior,
        c.venta_anio_base,c.venta_base_mismo_per,
        s.score_total,s.dim_negocio,s.dim_productividad,s.dim_servicio,s.dim_rentabilidad,s.dim_geo,
        s.pts_venta,s.pts_hl,s.pts_crecimiento,s.pts_dropsize,s.pts_rechazos,s.pts_rmd,s.pts_nps,
-       c.venta_ytd,c.crecimiento_pct,
+       c.venta_ytd,c.crecimiento_pct,c.crecimiento_nominal_pct,
+       c.crecimiento_real_pct,c.inflacion_factor,
        c.hl_ytd,c.bultos_ytd,c.pallets_ytd,c.up_ytd,c.pedidos_ytd,
        c.dropsize_bultos_ytd,c.ticket_promedio_ytd,
-       c.rechazos_ytd,c.pct_rechazo_pedidos,
+       c.rechazos_ytd,c.pedidos_rechazo_ytd,c.lineas_rechazo_ytd,
+       c.hl_rechazado_ytd,c.hl_rechazado_parcial_ytd,c.hl_rechazado_total_ytd,
+       c.pct_rechazo_pedidos,c.pct_rechazo_hl,
        c.nps_valor,c.rmd_valor,c.otif_valor,
        c.costo_entrega,c.costo_almacen,c.costo_logistico_total,
        c.margen_logistico_proxy,c.ratio_costo_logistico_pct,
        c.p25_ingresos,c.p50_ingresos,c.p75_ingresos,
        c.p25_crecimiento,c.p50_crecimiento,c.p75_crecimiento,
        c.umbral_venta_alta,c.umbral_venta_baja,c.umbral_crecimiento,
-       CASE c.cluster_dpo
-           WHEN 'Ganador'        THEN 'Prioridad de inventario - mejor OTIF - ventanas horarias precisas - evaluar flex/express'
-           WHEN 'En crecimiento' THEN 'Seguimiento comercial-logistico - mejorar frecuencia - acompanar experiencia'
-           WHEN 'Basico'         THEN 'Servicio estandar - costo controlado - frecuencia optima'
-           WHEN 'Ventas bajas'   THEN 'Optimizar frecuencia - consolidar pedidos - revisar rentabilidad'
+       CASE
+           WHEN COALESCE(c.cliente_refrigerado,FALSE) THEN 'Prioridad cadena de frio - inventario protegido - ventanas cortas - seguimiento OTIF'
+           WHEN c.cluster_dpo='Ganador' THEN 'Prioridad de inventario - mejor OTIF - ventanas horarias precisas - evaluar flex/express'
+           WHEN c.cluster_dpo='En crecimiento' THEN 'Seguimiento comercial-logistico - mejorar frecuencia - acompanar experiencia'
+           WHEN c.cluster_dpo='Basico' THEN 'Servicio estandar - costo controlado - frecuencia optima'
+           WHEN c.cluster_dpo='Ventas bajas' THEN 'Optimizar frecuencia - consolidar pedidos - revisar rentabilidad'
            ELSE 'Sin clasificacion' END AS plan_servicio,
-       CASE c.subcluster_logistico
-           WHEN 'Caro de servir' THEN 'Revisar costo logistico - negociar drop size minimo - evaluar consolidacion'
-           WHEN 'Alto potencial' THEN 'Fortalecer relacion - asignar vendedor referente - mejorar OTIF'
-           WHEN 'Eficiente'      THEN 'Mantener operacion - compartir benchmarks positivos'
-           WHEN 'Rentable'       THEN 'Proteger cuenta - renovar acuerdo - ofrecer beneficios premium'
-           WHEN 'Complejo'       THEN 'Plan mejora de rechazo - visita tecnica - acuerdo de entrega'
+       CASE
+           WHEN COALESCE(c.cliente_refrigerado,FALSE) THEN 'Mantener servicio refrigerado - prioridad operativa - validar cadena de frio'
+           WHEN c.subcluster_logistico='Caro de servir' THEN 'Revisar costo logistico - negociar drop size minimo - evaluar consolidacion'
+           WHEN c.subcluster_logistico='Alto potencial' THEN 'Fortalecer relacion - asignar vendedor referente - mejorar OTIF'
+           WHEN c.subcluster_logistico='Eficiente' THEN 'Mantener operacion - compartir benchmarks positivos'
+           WHEN c.subcluster_logistico='Rentable' THEN 'Proteger cuenta - renovar acuerdo - ofrecer beneficios premium'
+           WHEN c.subcluster_logistico='Complejo' THEN 'Plan mejora de rechazo - visita tecnica - acuerdo de entrega'
            ELSE                       'Monitorear indicadores mensualmente' END AS accion_prioritaria,
-       CASE WHEN c.pct_rechazo_pedidos>20 THEN 'CRITICO: tasa de rechazo > 20 %'
+       CASE WHEN COALESCE(c.cliente_refrigerado,FALSE) AND c.otif_valor IS NOT NULL AND c.otif_valor<90 THEN 'ATENCION: refrigerado con OTIF menor a 90 %'
+            WHEN c.pct_rechazo_pedidos>20 THEN 'CRITICO: tasa de rechazo > 20 %'
             WHEN c.pct_rechazo_pedidos>10 THEN 'ATENCION: tasa de rechazo > 10 %'
             WHEN c.otif_valor IS NOT NULL AND c.otif_valor<85 THEN 'ATENCION: OTIF menor a 85 %'
             WHEN c.ratio_costo_logistico_pct>40 THEN 'CRITICO: ratio costo logistico > 40 %'
             WHEN COALESCE(c.crecimiento_pct,0)<-30 THEN 'ALERTA: caida de venta > 30 %'
             WHEN c.cluster_dpo='Ganador' AND COALESCE(c.crecimiento_pct,0)<0 THEN 'AVISO: Ganador con caida YTD'
             ELSE NULL END AS alerta_operativa,
-       CASE c.cluster_dpo WHEN 'Ganador' THEN 1 WHEN 'En crecimiento' THEN 2
-                          WHEN 'Basico' THEN 3 WHEN 'Ventas bajas' THEN 4
-                          ELSE 7 END AS prioridad_gestion
+       CASE WHEN COALESCE(c.cliente_refrigerado,FALSE) THEN 1
+            WHEN c.cluster_dpo='Ganador' THEN 1
+            WHEN c.cluster_dpo='En crecimiento' THEN 2
+            WHEN c.cluster_dpo='Basico' THEN 3
+            WHEN c.cluster_dpo='Ventas bajas' THEN 4
+            ELSE 7 END AS prioridad_gestion
 FROM vw_cliente_cluster_dpo c
 LEFT JOIN vw_cliente_score s ON s.cliente=c.cliente AND s.sucursal=c.sucursal;
 
@@ -1148,6 +1434,84 @@ def _first_present(row: dict, keys: tuple[str, ...], default: Any = None) -> Any
     return default
 
 
+def _text_key(value: Any) -> str:
+    raw = unicodedata.normalize('NFD', str(value or ''))
+    raw = ''.join(ch for ch in raw if unicodedata.category(ch) != 'Mn')
+    return ' '.join(raw.lower().split())
+
+
+def _nps_score(value: Any) -> float | None:
+    if value in (None, ''):
+        return None
+    try:
+        score = float(str(value).strip().replace(',', '.'))
+    except (TypeError, ValueError):
+        return None
+    return score if 0 <= score <= 10 else None
+
+
+def _nps_category(score: float) -> str:
+    if score >= 9:
+        return 'Promoter'
+    if score >= 7:
+        return 'Passive'
+    return 'Detractor'
+
+
+def _nps_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day)
+    raw = str(value or '').strip()
+    if not raw:
+        return None
+    for fmt in (
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M',
+        '%Y-%m-%d',
+        '%d/%m/%Y %H:%M:%S',
+        '%d/%m/%Y %H:%M',
+        '%d/%m/%Y',
+        '%d-%m-%Y',
+        '%Y/%m/%d',
+    ):
+        try:
+            return datetime.strptime(raw[:19], fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _nps_is_delivery(driver: Any, subdriver: Any) -> bool:
+    text = f"{_text_key(driver)} | {_text_key(subdriver)}"
+    delivery_tokens = (
+        'delivery',
+        'experiencia de entrega',
+        'entrega',
+        'pedido completo',
+        'pedidos completos',
+        'productos danados',
+        'producto danado',
+        'productos en mal estado',
+        'equipo de entrega',
+        'dias de entrega',
+    )
+    return any(token in text for token in delivery_tokens)
+
+
+def _nps_is_general(subdriver: Any) -> bool:
+    key = _text_key(subdriver)
+    return key in {'', 'ninguno', 'general', 'sin subdriver', 'sin driver'}
+
+
+def _nps_survey_key(cliente: str, fecha: datetime, score: float) -> str:
+    return f"{cliente}|{fecha.replace(microsecond=0).isoformat(sep=' ')}|{score:.2f}"
+
+
 def ensure_tables() -> None:
     global _TABLES_READY
     if _TABLES_READY:
@@ -1161,9 +1525,12 @@ def ensure_tables() -> None:
                 for ddl in (
                     _DDL_PARAMETROS,
                     _DDL_ATRIBUTOS,
+                    _DDL_SERVICIO_HISTORICO,
+                    _DDL_NPS_DETALLADO,
                     _DDL_CLIENTE_GEO,
                     _DDL_CLIENTE_AUTOELEVADOR,
                     _DDL_PERIODOS,
+                    _DDL_INFLACION,
                     _DDL_SCORE_PESOS,
                     _DDL_DPO_CACHE,
                     _DDL_HISTORICO,
@@ -1175,6 +1542,7 @@ def ensure_tables() -> None:
                     CREATE TABLE IF NOT EXISTS clientes (
                         cliente VARCHAR(50) PRIMARY KEY
                     );
+                    ALTER TABLE clientes ADD COLUMN IF NOT EXISTS descripcion VARCHAR(255);
                     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS sucursal VARCHAR(50);
                     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS razon_social VARCHAR(255);
                     ALTER TABLE clientes ADD COLUMN IF NOT EXISTS nombre_fantasia VARCHAR(255);
@@ -1223,8 +1591,11 @@ def ensure_tables() -> None:
                         ON clientes(activo_maestro);
                     CREATE INDEX IF NOT EXISTS idx_clientes_seg_sucursal_localidad
                         ON clientes(sucursal, localidad);
+                    CREATE INDEX IF NOT EXISTS idx_clientes_seg_descripcion
+                        ON clientes((LOWER(TRIM(COALESCE(descripcion,'')))));
                     CREATE INDEX IF NOT EXISTS idx_seg_params_activo ON seg_parametros(activo,empresa_id);
                     CREATE INDEX IF NOT EXISTS idx_seg_periodos_activo ON seg_periodos_calculo(empresa_id,activo,id DESC);
+                    CREATE INDEX IF NOT EXISTS idx_seg_inflacion_periodo ON seg_inflacion_mensual(periodo_anio, periodo_mes);
                     CREATE INDEX IF NOT EXISTS idx_seg_score_dimension ON seg_score_pesos(dimension,activo);
                     CREATE INDEX IF NOT EXISTS idx_seg_dpo_cache_suc_cluster
                         ON seg_cliente_dpo_cache(sucursal, cluster_dpo, venta_ytd DESC);
@@ -1232,6 +1603,15 @@ def ensure_tables() -> None:
                         ON seg_cliente_dpo_cache(localidad, sucursal, cluster_dpo);
                     CREATE INDEX IF NOT EXISTS idx_seg_cli_suc       ON seg_clientes_atributos(sucursal_id);
                     CREATE INDEX IF NOT EXISTS idx_seg_cli_loc       ON seg_clientes_atributos(localidad);
+                    CREATE INDEX IF NOT EXISTS idx_seg_serv_hist_cli ON seg_cliente_metricas_servicio_historico(cliente);
+                    CREATE INDEX IF NOT EXISTS idx_seg_serv_hist_periodo ON seg_cliente_metricas_servicio_historico(periodo_anio, periodo_mes);
+                    CREATE INDEX IF NOT EXISTS idx_seg_serv_hist_cliente_periodo ON seg_cliente_metricas_servicio_historico(cliente, periodo_anio, periodo_mes);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_enc_cliente_fecha ON seg_cliente_nps_encuestas(cliente, fecha_encuesta DESC);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_enc_periodo ON seg_cliente_nps_encuestas(periodo_anio, periodo_mes);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_drv_encuesta ON seg_cliente_nps_drivers(encuesta_id);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_drv_delivery ON seg_cliente_nps_drivers(es_delivery);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_mensual_cliente_periodo ON seg_cliente_nps_mensual(cliente, periodo_anio, periodo_mes);
+                    CREATE INDEX IF NOT EXISTS idx_seg_nps_mensual_periodo ON seg_cliente_nps_mensual(periodo_anio, periodo_mes);
                     CREATE INDEX IF NOT EXISTS idx_cli_geo_sucursal   ON cliente_geografia(sucursal);
                     CREATE INDEX IF NOT EXISTS idx_cli_geo_localidad  ON cliente_geografia(localidad);
                     CREATE INDEX IF NOT EXISTS idx_cli_geo_lat_lon    ON cliente_geografia(latitud, longitud);
@@ -1251,16 +1631,26 @@ def ensure_tables() -> None:
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS pallets_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS up_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS rechazos_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS pedidos_rechazo_ytd INTEGER;
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS lineas_rechazo_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS hl_rechazado_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS hl_rechazado_parcial_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS hl_rechazado_total_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS nps_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS rmd_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS costo_entrega NUMERIC(18,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS costo_almacen NUMERIC(18,2);
                     ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS margen_logistico_proxy NUMERIC(18,2);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS cliente_refrigerado BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS crecimiento_nominal_pct NUMERIC(14,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS crecimiento_real_pct NUMERIC(14,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS inflacion_factor NUMERIC(18,8);
                     ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN crecimiento_pct TYPE NUMERIC(14,4);
                     ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN ratio_costo_logistico TYPE NUMERIC(14,4);
                     ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN dropsize_ytd TYPE NUMERIC(14,4);
                     ALTER TABLE seg_cliente_cluster_historico ALTER COLUMN pct_rechazo_pedidos TYPE NUMERIC(12,4);
+                    ALTER TABLE seg_cliente_cluster_historico ADD COLUMN IF NOT EXISTS pct_rechazo_hl NUMERIC(12,4);
 
                     ALTER TABLE seg_clientes_atributos ADD COLUMN IF NOT EXISTS promotor VARCHAR(255);
                     ALTER TABLE seg_clientes_atributos ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
@@ -1269,6 +1659,7 @@ def ensure_tables() -> None:
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS descripcion_cliente TEXT;
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS sucursal_nombre TEXT;
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS autoelevador BOOLEAN DEFAULT FALSE;
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS cliente_refrigerado BOOLEAN DEFAULT FALSE;
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS subcluster_logistico VARCHAR(80);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS ingreso NUMERIC(18,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS ventas_anio_actual NUMERIC(18,2);
@@ -1282,8 +1673,17 @@ def ensure_tables() -> None:
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS dropsize_bultos_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS ticket_promedio_ytd NUMERIC(18,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS rechazos_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS pedidos_rechazo_ytd INTEGER;
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS lineas_rechazo_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS hl_rechazado_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS hl_rechazado_parcial_ytd NUMERIC(18,4);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS hl_rechazado_total_ytd NUMERIC(18,4);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS pct_rechazo_pedidos NUMERIC(8,2);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS pct_rechazo_hl NUMERIC(8,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS crecimiento_pct NUMERIC(10,2);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS crecimiento_nominal_pct NUMERIC(10,2);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS crecimiento_real_pct NUMERIC(10,2);
+                    ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS inflacion_factor NUMERIC(18,8);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS nps_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS rmd_valor NUMERIC(6,2);
                     ALTER TABLE seg_cliente_dpo_cache ADD COLUMN IF NOT EXISTS otif_valor NUMERIC(6,2);
@@ -1333,6 +1733,20 @@ def ensure_tables() -> None:
                        ON CONFLICT (variable) DO NOTHING""",
                     _DEFAULT_SCORE_PESOS,
                 )
+                psycopg2.extras.execute_values(
+                    cur,
+                    """INSERT INTO seg_inflacion_mensual(periodo_anio, periodo_mes, inflacion_pct, fuente)
+                       VALUES %s
+                       ON CONFLICT (periodo_anio, periodo_mes) DO UPDATE SET
+                           inflacion_pct = EXCLUDED.inflacion_pct,
+                           fuente = EXCLUDED.fuente,
+                           updated_at = NOW()
+                       WHERE seg_inflacion_mensual.fuente IS NULL
+                          OR seg_inflacion_mensual.fuente LIKE 'INDEC IPC nacional publicado%%'
+                          OR seg_inflacion_mensual.fuente LIKE 'Datos Argentina / INDEC IPC nacional%%'""",
+                    [(anio, mes, pct, _IPC_SEED_SOURCE) for anio, mes, pct in _IPC_OFICIAL_SEED],
+                )
+                cur.execute(_SQL_RMD_ESCALA_1_5)
                 cur.execute(
                     """SELECT version FROM seg_schema_version
                        WHERE component = 'segmentacion'""",
@@ -1434,11 +1848,375 @@ def get_cache_status() -> dict:
     return cache
 
 
+def _coverage_pct(part: Any, total: Any) -> float | None:
+    part_n = float(part or 0)
+    total_n = float(total or 0)
+    if total_n <= 0:
+        return None
+    return round(part_n / total_n * 100, 1)
+
+
+def _coverage_status(coverage: float | None, ok: float = 80.0, warn: float = 50.0) -> str:
+    if coverage is None:
+        return 'sin_base'
+    if coverage >= ok:
+        return 'ok'
+    if coverage >= warn:
+        return 'advertencia'
+    return 'critico'
+
+
+def _count_status(value: Any, warn_when_zero: bool = False) -> str:
+    count = int(value or 0)
+    if count > 0:
+        return 'ok'
+    return 'advertencia' if warn_when_zero else 'critico'
+
+
+def _quality_source(
+    source_id: str,
+    nombre: str,
+    estado: str,
+    valor: Any,
+    detalle: str,
+    cobertura_pct: float | None = None,
+    total_base: Any = None,
+    updated_at: Any = None,
+    metricas: dict | None = None,
+) -> dict:
+    return {
+        'id': source_id,
+        'nombre': nombre,
+        'estado': estado,
+        'valor': valor,
+        'detalle': detalle,
+        'cobertura_pct': cobertura_pct,
+        'total_base': total_base,
+        'updated_at': updated_at,
+        'metricas': metricas or {},
+    }
+
+
+def get_calidad_datos() -> dict:
+    """Estado de cobertura de fuentes que alimentan la segmentacion."""
+    ensure_tables()
+    periodo = get_periodo_activo()
+    periodo_anio = int(periodo.get('periodo_anio') or date.today().year)
+    periodo_mes = int(periodo.get('periodo_mes') or 0)
+    fecha_desde = periodo.get('fecha_desde')
+    fecha_hasta = periodo.get('fecha_hasta')
+    fecha_base_hasta = periodo.get('fecha_base_hasta')
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM clientes) AS clientes_total,
+                (SELECT COUNT(*)
+                   FROM clientes c
+                  WHERE COALESCE(c.activo_maestro, TRUE) = TRUE
+                    AND COALESCE(LOWER(TRIM(c.anulado)), '') IN ('no','n','0','false','f')
+                ) AS clientes_activos,
+                (SELECT COUNT(*)
+                   FROM clientes c
+                  WHERE COALESCE(c.activo_maestro, TRUE) = TRUE
+                    AND COALESCE(LOWER(TRIM(c.anulado)), '') IN ('no','n','0','false','f')
+                    AND NULLIF(TRIM(COALESCE(c.fuerza_venta_1_dias_visita, '')), '') IS NOT NULL
+                    AND COALESCE(LOWER(TRIM(c.fuerza_venta_1_dias_visita)), '') <> 'dom'
+                    AND COALESCE(LOWER(TRIM(c.fuerza_venta_1_dias_visita)), '') NOT LIKE '%%oficina%%'
+                ) AS clientes_ruteables,
+                (SELECT COUNT(*)
+                   FROM clientes c
+                  WHERE COALESCE(LOWER(TRIM(c.descripcion)), '') IN ('ref','refrigerado','refrigerados')
+                ) AS clientes_ref,
+                (SELECT MAX(ultima_importacion_clientes) FROM clientes) AS clientes_updated_at,
+                (SELECT COUNT(*)
+                   FROM ventas_detalle v
+                   JOIN articulos a ON a.id_articulo = v.id_articulo
+                  WHERE v.fecha BETWEEN %(fecha_desde)s AND %(fecha_hasta)s
+                    AND LOWER(TRIM(COALESCE(a.tipo_producto,''))) = 'mercaderia'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'comod%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'comod%%'
+                ) AS ventas_filas,
+                (SELECT COUNT(DISTINCT NULLIF(TRIM(v.cliente),''))
+                   FROM ventas_detalle v
+                   JOIN articulos a ON a.id_articulo = v.id_articulo
+                  WHERE v.fecha BETWEEN %(fecha_desde)s AND %(fecha_hasta)s
+                    AND LOWER(TRIM(COALESCE(a.tipo_producto,''))) = 'mercaderia'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'comod%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'comod%%'
+                    AND NULLIF(TRIM(v.cliente),'') IS NOT NULL
+                ) AS ventas_clientes,
+                (SELECT ROUND(COALESCE(SUM(v.importe_neto),0)::NUMERIC,2)
+                   FROM ventas_detalle v
+                   JOIN articulos a ON a.id_articulo = v.id_articulo
+                  WHERE v.fecha BETWEEN %(fecha_desde)s AND %(fecha_hasta)s
+                    AND LOWER(TRIM(COALESCE(a.tipo_producto,''))) = 'mercaderia'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'comod%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'comod%%'
+                ) AS ventas_importe,
+                (SELECT ROUND(COALESCE(SUM(v.unidad_medida),0)::NUMERIC,2)
+                   FROM ventas_detalle v
+                   JOIN articulos a ON a.id_articulo = v.id_articulo
+                  WHERE v.fecha BETWEEN %(fecha_desde)s AND %(fecha_hasta)s
+                    AND LOWER(TRIM(COALESCE(a.tipo_producto,''))) = 'mercaderia'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'comod%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'remit%%'
+                    AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'comod%%'
+                ) AS ventas_hl,
+                (SELECT COUNT(*) FROM seg_cliente_dpo_cache) AS cache_clientes,
+                (SELECT MAX(updated_at) FROM seg_cliente_dpo_cache) AS cache_updated_at,
+                (SELECT COUNT(DISTINCT cliente) FROM seg_clientes_atributos
+                  WHERE rmd_valor IS NOT NULL OR otif_valor IS NOT NULL OR nps_valor IS NOT NULL
+                ) AS servicio_vigente_clientes,
+                (SELECT COUNT(DISTINCT cliente) FROM seg_clientes_atributos WHERE rmd_valor IS NOT NULL) AS servicio_vigente_rmd,
+                (SELECT COUNT(DISTINCT cliente) FROM seg_clientes_atributos WHERE otif_valor IS NOT NULL) AS servicio_vigente_otif,
+                (SELECT COUNT(DISTINCT cliente) FROM seg_clientes_atributos WHERE nps_valor IS NOT NULL) AS servicio_vigente_nps,
+                (SELECT MAX(updated_at) FROM seg_clientes_atributos) AS servicio_vigente_updated_at,
+                (SELECT COUNT(DISTINCT cliente)
+                   FROM seg_cliente_metricas_servicio_historico h
+                  WHERE h.periodo_anio = %(periodo_anio)s
+                    AND (h.periodo_mes = %(periodo_mes)s OR (%(periodo_mes)s <> 0 AND h.periodo_mes = 0))
+                    AND (h.rmd_valor IS NOT NULL OR h.otif_valor IS NOT NULL OR h.nps_valor IS NOT NULL)
+                ) AS servicio_hist_clientes,
+                (SELECT COUNT(DISTINCT cliente)
+                   FROM seg_cliente_metricas_servicio_historico h
+                  WHERE h.periodo_anio = %(periodo_anio)s
+                    AND (h.periodo_mes = %(periodo_mes)s OR (%(periodo_mes)s <> 0 AND h.periodo_mes = 0))
+                    AND h.rmd_valor IS NOT NULL
+                ) AS servicio_hist_rmd,
+                (SELECT COUNT(DISTINCT cliente)
+                   FROM seg_cliente_metricas_servicio_historico h
+                  WHERE h.periodo_anio = %(periodo_anio)s
+                    AND (h.periodo_mes = %(periodo_mes)s OR (%(periodo_mes)s <> 0 AND h.periodo_mes = 0))
+                    AND h.otif_valor IS NOT NULL
+                ) AS servicio_hist_otif,
+                (SELECT COUNT(DISTINCT cliente)
+                   FROM seg_cliente_metricas_servicio_historico h
+                  WHERE h.periodo_anio = %(periodo_anio)s
+                    AND (h.periodo_mes = %(periodo_mes)s OR (%(periodo_mes)s <> 0 AND h.periodo_mes = 0))
+                    AND h.nps_valor IS NOT NULL
+                ) AS servicio_hist_nps,
+                (SELECT MAX(updated_at)
+                   FROM seg_cliente_metricas_servicio_historico h
+                  WHERE h.periodo_anio = %(periodo_anio)s
+                    AND (h.periodo_mes = %(periodo_mes)s OR (%(periodo_mes)s <> 0 AND h.periodo_mes = 0))
+                ) AS servicio_hist_updated_at,
+                (SELECT COUNT(DISTINCT is_cliente) FROM cliente_autoelevador) AS auto_clientes,
+                (SELECT COUNT(DISTINCT is_cliente) FROM cliente_autoelevador WHERE autoelevador) AS auto_true,
+                (SELECT MAX(updated_at) FROM cliente_autoelevador) AS auto_updated_at,
+                (SELECT COUNT(DISTINCT cliente_id) FROM cliente_geografia
+                  WHERE latitud IS NOT NULL AND longitud IS NOT NULL
+                ) AS geo_clientes,
+                (SELECT MAX(updated_at) FROM cliente_geografia) AS geo_updated_at
+                ,
+                (SELECT COUNT(*)::INT
+                   FROM generate_series(
+                        (date_trunc('month', %(fecha_base_hasta)s::date)::date + interval '1 month')::date,
+                        date_trunc('month', %(fecha_hasta)s::date)::date,
+                        interval '1 month'
+                   ) m
+                ) AS ipc_meses_esperados,
+                (SELECT COUNT(*)::INT
+                   FROM seg_inflacion_mensual i
+                  WHERE make_date(i.periodo_anio, i.periodo_mes, 1)
+                        BETWEEN (date_trunc('month', %(fecha_base_hasta)s::date)::date + interval '1 month')::date
+                            AND date_trunc('month', %(fecha_hasta)s::date)::date
+                ) AS ipc_meses_cargados,
+                (SELECT MAX(updated_at) FROM seg_inflacion_mensual) AS ipc_updated_at
+            """,
+            {
+                'fecha_desde': fecha_desde,
+                'fecha_hasta': fecha_hasta,
+                'fecha_base_hasta': fecha_base_hasta,
+                'periodo_anio': periodo_anio,
+                'periodo_mes': periodo_mes,
+            },
+        )
+        row = dict(cur.fetchone() or {})
+
+        cur.execute("""
+            SELECT version, applied_at
+            FROM seg_schema_version
+            WHERE component IN ('segmentacion', 'segmentacion_cache')
+            ORDER BY component
+        """)
+        versiones = _dict_rows(cur)
+
+    ventas_clientes = int(row.get('ventas_clientes') or 0)
+    clientes_ruteables = int(row.get('clientes_ruteables') or 0)
+    cache_clientes = int(row.get('cache_clientes') or 0)
+    servicio_hist_clientes = int(row.get('servicio_hist_clientes') or 0)
+    servicio_vigente_clientes = int(row.get('servicio_vigente_clientes') or 0)
+    auto_clientes = int(row.get('auto_clientes') or 0)
+    geo_clientes = int(row.get('geo_clientes') or 0)
+
+    cache_cov = _coverage_pct(cache_clientes, ventas_clientes)
+    hist_cov = _coverage_pct(servicio_hist_clientes, ventas_clientes)
+    vigente_cov = _coverage_pct(servicio_vigente_clientes, ventas_clientes)
+    auto_cov = _coverage_pct(auto_clientes, ventas_clientes)
+    geo_cov = _coverage_pct(geo_clientes, ventas_clientes)
+    ventas_cov = _coverage_pct(ventas_clientes, clientes_ruteables)
+    ipc_esperados = int(row.get('ipc_meses_esperados') or 0)
+    ipc_cargados = int(row.get('ipc_meses_cargados') or 0)
+    ipc_estado = 'ok' if ipc_esperados and ipc_cargados >= ipc_esperados else ('advertencia' if ipc_cargados else 'critico')
+
+    fuentes = [
+        _quality_source(
+            'clientes',
+            'Maestro de clientes',
+            _count_status(clientes_ruteables),
+            clientes_ruteables,
+            f"{int(row.get('clientes_activos') or 0)} activos, {int(row.get('clientes_ref') or 0)} refrigerados REF",
+            _coverage_pct(clientes_ruteables, row.get('clientes_total')),
+            row.get('clientes_total'),
+            row.get('clientes_updated_at'),
+            {
+                'total': int(row.get('clientes_total') or 0),
+                'activos': int(row.get('clientes_activos') or 0),
+                'refrigerados_ref': int(row.get('clientes_ref') or 0),
+            },
+        ),
+        _quality_source(
+            'ventas_periodo',
+            'Ventas del periodo',
+            _count_status(ventas_clientes),
+            ventas_clientes,
+            f"{int(row.get('ventas_filas') or 0)} lineas, {round(float(row.get('ventas_hl') or 0), 1)} HL",
+            ventas_cov,
+            clientes_ruteables,
+            None,
+            {
+                'filas': int(row.get('ventas_filas') or 0),
+                'venta': float(row.get('ventas_importe') or 0),
+                'hl': float(row.get('ventas_hl') or 0),
+            },
+        ),
+        _quality_source(
+            'cache_segmentacion',
+            'Cache de segmentacion',
+            _coverage_status(cache_cov, ok=95, warn=80),
+            cache_clientes,
+            'Clientes listos en seg_cliente_dpo_cache',
+            cache_cov,
+            ventas_clientes,
+            row.get('cache_updated_at'),
+        ),
+        _quality_source(
+            'servicio_historico',
+            'Historico OTIF / RMD / NPS',
+            _coverage_status(hist_cov, ok=80, warn=40),
+            servicio_hist_clientes,
+            f"Periodo {periodo_anio}-{periodo_mes:02d}; RMD {int(row.get('servicio_hist_rmd') or 0)}, OTIF {int(row.get('servicio_hist_otif') or 0)}, NPS {int(row.get('servicio_hist_nps') or 0)}",
+            hist_cov,
+            ventas_clientes,
+            row.get('servicio_hist_updated_at'),
+            {
+                'rmd': int(row.get('servicio_hist_rmd') or 0),
+                'otif': int(row.get('servicio_hist_otif') or 0),
+                'nps': int(row.get('servicio_hist_nps') or 0),
+            },
+        ),
+        _quality_source(
+            'servicio_vigente',
+            'Servicio vigente',
+            _coverage_status(vigente_cov, ok=80, warn=40),
+            servicio_vigente_clientes,
+            f"RMD {int(row.get('servicio_vigente_rmd') or 0)}, OTIF {int(row.get('servicio_vigente_otif') or 0)}, NPS {int(row.get('servicio_vigente_nps') or 0)}",
+            vigente_cov,
+            ventas_clientes,
+            row.get('servicio_vigente_updated_at'),
+            {
+                'rmd': int(row.get('servicio_vigente_rmd') or 0),
+                'otif': int(row.get('servicio_vigente_otif') or 0),
+                'nps': int(row.get('servicio_vigente_nps') or 0),
+            },
+        ),
+        _quality_source(
+            'autoelevador',
+            'Autoelevador',
+            _coverage_status(auto_cov, ok=50, warn=15),
+            auto_clientes,
+            f"{int(row.get('auto_true') or 0)} clientes marcados con autoelevador",
+            auto_cov,
+            ventas_clientes,
+            row.get('auto_updated_at'),
+        ),
+        _quality_source(
+            'geografia',
+            'Geografia',
+            _coverage_status(geo_cov, ok=70, warn=30),
+            geo_clientes,
+            'Clientes con latitud y longitud',
+            geo_cov,
+            ventas_clientes,
+            row.get('geo_updated_at'),
+        ),
+        _quality_source(
+            'ipc',
+            'IPC inflacion',
+            ipc_estado,
+            ipc_cargados,
+            f"{ipc_cargados}/{ipc_esperados} meses cargados para deflactar crecimiento",
+            _coverage_pct(ipc_cargados, ipc_esperados),
+            ipc_esperados,
+            row.get('ipc_updated_at'),
+            {
+                'meses_cargados': ipc_cargados,
+                'meses_esperados': ipc_esperados,
+            },
+        ),
+    ]
+
+    alertas = []
+    for fuente in fuentes:
+        if fuente['estado'] == 'critico':
+            alertas.append(f"{fuente['nombre']}: cobertura critica")
+        elif fuente['estado'] == 'advertencia':
+            alertas.append(f"{fuente['nombre']}: revisar cobertura")
+
+    estado_general = 'ok'
+    if any(f['estado'] == 'critico' for f in fuentes):
+        estado_general = 'critico'
+    elif any(f['estado'] == 'advertencia' for f in fuentes):
+        estado_general = 'advertencia'
+
+    return {
+        'estado_general': estado_general,
+        'alertas': alertas,
+        'periodo': {
+            'periodo_anio': periodo_anio,
+            'periodo_mes': periodo_mes,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+        },
+        'resumen': {
+            'clientes_ventas': ventas_clientes,
+            'clientes_ruteables': clientes_ruteables,
+            'cache_cobertura_pct': cache_cov,
+            'servicio_historico_cobertura_pct': hist_cov,
+            'servicio_vigente_cobertura_pct': vigente_cov,
+            'fuentes_ok': sum(1 for f in fuentes if f['estado'] == 'ok'),
+            'fuentes_advertencia': sum(1 for f in fuentes if f['estado'] == 'advertencia'),
+            'fuentes_criticas': sum(1 for f in fuentes if f['estado'] == 'critico'),
+        },
+        'fuentes': fuentes,
+        'versiones': versiones,
+    }
+
+
 def _refresh_segmentacion_cache_from_view(ejecutado_por: str = 'sistema') -> dict:
     ensure_tables()
     t0 = time.time()
     with pg_conn() as conn:
-        with conn.cursor() as cur:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute("SELECT pg_advisory_xact_lock(2026052502)")
             cur.execute("TRUNCATE TABLE seg_cliente_dpo_cache")
             cur.execute("SET LOCAL statement_timeout = '90000ms'")
@@ -1481,6 +2259,8 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                     SELECT
                         sp.costo_entrega_hl,
                         sp.costo_almacen_hl,
+                        COALESCE(pc.periodo_anio, sp.anio_ytd) AS periodo_anio,
+                        COALESCE(pc.periodo_mes, 0) AS periodo_mes,
                         COALESCE(pc.fecha_desde, make_date(sp.anio_ytd, 1, 1)) AS fecha_desde,
                         COALESCE(
                             pc.fecha_hasta,
@@ -1522,12 +2302,43 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         SUM(COALESCE(v.importe_neto,0)) AS venta_ytd,
                         SUM(COALESCE(v.unidad_medida,0)) AS hl_ytd,
                         SUM(COALESCE(v.bultos,0)) AS bultos_ytd,
+                        SUM(CASE WHEN COALESCE(a.bultos_por_pallet,0)>0
+                                 THEN COALESCE(v.bultos,0)/a.bultos_por_pallet
+                                 ELSE 0 END) AS pallets_ytd,
                         SUM(COALESCE(v.unidad_paquete,0)) AS up_ytd,
                         COUNT(DISTINCT v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'')) AS pedidos_ytd,
-                        SUM(CASE WHEN COALESCE(v.bultos_rechazados,0)>0
-                                   OR COALESCE(v.unidad_medida_rechazado,0)>0
-                                   OR COALESCE(v.unidad_paquete_rechazado,0)>0
-                                 THEN 1 ELSE 0 END) AS rechazos_ytd,
+                        COUNT(DISTINCT CASE WHEN COALESCE(rz.tomar,FALSE)
+                                  AND (COALESCE(v.bultos_rechazados,0)>0
+                                    OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                    OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                 THEN v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'') END) AS rechazos_ytd,
+                        COUNT(DISTINCT CASE WHEN COALESCE(rz.tomar,FALSE)
+                                  AND (COALESCE(v.bultos_rechazados,0)>0
+                                    OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                    OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                 THEN v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'') END) AS pedidos_rechazo_ytd,
+                        SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                   AND (COALESCE(v.bultos_rechazados,0)>0
+                                     OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                     OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                 THEN 1 ELSE 0 END) AS lineas_rechazo_ytd,
+                        SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                   AND (COALESCE(v.bultos_rechazados,0)>0
+                                     OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                     OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                 THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_ytd,
+                        SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                   AND (COALESCE(v.bultos_rechazados,0)>0
+                                     OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                     OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                   AND LOWER(TRIM(COALESCE(v.rechazo_total,''))) NOT IN ('si','s','yes','y','true','1','x')
+                                 THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_parcial_ytd,
+                        SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                   AND (COALESCE(v.bultos_rechazados,0)>0
+                                     OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                     OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                   AND LOWER(TRIM(COALESCE(v.rechazo_total,''))) IN ('si','s','yes','y','true','1','x')
+                                 THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_total_ytd,
                         BOOL_OR(
                             LOWER(TRIM(COALESCE(v.descripcion_ruta,''))) LIKE '%temp%'
                             OR LOWER(TRIM(COALESCE(v.descripcion_detallada_ruta,''))) LIKE '%temp%'
@@ -1535,6 +2346,14 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                     FROM ventas_detalle v
                     CROSS JOIN params p
                     JOIN articulos a ON a.id_articulo = v.id_articulo
+                    LEFT JOIN LATERAL (
+                        SELECT tomar
+                        FROM rechazos r
+                        WHERE LOWER(TRIM(COALESCE(v.motivo_rechazo,''))) = r.motivo_key
+                           OR LOWER(TRIM(COALESCE(v.motivo_rechazo,''))) LIKE r.motivo_key || ' %'
+                        ORDER BY LENGTH(r.motivo_key) DESC
+                        LIMIT 1
+                    ) rz ON TRUE
                     WHERE v.fecha BETWEEN p.fecha_desde AND p.fecha_hasta
                       AND LOWER(TRIM(COALESCE(a.tipo_producto,'')))='mercaderia'
                       AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%'
@@ -1561,6 +2380,30 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                       AND NULLIF(TRIM(v.cliente),'') IS NOT NULL
                     GROUP BY 1, 2
                 ),
+                inflacion AS (
+                    SELECT
+                        e.expected_months,
+                        COUNT(i.*)::INT AS meses_ipc,
+                        CASE
+                            WHEN COUNT(i.*)::INT > 0
+                                THEN ROUND(EXP(SUM(LN(1 + (i.inflacion_pct / 100.0))))::NUMERIC, 8)
+                            ELSE NULL
+                        END AS inflacion_factor
+                    FROM params p
+                    CROSS JOIN LATERAL (
+                        SELECT COUNT(*)::INT AS expected_months
+                        FROM generate_series(
+                            (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date,
+                            date_trunc('month', p.fecha_hasta)::date,
+                            interval '1 month'
+                        ) m
+                    ) e
+                    LEFT JOIN seg_inflacion_mensual i
+                      ON make_date(i.periodo_anio, i.periodo_mes, 1)
+                         BETWEEN (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date
+                             AND date_trunc('month', p.fecha_hasta)::date
+                    GROUP BY e.expected_months
+                ),
                 joined AS (
                     SELECT
                         COALESCE(y.cliente, p.cliente) AS cliente,
@@ -1570,16 +2413,34 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         COALESCE(p.venta_base_mismo_per,0) AS venta_base_mismo_per,
                         CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0
                              THEN ROUND(((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per*100)::NUMERIC,2)
-                             ELSE NULL END AS crecimiento_pct,
+                             ELSE NULL END AS crecimiento_nominal_pct,
+                        CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0 AND inf.inflacion_factor IS NOT NULL
+                             THEN ROUND((((1 + ((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+                             ELSE NULL END AS crecimiento_real_pct,
+                        COALESCE(
+                            CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0 AND inf.inflacion_factor IS NOT NULL
+                                 THEN ROUND((((1 + ((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+                                 ELSE NULL END,
+                            CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0
+                                 THEN ROUND(((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per*100)::NUMERIC,2)
+                                 ELSE NULL END
+                        ) AS crecimiento_pct,
+                        inf.inflacion_factor,
                         COALESCE(y.hl_ytd,0) AS hl_ytd,
                         COALESCE(y.bultos_ytd,0) AS bultos_ytd,
-                        0::NUMERIC AS pallets_ytd,
+                        COALESCE(y.pallets_ytd,0) AS pallets_ytd,
                         COALESCE(y.up_ytd,0) AS up_ytd,
                         COALESCE(y.pedidos_ytd,0) AS pedidos_ytd,
                         COALESCE(y.rechazos_ytd,0) AS rechazos_ytd,
+                        COALESCE(y.pedidos_rechazo_ytd,0) AS pedidos_rechazo_ytd,
+                        COALESCE(y.lineas_rechazo_ytd,0) AS lineas_rechazo_ytd,
+                        COALESCE(y.hl_rechazado_ytd,0) AS hl_rechazado_ytd,
+                        COALESCE(y.hl_rechazado_parcial_ytd,0) AS hl_rechazado_parcial_ytd,
+                        COALESCE(y.hl_rechazado_total_ytd,0) AS hl_rechazado_total_ytd,
                         COALESCE(y.es_ruta_temp,FALSE) AS es_ruta_temp
                     FROM ytd y
                     FULL OUTER JOIN prev p ON p.cliente = y.cliente AND p.sucursal = y.sucursal
+                    CROSS JOIN inflacion inf
                 ),
                 activos AS (
                     SELECT
@@ -1588,15 +2449,27 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         COALESCE(NULLIF(TRIM(c.localidad),''), 'Sin localidad') AS localidad,
                         COALESCE(NULLIF(TRIM(s.nombre),''), j.sucursal) AS sucursal_nombre,
                         COALESCE(cae.autoelevador, ca.autoelevador, FALSE) AS autoelevador,
-                        ca.nps_valor,
-                        ca.rmd_valor,
-                        ca.otif_valor
+                        COALESCE(LOWER(TRIM(c.descripcion)) IN ('ref','refrigerado','refrigerados'), FALSE) AS cliente_refrigerado,
+                        COALESCE(mh.nps_valor, ca.nps_valor) AS nps_valor,
+                        COALESCE(mh.rmd_valor, ca.rmd_valor) AS rmd_valor,
+                        COALESCE(mh.otif_valor, ca.otif_valor) AS otif_valor
                     FROM joined j
+                    CROSS JOIN params p
                     JOIN clientes c ON c.cliente = j.cliente
                                   AND COALESCE(NULLIF(TRIM(c.sucursal),''), j.sucursal) = j.sucursal
                     LEFT JOIN sucursales s ON s.id = j.sucursal
                     LEFT JOIN cliente_autoelevador cae ON cae.is_cliente = j.cliente
                     LEFT JOIN seg_clientes_atributos ca ON ca.cliente = j.cliente
+                    LEFT JOIN LATERAL (
+                        SELECT h.nps_valor, h.rmd_valor, h.otif_valor
+                        FROM seg_cliente_metricas_servicio_historico h
+                        WHERE h.cliente = j.cliente
+                          AND h.periodo_anio = p.periodo_anio
+                          AND h.periodo_mes IN (p.periodo_mes, 0)
+                        ORDER BY CASE WHEN h.periodo_mes = p.periodo_mes THEN 0 ELSE 1 END,
+                                 h.updated_at DESC
+                        LIMIT 1
+                    ) mh ON TRUE
                     WHERE COALESCE(c.activo_maestro, TRUE) = TRUE
                       AND COALESCE(LOWER(TRIM(c.anulado)), '') IN ('no','n','0','false','f')
                       AND NULLIF(TRIM(COALESCE(c.fuerza_venta_1_dias_visita, '')), '') IS NOT NULL
@@ -1623,6 +2496,7 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         a.sucursal_nombre,
                         a.localidad,
                         a.autoelevador,
+                        a.cliente_refrigerado,
                         a.venta_ytd AS ingreso,
                         a.venta_ytd AS ventas_anio_actual,
                         a.venta_base_mismo_per AS ventas_anio_anterior,
@@ -1630,6 +2504,9 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         a.venta_base_mismo_per,
                         a.venta_ytd,
                         a.crecimiento_pct,
+                        a.crecimiento_nominal_pct,
+                        a.crecimiento_real_pct,
+                        a.inflacion_factor,
                         a.hl_ytd,
                         a.bultos_ytd,
                         a.pallets_ytd,
@@ -1638,7 +2515,13 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.bultos_ytd/a.pedidos_ytd)::NUMERIC,2) ELSE 0 END AS dropsize_bultos_ytd,
                         CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.venta_ytd/a.pedidos_ytd)::NUMERIC,2) ELSE 0 END AS ticket_promedio_ytd,
                         a.rechazos_ytd,
-                        CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+                        a.pedidos_rechazo_ytd,
+                        a.lineas_rechazo_ytd,
+                        a.hl_rechazado_ytd,
+                        a.hl_rechazado_parcial_ytd,
+                        a.hl_rechazado_total_ytd,
+                        CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.pedidos_rechazo_ytd::NUMERIC/a.pedidos_ytd*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+                        CASE WHEN a.hl_ytd > 0 THEN ROUND((a.hl_rechazado_ytd::NUMERIC/a.hl_ytd*100),2) ELSE 0 END AS pct_rechazo_hl,
                         a.nps_valor,
                         a.rmd_valor,
                         a.otif_valor,
@@ -1659,6 +2542,7 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         pct.p25_ingresos AS umbral_venta_baja,
                         pct.p50_crecimiento AS umbral_crecimiento,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Ganador'
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento THEN 'Ganador'
                             WHEN a.venta_ytd < pct.p75_ingresos
@@ -1668,6 +2552,7 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                             ELSE 'Basico'
                         END AS cluster_dpo,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Refrigerado'
                             WHEN a.rechazos_ytd > 0 AND a.pedidos_ytd > 0 AND (a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100) > 20 THEN 'Complejo'
                             WHEN COALESCE(a.crecimiento_pct,0) > 15 THEN 'Alto potencial'
                             WHEN a.autoelevador THEN 'Eficiente'
@@ -1687,6 +2572,8 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                         0::NUMERIC AS pts_rmd,
                         0::NUMERIC AS pts_nps,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE)
+                                THEN 'Prioridad cadena de frio - inventario protegido - ventanas cortas - seguimiento OTIF'
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento
                                 THEN 'Prioridad inventario - ventanas cortas - express habilitado - SLA premium'
@@ -1699,11 +2586,14 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                             ELSE 'Servicio estandar - optimizacion de frecuencia'
                         END AS plan_servicio,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Mantener servicio refrigerado y prioridad operativa'
                             WHEN a.venta_ytd <= pct.p25_ingresos THEN 'Revisar frecuencia y consolidacion'
                             WHEN COALESCE(a.crecimiento_pct,0) >= pct.p75_crecimiento THEN 'Priorizar desarrollo comercial'
                             ELSE 'Monitorear mensualmente'
                         END AS accion_prioritaria,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) AND a.otif_valor IS NOT NULL AND a.otif_valor < 90
+                                THEN 'ATENCION: refrigerado con OTIF menor a 90 %'
                             WHEN a.rechazos_ytd > 0 AND a.pedidos_ytd > 0 AND (a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100) > 20
                                 THEN 'CRITICO: tasa de rechazo > 20 %'
                             WHEN a.otif_valor IS NOT NULL AND a.otif_valor < 85 THEN 'ATENCION: OTIF menor a 85 %'
@@ -1711,6 +2601,7 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                             ELSE NULL
                         END AS alerta_operativa,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 1
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento THEN 1
                             WHEN a.venta_ytd < pct.p75_ingresos
@@ -1726,12 +2617,15 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                 INSERT INTO seg_cliente_dpo_cache
                     (
                         cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
-                        autoelevador, cluster_dpo, subcluster_logistico,
+                        autoelevador, cliente_refrigerado, cluster_dpo, subcluster_logistico,
                         ingreso, ventas_anio_actual, ventas_anio_anterior,
                         venta_anio_base, venta_base_mismo_per, venta_ytd, hl_ytd,
                         bultos_ytd, pallets_ytd, up_ytd, pedidos_ytd,
                         dropsize_bultos_ytd, ticket_promedio_ytd, rechazos_ytd,
-                        pct_rechazo_pedidos, crecimiento_pct, nps_valor, rmd_valor, otif_valor,
+                        pedidos_rechazo_ytd, lineas_rechazo_ytd,
+                        hl_rechazado_ytd, hl_rechazado_parcial_ytd, hl_rechazado_total_ytd,
+                        pct_rechazo_pedidos, pct_rechazo_hl, crecimiento_pct, crecimiento_nominal_pct,
+                        crecimiento_real_pct, inflacion_factor, nps_valor, rmd_valor, otif_valor,
                         costo_entrega, costo_almacen, costo_logistico_total,
                         margen_logistico_proxy, ratio_costo_logistico_pct,
                         p25_ingresos, p50_ingresos, p75_ingresos,
@@ -1750,6 +2644,7 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                     sucursal_nombre,
                     localidad,
                     autoelevador,
+                    cliente_refrigerado,
                     cluster_dpo,
                     subcluster_logistico,
                     ingreso,
@@ -1766,8 +2661,17 @@ def _refresh_segmentacion_cache_legacy(ejecutado_por: str = 'sistema') -> dict:
                     dropsize_bultos_ytd,
                     ticket_promedio_ytd,
                     rechazos_ytd,
+                    pedidos_rechazo_ytd,
+                    lineas_rechazo_ytd,
+                    hl_rechazado_ytd,
+                    hl_rechazado_parcial_ytd,
+                    hl_rechazado_total_ytd,
                     pct_rechazo_pedidos,
+                    pct_rechazo_hl,
                     crecimiento_pct,
+                    crecimiento_nominal_pct,
+                    crecimiento_real_pct,
+                    inflacion_factor,
                     nps_valor,
                     rmd_valor,
                     otif_valor,
@@ -1859,6 +2763,7 @@ def _update_dpo_cache_scores(cur) -> int:
                    COALESCE(d.rmd_valor,md.mrmd) AS ri,
                    COALESCE(d.nps_valor,md.mnps) AS ni,
                    CASE WHEN COALESCE(d.pedidos_ytd,0)>0 THEN COALESCE(d.pallets_ytd,0)/d.pedidos_ytd ELSE 0 END AS ppp,
+                   COALESCE(d.pct_rechazo_hl,d.pct_rechazo_pedidos,0) AS rechazo_score_pct,
                    GREATEST(0,COALESCE(d.ratio_costo_logistico_pct,0)) AS rcp
             FROM seg_cliente_dpo_cache d
             CROSS JOIN md
@@ -1870,7 +2775,7 @@ def _update_dpo_cache_scores(cur) -> int:
                    MIN(cc) OVER() AS mnc, MAX(cc) OVER() AS mxc,
                    MIN(dropsize_bultos_ytd) OVER() AS mnd, MAX(dropsize_bultos_ytd) OVER() AS mxd,
                    MIN(ppp) OVER() AS mnp, MAX(ppp) OVER() AS mxp,
-                   MIN(pct_rechazo_pedidos) OVER() AS mnr, MAX(pct_rechazo_pedidos) OVER() AS mxr,
+                   MIN(rechazo_score_pct) OVER() AS mnr, MAX(rechazo_score_pct) OVER() AS mxr,
                    MIN(ri) OVER() AS mnrmd, MAX(ri) OVER() AS mxrmd,
                    MIN(ni) OVER() AS mnnps, MAX(ni) OVER() AS mxnps,
                    MIN(rcp) OVER() AS mnrc, MAX(rcp) OVER() AS mxrc,
@@ -1885,7 +2790,7 @@ def _update_dpo_cache_scores(cur) -> int:
                    CASE WHEN mxc>mnc THEN (cc-mnc)/(mxc-mnc) ELSE 0.5 END AS nc,
                    CASE WHEN mxd>mnd THEN (dropsize_bultos_ytd-mnd)/(mxd-mnd) ELSE 0.5 END AS nd,
                    CASE WHEN mxp>mnp THEN (ppp-mnp)/(mxp-mnp) ELSE 0.5 END AS np,
-                   CASE WHEN mxr>mnr THEN 1-(pct_rechazo_pedidos-mnr)/(mxr-mnr) ELSE 0.5 END AS nr_,
+                   CASE WHEN mxr>mnr THEN 1-(rechazo_score_pct-mnr)/(mxr-mnr) ELSE 0.5 END AS nr_,
                    CASE WHEN mxrmd>mnrmd THEN (ri-mnrmd)/(mxrmd-mnrmd) ELSE 0.5 END AS nrmd,
                    CASE WHEN mxnps>mnnps THEN (ni-mnnps)/(mxnps-mnnps) ELSE 0.5 END AS nnps,
                    CASE WHEN mxrc>mnrc THEN 1-(rcp-mnrc)/(mxrc-mnrc) ELSE 0.5 END AS nrc,
@@ -2124,10 +3029,27 @@ def update_score_pesos(rows: list[dict]) -> int:
 # Atributos de clientes
 # ─────────────────────────────────────────────────────────────
 
+def _normalize_rmd_value(value: Any) -> float | None:
+    if value in (None, ''):
+        return None
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if 1 <= parsed <= 5 else None
+
+
 def upsert_atributos_cliente(cliente: str, data: dict) -> dict:
     ensure_tables()
     data['cliente'] = cliente.strip()
     data['updated_at'] = datetime.now()
+    if 'rmd_valor' in data:
+        rmd_valor = _normalize_rmd_value(data.get('rmd_valor'))
+        if rmd_valor is None:
+            data.pop('rmd_valor', None)
+            data.pop('rmd_fecha', None)
+        else:
+            data['rmd_valor'] = rmd_valor
     campos = ('cliente', 'sucursal_id', 'localidad', 'autoelevador',
               'nps_valor', 'nps_fecha', 'rmd_valor', 'rmd_fecha',
               'otif_valor', 'otif_fecha', 'updated_at')
@@ -2156,23 +3078,25 @@ def bulk_upsert_atributos(registros: list[dict]) -> int:
     if not registros:
         return 0
     now = datetime.now()
-    batch = [
-        (
-            r.get('cliente', '').strip(),
+    batch = []
+    for r in registros:
+        cliente = r.get('cliente', '').strip()
+        if not cliente:
+            continue
+        rmd_valor = _normalize_rmd_value(r.get('rmd_valor'))
+        batch.append((
+            cliente,
             r.get('sucursal_id'),
             r.get('localidad'),
             r.get('autoelevador'),
             r.get('nps_valor'),
             r.get('nps_fecha'),
-            r.get('rmd_valor'),
-            r.get('rmd_fecha'),
+            rmd_valor,
+            r.get('rmd_fecha') if rmd_valor is not None else None,
             r.get('otif_valor'),
             r.get('otif_fecha'),
             now,
-        )
-        for r in registros
-        if r.get('cliente', '').strip()
-    ]
+        ))
     with pg_conn() as conn:
         with conn.cursor() as cur:
             psycopg2.extras.execute_values(
@@ -2202,6 +3126,604 @@ def bulk_upsert_atributos(registros: list[dict]) -> int:
 # ─────────────────────────────────────────────────────────────
 # Consultas sobre vistas
 # ─────────────────────────────────────────────────────────────
+
+def recalcular_nps_mensual(fuente: str = 'nps_detallado') -> dict:
+    """Recalcula el resumen mensual de NPS y lo publica en el historico de servicio."""
+    ensure_tables()
+    now = datetime.now()
+    with pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """
+                WITH survey AS (
+                    SELECT
+                        e.id,
+                        e.cliente,
+                        e.periodo_anio,
+                        e.periodo_mes,
+                        e.fecha_encuesta,
+                        e.score,
+                        BOOL_OR(COALESCE(d.es_delivery,FALSE)) AS has_delivery,
+                        BOOL_OR(COALESCE(d.es_general,FALSE)) AS has_general
+                    FROM seg_cliente_nps_encuestas e
+                    LEFT JOIN seg_cliente_nps_drivers d ON d.encuesta_id = e.id
+                    GROUP BY e.id
+                ),
+                agg_raw AS (
+                    SELECT
+                        cliente,
+                        periodo_anio,
+                        periodo_mes,
+                        MAX(fecha_encuesta) AS ultima_fecha,
+                        COUNT(*) AS respuestas,
+                        ROUND(AVG(score)::NUMERIC, 2) AS score_promedio,
+                        COUNT(*) FILTER (WHERE score >= 9) AS promotores,
+                        COUNT(*) FILTER (WHERE score >= 7 AND score < 9) AS pasivos,
+                        COUNT(*) FILTER (WHERE score <= 6) AS detractores,
+                        ROUND(((COUNT(*) FILTER (WHERE score >= 9) - COUNT(*) FILTER (WHERE score <= 6))::NUMERIC / NULLIF(COUNT(*),0) * 100), 2) AS nps_indice,
+                        COUNT(*) FILTER (WHERE has_delivery) AS delivery_respuestas,
+                        ROUND((AVG(score) FILTER (WHERE has_delivery))::NUMERIC, 2) AS delivery_score_promedio,
+                        COUNT(*) FILTER (WHERE has_delivery AND score >= 9) AS delivery_promotores,
+                        COUNT(*) FILTER (WHERE has_delivery AND score >= 7 AND score < 9) AS delivery_pasivos,
+                        COUNT(*) FILTER (WHERE has_delivery AND score <= 6) AS delivery_detractores,
+                        ROUND(((COUNT(*) FILTER (WHERE has_delivery AND score >= 9) - COUNT(*) FILTER (WHERE has_delivery AND score <= 6))::NUMERIC / NULLIF(COUNT(*) FILTER (WHERE has_delivery),0) * 100), 2) AS delivery_nps_indice,
+                        COUNT(*) FILTER (WHERE has_general) AS general_respuestas,
+                        ROUND((AVG(score) FILTER (WHERE has_general))::NUMERIC, 2) AS general_score_promedio,
+                        COUNT(*) FILTER (WHERE has_general AND score >= 9) AS general_promotores,
+                        COUNT(*) FILTER (WHERE has_general AND score >= 7 AND score < 9) AS general_pasivos,
+                        COUNT(*) FILTER (WHERE has_general AND score <= 6) AS general_detractores,
+                        ROUND(((COUNT(*) FILTER (WHERE has_general AND score >= 9) - COUNT(*) FILTER (WHERE has_general AND score <= 6))::NUMERIC / NULLIF(COUNT(*) FILTER (WHERE has_general),0) * 100), 2) AS general_nps_indice
+                    FROM survey
+                    GROUP BY cliente, periodo_anio, periodo_mes
+                ),
+                agg AS (
+                    SELECT
+                        a.*,
+                        ROUND((
+                            CASE
+                                WHEN a.delivery_respuestas > 0 AND a.general_respuestas > 0
+                                    THEN COALESCE(a.delivery_nps_indice, a.nps_indice) * 0.70
+                                       + COALESCE(a.general_nps_indice, a.nps_indice) * 0.30
+                                WHEN a.delivery_respuestas > 0
+                                    THEN COALESCE(a.delivery_nps_indice, a.nps_indice)
+                                WHEN a.general_respuestas > 0
+                                    THEN COALESCE(a.general_nps_indice, a.nps_indice)
+                                ELSE a.nps_indice
+                            END
+                        )::NUMERIC, 2) AS nps_logistico_indice
+                    FROM agg_raw a
+                ),
+                top_raw AS (
+                    SELECT
+                        e.cliente,
+                        e.periodo_anio,
+                        e.periodo_mes,
+                        COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver') AS driver,
+                        COALESCE(NULLIF(TRIM(d.driver_secundario),''), 'Ninguno') AS subdriver,
+                        BOOL_OR(COALESCE(d.es_delivery,FALSE)) AS es_delivery,
+                        COUNT(DISTINCT e.id) AS respuestas
+                    FROM seg_cliente_nps_encuestas e
+                    JOIN seg_cliente_nps_drivers d ON d.encuesta_id = e.id
+                    GROUP BY e.cliente, e.periodo_anio, e.periodo_mes, driver, subdriver
+                ),
+                top_rank AS (
+                    SELECT *,
+                           ROW_NUMBER() OVER (
+                               PARTITION BY cliente, periodo_anio, periodo_mes
+                               ORDER BY respuestas DESC, es_delivery DESC, driver, subdriver
+                           ) AS rn
+                    FROM top_raw
+                ),
+                tops AS (
+                    SELECT
+                        cliente,
+                        periodo_anio,
+                        periodo_mes,
+                        COALESCE(
+                            jsonb_agg(
+                                jsonb_build_object(
+                                    'driver', driver,
+                                    'subdriver', subdriver,
+                                    'respuestas', respuestas,
+                                    'delivery', es_delivery
+                                )
+                                ORDER BY respuestas DESC, es_delivery DESC, driver, subdriver
+                            ) FILTER (WHERE rn <= 8),
+                            '[]'::jsonb
+                        ) AS top_subdrivers
+                    FROM top_rank
+                    GROUP BY cliente, periodo_anio, periodo_mes
+                )
+                INSERT INTO seg_cliente_nps_mensual (
+                    cliente, periodo_anio, periodo_mes, ultima_fecha,
+                    respuestas, score_promedio, promotores, pasivos, detractores, nps_indice,
+                    delivery_respuestas, delivery_score_promedio, delivery_promotores, delivery_pasivos, delivery_detractores, delivery_nps_indice,
+                    general_respuestas, general_score_promedio, general_promotores, general_pasivos, general_detractores, general_nps_indice,
+                    nps_logistico_indice, nps_logistico_norm, top_subdrivers, fuente, updated_at
+                )
+                SELECT
+                    a.cliente, a.periodo_anio, a.periodo_mes, a.ultima_fecha,
+                    a.respuestas, a.score_promedio, a.promotores, a.pasivos, a.detractores, a.nps_indice,
+                    a.delivery_respuestas, a.delivery_score_promedio, a.delivery_promotores, a.delivery_pasivos, a.delivery_detractores, a.delivery_nps_indice,
+                    a.general_respuestas, a.general_score_promedio, a.general_promotores, a.general_pasivos, a.general_detractores, a.general_nps_indice,
+                    a.nps_logistico_indice,
+                    ROUND(((a.nps_logistico_indice + 100) / 2)::NUMERIC, 2) AS nps_logistico_norm,
+                    COALESCE(t.top_subdrivers, '[]'::jsonb),
+                    %(fuente)s,
+                    %(now)s
+                FROM agg a
+                LEFT JOIN tops t
+                  ON t.cliente = a.cliente
+                 AND t.periodo_anio = a.periodo_anio
+                 AND t.periodo_mes = a.periodo_mes
+                ON CONFLICT (cliente, periodo_anio, periodo_mes) DO UPDATE SET
+                    ultima_fecha = EXCLUDED.ultima_fecha,
+                    respuestas = EXCLUDED.respuestas,
+                    score_promedio = EXCLUDED.score_promedio,
+                    promotores = EXCLUDED.promotores,
+                    pasivos = EXCLUDED.pasivos,
+                    detractores = EXCLUDED.detractores,
+                    nps_indice = EXCLUDED.nps_indice,
+                    delivery_respuestas = EXCLUDED.delivery_respuestas,
+                    delivery_score_promedio = EXCLUDED.delivery_score_promedio,
+                    delivery_promotores = EXCLUDED.delivery_promotores,
+                    delivery_pasivos = EXCLUDED.delivery_pasivos,
+                    delivery_detractores = EXCLUDED.delivery_detractores,
+                    delivery_nps_indice = EXCLUDED.delivery_nps_indice,
+                    general_respuestas = EXCLUDED.general_respuestas,
+                    general_score_promedio = EXCLUDED.general_score_promedio,
+                    general_promotores = EXCLUDED.general_promotores,
+                    general_pasivos = EXCLUDED.general_pasivos,
+                    general_detractores = EXCLUDED.general_detractores,
+                    general_nps_indice = EXCLUDED.general_nps_indice,
+                    nps_logistico_indice = EXCLUDED.nps_logistico_indice,
+                    nps_logistico_norm = EXCLUDED.nps_logistico_norm,
+                    top_subdrivers = EXCLUDED.top_subdrivers,
+                    fuente = EXCLUDED.fuente,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                {'fuente': fuente[:120], 'now': now},
+            )
+            mensual_actualizado = cur.rowcount
+
+            cur.execute(
+                """
+                INSERT INTO seg_cliente_metricas_servicio_historico
+                    (cliente, periodo_anio, periodo_mes, nps_valor, nps_fecha, fuente, updated_at)
+                SELECT cliente, periodo_anio, periodo_mes, nps_logistico_indice, ultima_fecha::DATE,
+                       %(fuente)s, %(now)s
+                FROM seg_cliente_nps_mensual
+                WHERE nps_logistico_indice IS NOT NULL
+                ON CONFLICT (cliente, periodo_anio, periodo_mes) DO UPDATE SET
+                    nps_valor = EXCLUDED.nps_valor,
+                    nps_fecha = EXCLUDED.nps_fecha,
+                    fuente = EXCLUDED.fuente,
+                    updated_at = EXCLUDED.updated_at
+                """,
+                {'fuente': fuente[:120], 'now': now},
+            )
+            historico_actualizado = cur.rowcount
+
+            cur.execute(
+                """
+                SELECT COUNT(*) AS encuestas,
+                       COUNT(DISTINCT cliente) AS clientes,
+                       COUNT(DISTINCT (periodo_anio, periodo_mes)) AS periodos
+                FROM seg_cliente_nps_encuestas
+                """
+            )
+            resumen = dict(cur.fetchone() or {})
+
+            cur.execute(
+                """
+                SELECT DISTINCT ON (cliente)
+                       cliente,
+                       nps_logistico_indice AS nps_valor,
+                       ultima_fecha::DATE AS nps_fecha
+                FROM seg_cliente_nps_mensual
+                WHERE nps_logistico_indice IS NOT NULL
+                ORDER BY cliente, periodo_anio DESC, periodo_mes DESC, updated_at DESC
+                """
+            )
+            vigentes = _dict_rows(cur)
+
+    vigentes_actualizados = bulk_upsert_atributos(vigentes) if vigentes else 0
+    _use_live_plan_source()
+    return {
+        'mensual_actualizado': mensual_actualizado,
+        'historico_actualizado': historico_actualizado,
+        'vigentes_actualizados': vigentes_actualizados,
+        **resumen,
+    }
+
+
+def bulk_upsert_nps_detallado(registros: list[dict], fuente: str = 'nps_detallado') -> dict:
+    """Carga encuestas NPS con drivers/subdrivers y recalcula el resumen logistico."""
+    ensure_tables()
+    if not registros:
+        return {
+            'filas': 0,
+            'encuestas_importadas': 0,
+            'drivers_importados': 0,
+            'descartados': 0,
+            'clientes': 0,
+            'periodos': 0,
+        }
+
+    encuestas: dict[str, dict] = {}
+    drivers: set[tuple[str, str, str, bool, bool]] = set()
+    descartados = 0
+    for row in registros:
+        cliente = str(_first_present(
+            row,
+            ('cliente', 'id_cliente', 'cliente_id', 'is_cliente', 'cod_cliente', 'codigo_cliente', 'codigo'),
+            '',
+        )).strip()
+        fecha = _nps_datetime(_first_present(row, ('fecha_encuesta', 'fecha', 'fecha_enc', 'fechaenc'), None))
+        score = _nps_score(_first_present(row, ('score', 'nps_score', 'nps', 'puntaje'), None))
+        if not cliente or fecha is None or score is None:
+            descartados += 1
+            continue
+
+        encuesta_key = str(row.get('encuesta_key') or _nps_survey_key(cliente, fecha, score))[:180]
+        item = encuestas.setdefault(encuesta_key, {
+            'encuesta_key': encuesta_key,
+            'cliente': cliente,
+            'fecha_encuesta': fecha.replace(microsecond=0),
+            'periodo_anio': fecha.year,
+            'periodo_mes': fecha.month,
+            'score': score,
+            'categoria_nps': _nps_category(score),
+            'comentario': str(row.get('comentario') or '').strip() or None,
+            'cod_cliente_distribuidor': str(row.get('cod_cliente_distribuidor') or '').strip() or None,
+            'nombre_cliente': str(row.get('nombre_cliente') or '').strip() or None,
+            'localidad': str(row.get('localidad') or '').strip() or None,
+            'segmento_mkt': str(row.get('segmento_mkt') or '').strip() or None,
+            'segmento_venta': str(row.get('segmento_venta') or '').strip() or None,
+            'cod_distribuidor': str(row.get('cod_distribuidor') or '').strip() or None,
+            'ddc_name': str(row.get('ddc_name') or '').strip() or None,
+        })
+        for field in ('comentario', 'cod_cliente_distribuidor', 'nombre_cliente', 'localidad',
+                      'segmento_mkt', 'segmento_venta', 'cod_distribuidor', 'ddc_name'):
+            if not item.get(field) and row.get(field):
+                item[field] = str(row.get(field)).strip() or None
+
+        driver = str(row.get('driver_primario') or '').strip()
+        subdriver = str(row.get('driver_secundario') or '').strip() or 'Ninguno'
+        drivers.add((
+            encuesta_key,
+            driver,
+            subdriver,
+            _nps_is_delivery(driver, subdriver),
+            _nps_is_general(subdriver),
+        ))
+
+    if not encuestas:
+        return {
+            'filas': len(registros),
+            'encuestas_importadas': 0,
+            'drivers_importados': 0,
+            'descartados': descartados,
+            'clientes': 0,
+            'periodos': 0,
+        }
+
+    now = datetime.now()
+    fuente = str(fuente or 'nps_detallado')[:120]
+    encuesta_batch = [
+        (
+            item['encuesta_key'],
+            item['cliente'],
+            item['fecha_encuesta'],
+            item['periodo_anio'],
+            item['periodo_mes'],
+            item['score'],
+            item['categoria_nps'],
+            item['comentario'],
+            item['cod_cliente_distribuidor'],
+            item['nombre_cliente'],
+            item['localidad'],
+            item['segmento_mkt'],
+            item['segmento_venta'],
+            item['cod_distribuidor'],
+            item['ddc_name'],
+            fuente,
+            now,
+        )
+        for item in encuestas.values()
+    ]
+    driver_batch: list[tuple] = []
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            returned = psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO seg_cliente_nps_encuestas
+                   (encuesta_key, cliente, fecha_encuesta, periodo_anio, periodo_mes,
+                    score, categoria_nps, comentario, cod_cliente_distribuidor,
+                    nombre_cliente, localidad, segmento_mkt, segmento_venta,
+                    cod_distribuidor, ddc_name, fuente, updated_at)
+                   VALUES %s
+                   ON CONFLICT (encuesta_key) DO UPDATE SET
+                       cliente = EXCLUDED.cliente,
+                       fecha_encuesta = EXCLUDED.fecha_encuesta,
+                       periodo_anio = EXCLUDED.periodo_anio,
+                       periodo_mes = EXCLUDED.periodo_mes,
+                       score = EXCLUDED.score,
+                       categoria_nps = EXCLUDED.categoria_nps,
+                       comentario = COALESCE(EXCLUDED.comentario, seg_cliente_nps_encuestas.comentario),
+                       cod_cliente_distribuidor = COALESCE(EXCLUDED.cod_cliente_distribuidor, seg_cliente_nps_encuestas.cod_cliente_distribuidor),
+                       nombre_cliente = COALESCE(EXCLUDED.nombre_cliente, seg_cliente_nps_encuestas.nombre_cliente),
+                       localidad = COALESCE(EXCLUDED.localidad, seg_cliente_nps_encuestas.localidad),
+                       segmento_mkt = COALESCE(EXCLUDED.segmento_mkt, seg_cliente_nps_encuestas.segmento_mkt),
+                       segmento_venta = COALESCE(EXCLUDED.segmento_venta, seg_cliente_nps_encuestas.segmento_venta),
+                       cod_distribuidor = COALESCE(EXCLUDED.cod_distribuidor, seg_cliente_nps_encuestas.cod_distribuidor),
+                       ddc_name = COALESCE(EXCLUDED.ddc_name, seg_cliente_nps_encuestas.ddc_name),
+                       fuente = EXCLUDED.fuente,
+                       updated_at = EXCLUDED.updated_at
+                   RETURNING id, encuesta_key""",
+                encuesta_batch,
+                page_size=500,
+                fetch=True,
+            )
+            encuesta_ids = {row[1]: row[0] for row in returned}
+            if encuesta_ids:
+                cur.execute(
+                    "DELETE FROM seg_cliente_nps_drivers WHERE encuesta_id = ANY(%s)",
+                    (list(encuesta_ids.values()),),
+                )
+            driver_batch = [
+                (
+                    encuesta_ids[key],
+                    driver,
+                    subdriver,
+                    es_delivery,
+                    es_general,
+                    now,
+                )
+                for key, driver, subdriver, es_delivery, es_general in drivers
+                if key in encuesta_ids
+            ]
+            if driver_batch:
+                psycopg2.extras.execute_values(
+                    cur,
+                    """INSERT INTO seg_cliente_nps_drivers
+                       (encuesta_id, driver_primario, driver_secundario, es_delivery, es_general, updated_at)
+                       VALUES %s
+                       ON CONFLICT (encuesta_id, driver_primario, driver_secundario) DO UPDATE SET
+                           es_delivery = EXCLUDED.es_delivery,
+                           es_general = EXCLUDED.es_general,
+                           updated_at = EXCLUDED.updated_at""",
+                    driver_batch,
+                    page_size=1000,
+                )
+
+    resumen = recalcular_nps_mensual(fuente=fuente)
+    return {
+        'filas': len(registros),
+        'encuestas_importadas': len(encuestas),
+        'drivers_importados': len(driver_batch),
+        'descartados': descartados,
+        **resumen,
+    }
+
+
+def _period_int(value: Any, default: int | None = None) -> int | None:
+    if value in (None, ''):
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def bulk_upsert_inflacion_mensual(registros: list[dict], fuente: str = 'ipc_upload') -> dict:
+    """Carga variacion mensual de IPC para deflactar crecimiento de ventas."""
+    ensure_tables()
+    if not registros:
+        return {'importados': 0, 'periodos': 0}
+
+    dedup: dict[tuple[int, int], dict] = {}
+    for row in registros:
+        anio = _period_int(_first_present(row, ('periodo_anio', 'anio', 'ano', 'year'), None))
+        mes = _period_int(_first_present(row, ('periodo_mes', 'mes', 'month'), None))
+        if not anio or anio < 2000 or anio > 2099 or not mes or mes < 1 or mes > 12:
+            continue
+        value = _first_present(
+            row,
+            ('inflacion_pct', 'variacion_pct', 'ipc_variacion_pct', 'ipc_mensual_pct', 'ipc_pct'),
+            None,
+        )
+        try:
+            inflacion_pct = float(value)
+        except (TypeError, ValueError):
+            continue
+        if inflacion_pct <= -99.999999:
+            continue
+        indice_raw = _first_present(row, ('indice_ipc', 'ipc_indice', 'indice', 'valor_indice'), None)
+        try:
+            indice_ipc = float(indice_raw) if indice_raw not in (None, '') else None
+        except (TypeError, ValueError):
+            indice_ipc = None
+        dedup[(anio, mes)] = {
+            'periodo_anio': anio,
+            'periodo_mes': mes,
+            'inflacion_pct': inflacion_pct,
+            'indice_ipc': indice_ipc,
+            'fuente': str(row.get('fuente') or fuente or 'ipc_upload')[:120],
+        }
+
+    valid_rows = list(dedup.values())
+    if not valid_rows:
+        return {'importados': 0, 'periodos': 0}
+
+    now = datetime.now()
+    batch = [
+        (
+            r['periodo_anio'],
+            r['periodo_mes'],
+            r['inflacion_pct'],
+            r.get('indice_ipc'),
+            r.get('fuente') or fuente or 'ipc_upload',
+            now,
+        )
+        for r in valid_rows
+    ]
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO seg_inflacion_mensual
+                   (periodo_anio, periodo_mes, inflacion_pct, indice_ipc, fuente, updated_at)
+                   VALUES %s
+                   ON CONFLICT (periodo_anio, periodo_mes) DO UPDATE SET
+                       inflacion_pct = EXCLUDED.inflacion_pct,
+                       indice_ipc = COALESCE(EXCLUDED.indice_ipc, seg_inflacion_mensual.indice_ipc),
+                       fuente = EXCLUDED.fuente,
+                       updated_at = EXCLUDED.updated_at""",
+                batch,
+                page_size=1000,
+            )
+    cache_svc.clear('segmentacion:')
+    periods = sorted((r['periodo_anio'], r['periodo_mes']) for r in valid_rows)
+    return {
+        'importados': len(valid_rows),
+        'periodos': len(periods),
+        'desde': f"{periods[0][0]}-{periods[0][1]:02d}",
+        'hasta': f"{periods[-1][0]}-{periods[-1][1]:02d}",
+    }
+
+
+def get_inflacion_mensual(limit: int = 36) -> list[dict]:
+    ensure_tables()
+    limit = max(1, min(int(limit or 36), 240))
+    with pg_cursor() as cur:
+        cur.execute(
+            """SELECT periodo_anio, periodo_mes, inflacion_pct, indice_ipc, fuente, updated_at
+               FROM seg_inflacion_mensual
+               ORDER BY periodo_anio DESC, periodo_mes DESC
+               LIMIT %(limit)s""",
+            {'limit': limit},
+        )
+        return _dict_rows(cur)
+
+
+def bulk_upsert_servicio_historico(registros: list[dict], fuente: str = 'import') -> dict:
+    """Carga OTIF/RMD/NPS historico por cliente y periodo."""
+    ensure_tables()
+    if not registros:
+        return {'importados': 0, 'clientes': 0, 'periodos': 0, 'vigentes_actualizados': 0}
+
+    dedup: dict[tuple[str, int, int], dict] = {}
+    for row in registros:
+        cliente = str(_first_present(
+            row,
+            ('cliente', 'is_cliente', 'cliente_id', 'id_cliente', 'cod_cliente', 'codigo_cliente', 'codigo'),
+            '',
+        )).strip()
+        anio = _period_int(_first_present(row, ('periodo_anio', 'anio', 'ano', 'year'), None))
+        mes = _period_int(_first_present(row, ('periodo_mes', 'mes', 'month'), 0), 0)
+        if not cliente or not anio or anio < 2000 or anio > 2099 or mes is None or mes < 0 or mes > 12:
+            continue
+
+        key = (cliente, anio, mes)
+        item = dedup.setdefault(key, {
+            'cliente': cliente,
+            'periodo_anio': anio,
+            'periodo_mes': mes,
+            'fuente': str(row.get('fuente') or fuente or 'import')[:120],
+        })
+        for metric in ('nps', 'rmd', 'otif'):
+            value_key = f'{metric}_valor'
+            date_key = f'{metric}_fecha'
+            if row.get(value_key) not in (None, ''):
+                value = row.get(value_key)
+                if metric == 'rmd':
+                    value = _normalize_rmd_value(value)
+                    if value is None:
+                        continue
+                item[value_key] = value
+                if row.get(date_key) not in (None, ''):
+                    item[date_key] = row.get(date_key)
+            elif row.get(date_key) not in (None, '') and item.get(value_key) not in (None, ''):
+                item[date_key] = row.get(date_key)
+
+    valid_rows = [
+        item for item in dedup.values()
+        if any(item.get(f'{metric}_valor') not in (None, '') for metric in ('nps', 'rmd', 'otif'))
+    ]
+    if not valid_rows:
+        return {'importados': 0, 'clientes': 0, 'periodos': 0, 'vigentes_actualizados': 0}
+
+    now = datetime.now()
+    batch = [
+        (
+            r['cliente'],
+            r['periodo_anio'],
+            r['periodo_mes'],
+            r.get('nps_valor'),
+            r.get('nps_fecha'),
+            r.get('rmd_valor'),
+            r.get('rmd_fecha'),
+            r.get('otif_valor'),
+            r.get('otif_fecha'),
+            r.get('fuente') or fuente or 'import',
+            now,
+        )
+        for r in valid_rows
+    ]
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO seg_cliente_metricas_servicio_historico
+                   (cliente, periodo_anio, periodo_mes,
+                    nps_valor, nps_fecha, rmd_valor, rmd_fecha, otif_valor, otif_fecha,
+                    fuente, updated_at)
+                   VALUES %s
+                   ON CONFLICT (cliente, periodo_anio, periodo_mes) DO UPDATE SET
+                       nps_valor  = COALESCE(EXCLUDED.nps_valor, seg_cliente_metricas_servicio_historico.nps_valor),
+                       nps_fecha  = COALESCE(EXCLUDED.nps_fecha, seg_cliente_metricas_servicio_historico.nps_fecha),
+                       rmd_valor  = COALESCE(EXCLUDED.rmd_valor, seg_cliente_metricas_servicio_historico.rmd_valor),
+                       rmd_fecha  = COALESCE(EXCLUDED.rmd_fecha, seg_cliente_metricas_servicio_historico.rmd_fecha),
+                       otif_valor = COALESCE(EXCLUDED.otif_valor, seg_cliente_metricas_servicio_historico.otif_valor),
+                       otif_fecha = COALESCE(EXCLUDED.otif_fecha, seg_cliente_metricas_servicio_historico.otif_fecha),
+                       fuente     = EXCLUDED.fuente,
+                       updated_at = EXCLUDED.updated_at""",
+                batch,
+                page_size=1000,
+            )
+
+    latest_by_cliente: dict[str, dict] = {}
+    for row in valid_rows:
+        current = latest_by_cliente.get(row['cliente'])
+        row_key = (row['periodo_anio'], row['periodo_mes'])
+        current_key = (
+            current.get('periodo_anio', 0),
+            current.get('periodo_mes', 0),
+        ) if current else None
+        if current is None or row_key >= current_key:
+            latest_by_cliente[row['cliente']] = row
+
+    vigentes = bulk_upsert_atributos([
+        {
+            'cliente': row['cliente'],
+            'nps_valor': row.get('nps_valor'),
+            'nps_fecha': row.get('nps_fecha'),
+            'rmd_valor': row.get('rmd_valor'),
+            'rmd_fecha': row.get('rmd_fecha'),
+            'otif_valor': row.get('otif_valor'),
+            'otif_fecha': row.get('otif_fecha'),
+        }
+        for row in latest_by_cliente.values()
+    ])
+    _use_live_plan_source()
+    return {
+        'importados': len(valid_rows),
+        'clientes': len(latest_by_cliente),
+        'periodos': len({(r['periodo_anio'], r['periodo_mes']) for r in valid_rows}),
+        'vigentes_actualizados': vigentes,
+    }
+
 
 def bulk_upsert_autoelevador(clientes: list[dict | str], fuente: str = 'api') -> int:
     ensure_tables()
@@ -2352,12 +3874,15 @@ def _dict_rows(cur) -> list[dict]:
 
 _DPO_CACHE_COLUMNS = (
     'cliente', 'descripcion_cliente', 'sucursal', 'sucursal_nombre', 'localidad',
-    'autoelevador', 'cluster_dpo', 'subcluster_logistico',
+    'autoelevador', 'cliente_refrigerado', 'cluster_dpo', 'subcluster_logistico',
     'ingreso', 'ventas_anio_actual', 'ventas_anio_anterior',
     'venta_anio_base', 'venta_base_mismo_per', 'venta_ytd', 'hl_ytd',
     'bultos_ytd', 'pallets_ytd', 'up_ytd', 'pedidos_ytd',
     'dropsize_bultos_ytd', 'ticket_promedio_ytd', 'rechazos_ytd',
-    'pct_rechazo_pedidos', 'crecimiento_pct', 'nps_valor', 'rmd_valor',
+    'pedidos_rechazo_ytd', 'lineas_rechazo_ytd',
+    'hl_rechazado_ytd', 'hl_rechazado_parcial_ytd', 'hl_rechazado_total_ytd',
+    'pct_rechazo_pedidos', 'pct_rechazo_hl', 'crecimiento_pct', 'crecimiento_nominal_pct',
+    'crecimiento_real_pct', 'inflacion_factor', 'nps_valor', 'rmd_valor',
     'otif_valor',
     'costo_entrega', 'costo_almacen', 'costo_logistico_total',
     'margen_logistico_proxy', 'ratio_costo_logistico_pct',
@@ -2409,6 +3934,8 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         SELECT
                             sp.costo_entrega_hl,
                             sp.costo_almacen_hl,
+                            COALESCE(pc.periodo_anio, sp.anio_ytd) AS periodo_anio,
+                            COALESCE(pc.periodo_mes, 0) AS periodo_mes,
                             COALESCE(pc.fecha_desde, make_date(sp.anio_ytd, 1, 1)) AS fecha_desde,
                             COALESCE(
                                 pc.fecha_hasta,
@@ -2454,10 +3981,38 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                                      THEN COALESCE(v.bultos,0)/a.bultos_por_pallet ELSE 0 END) AS pallets_ytd,
                             SUM(COALESCE(v.unidad_paquete,0)) AS up_ytd,
                             COUNT(DISTINCT v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'')) AS pedidos_ytd,
-                            SUM(CASE WHEN COALESCE(v.bultos_rechazados,0)>0
-                                       OR COALESCE(v.unidad_medida_rechazado,0)>0
-                                       OR COALESCE(v.unidad_paquete_rechazado,0)>0
-                                     THEN 1 ELSE 0 END) AS rechazos_ytd,
+                            COUNT(DISTINCT CASE WHEN COALESCE(rz.tomar,FALSE)
+                                      AND (COALESCE(v.bultos_rechazados,0)>0
+                                        OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                        OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                     THEN v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'') END) AS rechazos_ytd,
+                            COUNT(DISTINCT CASE WHEN COALESCE(rz.tomar,FALSE)
+                                      AND (COALESCE(v.bultos_rechazados,0)>0
+                                        OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                        OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                     THEN v.fecha::TEXT||'|'||NULLIF(TRIM(v.cliente),'') END) AS pedidos_rechazo_ytd,
+                            SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                       AND (COALESCE(v.bultos_rechazados,0)>0
+                                         OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                         OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                     THEN 1 ELSE 0 END) AS lineas_rechazo_ytd,
+                            SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                       AND (COALESCE(v.bultos_rechazados,0)>0
+                                         OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                         OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                     THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_ytd,
+                            SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                       AND (COALESCE(v.bultos_rechazados,0)>0
+                                         OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                         OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                       AND LOWER(TRIM(COALESCE(v.rechazo_total,''))) NOT IN ('si','s','yes','y','true','1','x')
+                                     THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_parcial_ytd,
+                            SUM(CASE WHEN COALESCE(rz.tomar,FALSE)
+                                       AND (COALESCE(v.bultos_rechazados,0)>0
+                                         OR COALESCE(v.unidad_medida_rechazado,0)>0
+                                         OR COALESCE(v.unidad_paquete_rechazado,0)>0)
+                                       AND LOWER(TRIM(COALESCE(v.rechazo_total,''))) IN ('si','s','yes','y','true','1','x')
+                                     THEN COALESCE(v.unidad_medida_rechazado,0) ELSE 0 END) AS hl_rechazado_total_ytd,
                             BOOL_OR(
                                 LOWER(TRIM(COALESCE(v.descripcion_ruta,''))) LIKE '%%temp%%'
                                 OR LOWER(TRIM(COALESCE(v.descripcion_detallada_ruta,''))) LIKE '%%temp%%'
@@ -2465,6 +4020,14 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         FROM ventas_detalle v
                         CROSS JOIN params p
                         JOIN articulos a ON a.id_articulo = v.id_articulo
+                        LEFT JOIN LATERAL (
+                            SELECT tomar
+                            FROM rechazos r
+                            WHERE LOWER(TRIM(COALESCE(v.motivo_rechazo,''))) = r.motivo_key
+                               OR LOWER(TRIM(COALESCE(v.motivo_rechazo,''))) LIKE r.motivo_key || ' %%'
+                            ORDER BY LENGTH(r.motivo_key) DESC
+                            LIMIT 1
+                        ) rz ON TRUE
                         WHERE v.fecha BETWEEN p.fecha_desde AND p.fecha_hasta
                           AND LOWER(TRIM(COALESCE(a.tipo_producto,'')))='mercaderia'
                           AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
@@ -2491,6 +4054,30 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                           AND NULLIF(TRIM(v.cliente),'') IS NOT NULL
                         GROUP BY 1, 2
                     ),
+                    inflacion AS (
+                        SELECT
+                            e.expected_months,
+                            COUNT(i.*)::INT AS meses_ipc,
+                            CASE
+                                WHEN COUNT(i.*)::INT > 0
+                                    THEN ROUND(EXP(SUM(LN(1 + (i.inflacion_pct / 100.0))))::NUMERIC, 8)
+                                ELSE NULL
+                            END AS inflacion_factor
+                        FROM params p
+                        CROSS JOIN LATERAL (
+                            SELECT COUNT(*)::INT AS expected_months
+                            FROM generate_series(
+                                (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date,
+                                date_trunc('month', p.fecha_hasta)::date,
+                                interval '1 month'
+                            ) m
+                        ) e
+                        LEFT JOIN seg_inflacion_mensual i
+                          ON make_date(i.periodo_anio, i.periodo_mes, 1)
+                             BETWEEN (date_trunc('month', p.fecha_base_hasta)::date + interval '1 month')::date
+                                 AND date_trunc('month', p.fecha_hasta)::date
+                        GROUP BY e.expected_months
+                    ),
                     joined AS (
                         SELECT
                             COALESCE(y.cliente, p.cliente) AS cliente,
@@ -2500,16 +4087,34 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                             COALESCE(p.venta_base_mismo_per,0) AS venta_base_mismo_per,
                             CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0
                                  THEN ROUND(((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per*100)::NUMERIC,2)
-                                 ELSE NULL END AS crecimiento_pct,
+                                 ELSE NULL END AS crecimiento_nominal_pct,
+                            CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0 AND inf.inflacion_factor IS NOT NULL
+                                 THEN ROUND((((1 + ((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+                                 ELSE NULL END AS crecimiento_real_pct,
+                            COALESCE(
+                                CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0 AND inf.inflacion_factor IS NOT NULL
+                                     THEN ROUND((((1 + ((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per)) / inf.inflacion_factor - 1) * 100)::NUMERIC,2)
+                                     ELSE NULL END,
+                                CASE WHEN COALESCE(p.venta_base_mismo_per,0)>0
+                                     THEN ROUND(((COALESCE(y.venta_ytd,0)-p.venta_base_mismo_per)/p.venta_base_mismo_per*100)::NUMERIC,2)
+                                     ELSE NULL END
+                            ) AS crecimiento_pct,
+                            inf.inflacion_factor,
                             COALESCE(y.hl_ytd,0) AS hl_ytd,
                             COALESCE(y.bultos_ytd,0) AS bultos_ytd,
                             COALESCE(y.pallets_ytd,0) AS pallets_ytd,
                             COALESCE(y.up_ytd,0) AS up_ytd,
                             COALESCE(y.pedidos_ytd,0) AS pedidos_ytd,
                             COALESCE(y.rechazos_ytd,0) AS rechazos_ytd,
+                            COALESCE(y.pedidos_rechazo_ytd,0) AS pedidos_rechazo_ytd,
+                            COALESCE(y.lineas_rechazo_ytd,0) AS lineas_rechazo_ytd,
+                            COALESCE(y.hl_rechazado_ytd,0) AS hl_rechazado_ytd,
+                            COALESCE(y.hl_rechazado_parcial_ytd,0) AS hl_rechazado_parcial_ytd,
+                            COALESCE(y.hl_rechazado_total_ytd,0) AS hl_rechazado_total_ytd,
                             COALESCE(y.es_ruta_temp,FALSE) AS es_ruta_temp
                         FROM ytd y
                         FULL OUTER JOIN prev p ON p.cliente = y.cliente AND p.sucursal = y.sucursal
+                        CROSS JOIN inflacion inf
                     ),
                     activos AS (
                         SELECT
@@ -2518,14 +4123,27 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                             COALESCE(NULLIF(TRIM(c.localidad),''), 'Sin localidad') AS localidad,
                             COALESCE(NULLIF(TRIM(s.nombre),''), j.sucursal) AS sucursal_nombre,
                             COALESCE(cae.autoelevador, ca.autoelevador, FALSE) AS autoelevador,
-                            ca.nps_valor,
-                            ca.rmd_valor
+                            COALESCE(LOWER(TRIM(c.descripcion)) IN ('ref','refrigerado','refrigerados'), FALSE) AS cliente_refrigerado,
+                            COALESCE(mh.nps_valor, ca.nps_valor) AS nps_valor,
+                            COALESCE(mh.rmd_valor, ca.rmd_valor) AS rmd_valor,
+                            COALESCE(mh.otif_valor, ca.otif_valor) AS otif_valor
                         FROM joined j
+                        CROSS JOIN params p
                         JOIN clientes c ON c.cliente = j.cliente
                                       AND COALESCE(NULLIF(TRIM(c.sucursal),''), j.sucursal) = j.sucursal
                         LEFT JOIN sucursales s ON s.id = j.sucursal
                         LEFT JOIN cliente_autoelevador cae ON cae.is_cliente = j.cliente
                         LEFT JOIN seg_clientes_atributos ca ON ca.cliente = j.cliente
+                        LEFT JOIN LATERAL (
+                            SELECT h.nps_valor, h.rmd_valor, h.otif_valor
+                            FROM seg_cliente_metricas_servicio_historico h
+                            WHERE h.cliente = j.cliente
+                              AND h.periodo_anio = p.periodo_anio
+                              AND h.periodo_mes IN (p.periodo_mes, 0)
+                            ORDER BY CASE WHEN h.periodo_mes = p.periodo_mes THEN 0 ELSE 1 END,
+                                     h.updated_at DESC
+                            LIMIT 1
+                        ) mh ON TRUE
                         WHERE COALESCE(c.activo_maestro, TRUE) = TRUE
                           AND COALESCE(LOWER(TRIM(c.anulado)), '') IN ('no','n','0','false','f')
                           AND NULLIF(TRIM(COALESCE(c.fuerza_venta_1_dias_visita, '')), '') IS NOT NULL
@@ -2551,6 +4169,7 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         a.sucursal_nombre,
                         a.localidad,
                         a.autoelevador,
+                        a.cliente_refrigerado,
                         a.venta_ytd AS ingreso,
                         a.venta_ytd AS ventas_anio_actual,
                         a.venta_base_mismo_per AS ventas_anio_anterior,
@@ -2558,6 +4177,9 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         a.venta_base_mismo_per,
                         a.venta_ytd,
                         a.crecimiento_pct,
+                        a.crecimiento_nominal_pct,
+                        a.crecimiento_real_pct,
+                        a.inflacion_factor,
                         a.hl_ytd,
                         a.bultos_ytd,
                         a.pallets_ytd,
@@ -2566,9 +4188,16 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.bultos_ytd/a.pedidos_ytd)::NUMERIC,2) ELSE 0 END AS dropsize_bultos_ytd,
                         CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.venta_ytd/a.pedidos_ytd)::NUMERIC,2) ELSE 0 END AS ticket_promedio_ytd,
                         a.rechazos_ytd,
-                        CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+                        a.pedidos_rechazo_ytd,
+                        a.lineas_rechazo_ytd,
+                        a.hl_rechazado_ytd,
+                        a.hl_rechazado_parcial_ytd,
+                        a.hl_rechazado_total_ytd,
+                        CASE WHEN a.pedidos_ytd > 0 THEN ROUND((a.pedidos_rechazo_ytd::NUMERIC/a.pedidos_ytd*100),2) ELSE 0 END AS pct_rechazo_pedidos,
+                        CASE WHEN a.hl_ytd > 0 THEN ROUND((a.hl_rechazado_ytd::NUMERIC/a.hl_ytd*100),2) ELSE 0 END AS pct_rechazo_hl,
                         a.nps_valor,
                         a.rmd_valor,
+                        a.otif_valor,
                         ROUND((a.hl_ytd * p.costo_entrega_hl)::NUMERIC,2) AS costo_entrega,
                         ROUND((a.hl_ytd * p.costo_almacen_hl)::NUMERIC,2) AS costo_almacen,
                         ROUND((a.hl_ytd * (p.costo_entrega_hl + p.costo_almacen_hl))::NUMERIC,2) AS costo_logistico_total,
@@ -2586,6 +4215,7 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         pct.p25_ingresos AS umbral_venta_baja,
                         pct.p50_crecimiento AS umbral_crecimiento,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Ganador'
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento THEN 'Ganador'
                             WHEN a.venta_ytd < pct.p75_ingresos
@@ -2595,6 +4225,7 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                             ELSE 'Basico'
                         END AS cluster_dpo,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Refrigerado'
                             WHEN a.rechazos_ytd > 0 AND a.pedidos_ytd > 0 AND (a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100) > 20 THEN 'Complejo'
                             WHEN COALESCE(a.crecimiento_pct,0) > 15 THEN 'Alto potencial'
                             WHEN a.autoelevador THEN 'Eficiente'
@@ -2614,6 +4245,8 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                         0::NUMERIC AS pts_rmd,
                         0::NUMERIC AS pts_nps,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE)
+                                THEN 'Prioridad cadena de frio - inventario protegido - ventanas cortas - seguimiento OTIF'
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento
                                 THEN 'Prioridad inventario - ventanas cortas - express habilitado - SLA premium'
@@ -2626,17 +4259,22 @@ def _compute_plan_servicio_light_rows_legacy() -> list[dict]:
                             ELSE 'Servicio estandar - optimizacion de frecuencia'
                         END AS plan_servicio,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 'Mantener servicio refrigerado y prioridad operativa'
                             WHEN a.venta_ytd <= pct.p25_ingresos THEN 'Revisar frecuencia y consolidacion'
                             WHEN COALESCE(a.crecimiento_pct,0) >= pct.p75_crecimiento THEN 'Priorizar desarrollo comercial'
                             ELSE 'Monitorear mensualmente'
                         END AS accion_prioritaria,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) AND a.otif_valor IS NOT NULL AND a.otif_valor < 90
+                                THEN 'ATENCION: refrigerado con OTIF menor a 90 %'
                             WHEN a.rechazos_ytd > 0 AND a.pedidos_ytd > 0 AND (a.rechazos_ytd::NUMERIC/a.pedidos_ytd*100) > 20
                                 THEN 'CRITICO: tasa de rechazo > 20 %'
+                            WHEN a.otif_valor IS NOT NULL AND a.otif_valor < 85 THEN 'ATENCION: OTIF menor a 85 %'
                             WHEN COALESCE(a.crecimiento_pct,0) < -30 THEN 'ALERTA: caida de venta > 30 %'
                             ELSE NULL
                         END AS alerta_operativa,
                         CASE
+                            WHEN COALESCE(a.cliente_refrigerado,FALSE) THEN 1
                             WHEN a.venta_ytd >= pct.p75_ingresos
                              AND COALESCE(a.crecimiento_pct,0) >= pct.p50_crecimiento THEN 1
                             WHEN a.venta_ytd < pct.p75_ingresos
@@ -2703,8 +4341,12 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
             'hl_total_ytd': 0.0,
             'costo_logistico_total': 0.0,
             'rechazos_total': 0.0,
+            'pedidos_rechazo_total': 0.0,
+            'lineas_rechazo_total': 0.0,
+            'hl_rechazado_total': 0.0,
             'pedidos_total': 0.0,
             '_pct_rechazo': [],
+            '_pct_rechazo_hl': [],
             '_dropsize': [],
             '_crecimiento': [],
             '_rmd': [],
@@ -2716,9 +4358,14 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
         item['venta_total_ytd'] += float(row.get('venta_ytd') or 0)
         item['hl_total_ytd'] += float(row.get('hl_ytd') or 0)
         item['costo_logistico_total'] += float(row.get('costo_logistico_total') or 0)
-        item['rechazos_total'] += float(row.get('rechazos_ytd') or 0)
+        pedidos_rechazo = float(row.get('pedidos_rechazo_ytd') if row.get('pedidos_rechazo_ytd') is not None else row.get('rechazos_ytd') or 0)
+        item['rechazos_total'] += pedidos_rechazo
+        item['pedidos_rechazo_total'] += pedidos_rechazo
+        item['lineas_rechazo_total'] += float(row.get('lineas_rechazo_ytd') or 0)
+        item['hl_rechazado_total'] += float(row.get('hl_rechazado_ytd') or 0)
         item['pedidos_total'] += float(row.get('pedidos_ytd') or 0)
         item['_pct_rechazo'].append(float(row.get('pct_rechazo_pedidos') or 0))
+        item['_pct_rechazo_hl'].append(float(row.get('pct_rechazo_hl') or 0))
         item['_dropsize'].append(float(row.get('dropsize_bultos_ytd') or 0))
         item['_crecimiento'].append(float(row.get('crecimiento_pct') or 0))
         if row.get('rmd_valor') is not None:
@@ -2747,8 +4394,12 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
             'hl_total_ytd': round(item['hl_total_ytd'], 4),
             'costo_logistico_total': round(item['costo_logistico_total'], 2),
             'rechazos_total': round(item['rechazos_total'], 0),
+            'pedidos_rechazo_total': round(item['pedidos_rechazo_total'], 0),
+            'lineas_rechazo_total': round(item['lineas_rechazo_total'], 0),
+            'hl_rechazado_total': round(item['hl_rechazado_total'], 4),
             'pedidos_total': round(item['pedidos_total'], 0),
-            'pct_rechazo_prom': avg(item['_pct_rechazo']),
+            'pct_rechazo_prom': round((item['pedidos_rechazo_total'] / item['pedidos_total'] * 100), 2) if item['pedidos_total'] else avg(item['_pct_rechazo']),
+            'pct_rechazo_hl_prom': round((item['hl_rechazado_total'] / item['hl_total_ytd'] * 100), 2) if item['hl_total_ytd'] else avg(item['_pct_rechazo_hl']),
             'dropsize_prom': avg(item['_dropsize']),
             'crecimiento_prom_pct': avg(item['_crecimiento']),
             'rmd_prom': avg(item['_rmd']),
@@ -2917,6 +4568,342 @@ def get_plan_servicio(
         return []
 
 
+_CLIENTS_EXPORT_FIELDS = (
+    'cliente', 'descripcion_cliente', 'sucursal_nombre', 'sucursal', 'localidad',
+    'cluster_dpo', 'subcluster_logistico', 'cliente_refrigerado', 'autoelevador',
+    'score_total', 'ventas_anio_actual', 'ventas_anio_anterior',
+    'crecimiento_pct', 'crecimiento_nominal_pct', 'inflacion_factor',
+    'hl_ytd', 'bultos_ytd', 'pallets_ytd', 'up_ytd', 'pedidos_ytd',
+    'dropsize_bultos_ytd', 'ticket_promedio_ytd',
+    'costo_entrega', 'costo_almacen', 'costo_logistico_total',
+    'ratio_costo_logistico_pct', 'margen_logistico_proxy',
+    'pedidos_rechazo_ytd', 'lineas_rechazo_ytd', 'hl_rechazado_ytd',
+    'hl_rechazado_parcial_ytd', 'hl_rechazado_total_ytd',
+    'pct_rechazo_pedidos', 'pct_rechazo_hl',
+    'rmd_valor', 'otif_valor', 'nps_valor',
+    'dim_negocio', 'dim_productividad', 'dim_servicio', 'dim_rentabilidad', 'dim_geo',
+    'pts_venta', 'pts_hl', 'pts_crecimiento', 'pts_dropsize', 'pts_rechazos',
+    'pts_rmd', 'pts_nps',
+    'prioridad_gestion', 'plan_servicio', 'accion_prioritaria', 'alerta_operativa',
+)
+
+_CLIENTS_EXPORT_SORTS = {
+    'venta_ytd': 'ventas_anio_actual',
+    'ventas_anio_actual': 'ventas_anio_actual',
+    'score_total': 'score_total',
+    'crecimiento_pct': 'crecimiento_pct',
+    'ratio_costo_logistico_pct': 'ratio_costo_logistico_pct',
+    'pct_rechazo_hl': 'pct_rechazo_hl',
+    'pct_rechazo_pedidos': 'pct_rechazo_pedidos',
+    'hl_ytd': 'hl_ytd',
+    'rmd_valor': 'rmd_valor',
+    'otif_valor': 'otif_valor',
+    'nps_valor': 'nps_valor',
+}
+
+
+def _matches_client_query(row: dict, query: str) -> bool:
+    if not query:
+        return True
+    haystack = ' '.join(str(row.get(key) or '') for key in (
+        'cliente', 'descripcion_cliente', 'localidad', 'sucursal', 'sucursal_nombre',
+        'cluster_dpo', 'subcluster_logistico',
+    )).lower()
+    return query.lower() in haystack
+
+
+def _sort_export_rows(rows: list[dict], sort_key: str | None) -> list[dict]:
+    field = _CLIENTS_EXPORT_SORTS.get(str(sort_key or 'venta_ytd'), 'ventas_anio_actual')
+
+    def numeric(row: dict) -> float:
+        try:
+            return float(row.get(field) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return sorted(rows, key=numeric, reverse=True)
+
+
+def _safe_export_filename(prefix: str, ext: str, *parts: Any) -> str:
+    raw = '_'.join(str(p) for p in parts if p not in (None, '', 'TODAS')) or datetime.now().strftime('%Y%m%d')
+    raw = unicodedata.normalize('NFD', raw)
+    raw = ''.join(ch for ch in raw if unicodedata.category(ch) != 'Mn')
+    safe = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in raw).strip('_') or 'todos'
+    return f'{prefix}_{safe}.{ext}'
+
+
+def export_clientes_excel(
+    sucursal: str | None = None,
+    cluster: str | None = None,
+    q: str | None = None,
+    sort: str | None = None,
+    limit: int = 20000,
+) -> tuple[BytesIO, str, str]:
+    ensure_tables()
+    limit = max(1, min(int(limit or 20000), 50000))
+    rows = get_plan_servicio(sucursal=sucursal, cluster=cluster, limit=limit, offset=0)
+    query = str(q or '').strip().lower()
+    if query:
+        rows = [row for row in rows if _matches_client_query(row, query)]
+    rows = _sort_export_rows(rows, sort)
+
+    wb = Workbook()
+    ws_meta = wb.active
+    ws_meta.title = 'Filtros'
+    _append_key_values(ws_meta, 'Export cartera de clientes', [
+        ('generado_at', datetime.now().replace(microsecond=0)),
+        ('sucursal', sucursal if sucursal and sucursal != 'TODAS' else 'Todas'),
+        ('cluster_dpo', _normalize_cluster_filter(cluster) or 'Todos'),
+        ('busqueda', q or ''),
+        ('orden', sort or 'venta_ytd'),
+        ('clientes_exportados', len(rows)),
+    ])
+
+    ws = wb.create_sheet('Clientes')
+    headers = [_label(field) for field in _CLIENTS_EXPORT_FIELDS]
+    data_rows = [[row.get(field) for field in _CLIENTS_EXPORT_FIELDS] for row in rows]
+    _append_table(ws, 'Cartera de clientes', headers, data_rows)
+    ws.freeze_panes = 'A4'
+    ws.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{max(3, len(rows) + 3)}'
+    for idx, field in enumerate(_CLIENTS_EXPORT_FIELDS, start=1):
+        width = 42 if field in {'descripcion_cliente', 'plan_servicio', 'accion_prioritaria', 'alerta_operativa'} else 18
+        ws.column_dimensions[get_column_letter(idx)].width = width
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = _safe_export_filename('cartera_clientes', 'xlsx', sucursal, cluster, q)
+    return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def get_reporte_costos_atencion(
+    sucursal: str | None = None,
+    cluster: str | None = None,
+    limit: int = 80,
+    incluir_outliers: bool = False,
+    min_venta: float | None = None,
+) -> dict:
+    ensure_tables()
+    limit = max(1, min(int(limit or 80), 500))
+    cluster = _normalize_cluster_filter(cluster)
+    source = 'seg_cliente_dpo_cache' if _dpo_cache_has_rows() else _plan_source()
+
+    conds = ['COALESCE(venta_ytd,0) > 0', 'COALESCE(costo_logistico_total,0) > 0']
+    params: dict[str, Any] = {}
+    if sucursal and sucursal != 'TODAS':
+        conds.append('sucursal = %(suc)s')
+        params['suc'] = sucursal
+    if cluster:
+        conds.append('cluster_dpo = %(cl)s')
+        params['cl'] = cluster
+    where = ' AND '.join(conds)
+
+    with pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute("SET LOCAL statement_timeout = '45000ms'")
+            cur.execute(
+                f"""
+                SELECT
+                    COUNT(*)::INT AS clientes_evaluados,
+                    ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_total_evaluado,
+                    ROUND(SUM(venta_ytd)::NUMERIC,2) AS venta_total_evaluada,
+                    ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_prom_evaluado,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY ratio_costo_logistico_pct) AS p75_ratio,
+                    percentile_cont(0.25) WITHIN GROUP (ORDER BY dropsize_bultos_ytd) AS p25_dropsize,
+                    percentile_cont(0.50) WITHIN GROUP (ORDER BY dropsize_bultos_ytd) AS p50_dropsize,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY pedidos_ytd) AS p75_pedidos,
+                    percentile_cont(0.25) WITHIN GROUP (ORDER BY venta_ytd) AS p25_venta,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY pct_rechazo_pedidos) AS p75_rechazo,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY pct_rechazo_hl) AS p75_rechazo_hl,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY costo_logistico_total) AS p75_costo
+                FROM {source}
+                WHERE {where}
+                """,
+                params,
+            )
+            umbrales = dict(cur.fetchone() or {})
+
+            if not int(umbrales.get('clientes_evaluados') or 0):
+                return {
+                    'items': [],
+                    'resumen': {
+                        'clientes_evaluados': 0,
+                        'clientes_en_reporte': 0,
+                        'criterio': 'Sin clientes con venta y costo logistico para los filtros actuales',
+                    },
+                    'umbrales': umbrales,
+                }
+
+            effective_min_venta = None if incluir_outliers else (
+                min_venta if min_venta is not None else umbrales.get('p25_venta')
+            )
+            data_params = {
+                **params,
+                'lim': limit,
+                'min_venta': effective_min_venta,
+                'p75_ratio': umbrales.get('p75_ratio') or 0,
+                'p25_dropsize': umbrales.get('p25_dropsize') or 0,
+                'p50_dropsize': umbrales.get('p50_dropsize') or 0,
+                'p75_pedidos': umbrales.get('p75_pedidos') or 0,
+                'p75_rechazo': umbrales.get('p75_rechazo') or 0,
+                'p75_rechazo_hl': umbrales.get('p75_rechazo_hl') or 0,
+                'p75_costo': umbrales.get('p75_costo') or 0,
+            }
+            data_where = where
+            if effective_min_venta is not None:
+                data_where += ' AND venta_ytd >= %(min_venta)s'
+
+            cur.execute(
+                f"""
+                WITH evaluado AS (
+                    SELECT
+                        cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
+                        cluster_dpo, subcluster_logistico, autoelevador, venta_ytd, hl_ytd, pedidos_ytd,
+                        costo_logistico_total, ratio_costo_logistico_pct, margen_logistico_proxy,
+                        dropsize_bultos_ytd, pct_rechazo_pedidos, pct_rechazo_hl,
+                        hl_rechazado_ytd, score_total,
+                        ROUND((costo_logistico_total / NULLIF(pedidos_ytd,0))::NUMERIC,2) AS costo_por_pedido,
+                        ROUND((venta_ytd / NULLIF(pedidos_ytd,0))::NUMERIC,2) AS venta_por_pedido,
+                        ROUND((costo_logistico_total / NULLIF(hl_ytd,0))::NUMERIC,2) AS costo_por_hl,
+                        CASE
+                            WHEN COALESCE(margen_logistico_proxy,0) < 0 THEN 'Margen logistico negativo'
+                            WHEN COALESCE(ratio_costo_logistico_pct,0) >= %(p75_ratio)s THEN 'Costo relativo alto'
+                            WHEN COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s
+                             AND COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s THEN 'Muchas entregas de bajo drop size'
+                            WHEN COALESCE(pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
+                              OR COALESCE(pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazo operativo alto'
+                            WHEN COALESCE(costo_logistico_total,0) >= %(p75_costo)s THEN 'Costo absoluto alto'
+                            ELSE 'Costo logistico relevante'
+                        END AS motivo_principal,
+                        ARRAY_REMOVE(ARRAY[
+                            CASE WHEN COALESCE(ratio_costo_logistico_pct,0) >= %(p75_ratio)s
+                                THEN 'Costo sobre venta alto: ' || ROUND(ratio_costo_logistico_pct::NUMERIC,2) || ' %% vs p75 ' || ROUND(%(p75_ratio)s::NUMERIC,2) || ' %%' END,
+                            CASE WHEN COALESCE(costo_logistico_total,0) >= %(p75_costo)s
+                                THEN 'Costo absoluto por encima del p75: $' || ROUND(costo_logistico_total::NUMERIC,0) || ' vs $' || ROUND(%(p75_costo)s::NUMERIC,0) END,
+                            CASE WHEN COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s
+                                THEN 'Drop size bajo: ' || ROUND(dropsize_bultos_ytd::NUMERIC,2) || ' bultos/pedido vs p25 ' || ROUND(%(p25_dropsize)s::NUMERIC,2) END,
+                            CASE WHEN COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(dropsize_bultos_ytd,0) <= %(p50_dropsize)s
+                                THEN 'Frecuencia alta con poco volumen: ' || pedidos_ytd || ' pedidos y drop size ' || ROUND(dropsize_bultos_ytd::NUMERIC,2) END,
+                            CASE WHEN COALESCE(pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
+                                THEN 'Rechazo alto: ' || ROUND(pct_rechazo_pedidos::NUMERIC,2) || ' %% de pedidos' END,
+                            CASE WHEN COALESCE(pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3)
+                                THEN 'Rechazo HL alto: ' || ROUND(pct_rechazo_hl::NUMERIC,2) || ' %% HL (' || ROUND(COALESCE(hl_rechazado_ytd,0)::NUMERIC,2) || ' HL rechazados)' END,
+                            CASE WHEN COALESCE(margen_logistico_proxy,0) < 0
+                                THEN 'Margen logistico proxy negativo: $' || ROUND(margen_logistico_proxy::NUMERIC,0) END
+                        ], NULL) AS motivos,
+                        ROUND(LEAST(100,
+                            CASE WHEN %(p75_ratio)s > 0
+                                THEN LEAST(35, COALESCE(ratio_costo_logistico_pct,0) / %(p75_ratio)s * 28)
+                                ELSE 0 END
+                            + CASE WHEN %(p75_costo)s > 0 AND COALESCE(costo_logistico_total,0) >= %(p75_costo)s THEN 10 ELSE 0 END
+                            + CASE WHEN %(p25_dropsize)s > 0 AND COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s THEN 20 ELSE 0 END
+                            + CASE WHEN %(p75_pedidos)s > 0 AND COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(dropsize_bultos_ytd,0) <= %(p50_dropsize)s THEN 15 ELSE 0 END
+                            + CASE WHEN COALESCE(pct_rechazo_pedidos,0) >= 20 THEN 15 WHEN COALESCE(pct_rechazo_pedidos,0) >= 10 THEN 8 ELSE 0 END
+                            + CASE WHEN COALESCE(pct_rechazo_hl,0) >= 5 THEN 10 WHEN COALESCE(pct_rechazo_hl,0) >= 3 THEN 5 ELSE 0 END
+                            + CASE WHEN COALESCE(margen_logistico_proxy,0) < 0 THEN 15 ELSE 0 END
+                        )::NUMERIC,2) AS indice_costo_servicio
+                    FROM {source}
+                    WHERE {data_where}
+                )
+                SELECT *,
+                       CASE WHEN ARRAY_LENGTH(motivos, 1) > 0
+                            THEN ARRAY_TO_STRING(motivos, '; ')
+                            ELSE 'El costo es relevante por su combinacion de costo total, venta y volumen atendido.'
+                       END AS explicacion
+                FROM evaluado
+                ORDER BY indice_costo_servicio DESC NULLS LAST,
+                         ratio_costo_logistico_pct DESC NULLS LAST,
+                         costo_logistico_total DESC NULLS LAST
+                LIMIT %(lim)s
+                """,
+                data_params,
+            )
+            rows = _dict_rows(cur)
+
+            excluidos_margen_negativo: list[dict] = []
+            excluidos_resumen = {
+                'clientes': 0,
+                'costo_total': 0,
+                'venta_total': 0,
+                'margen_logistico_proxy_total': 0,
+            }
+            if effective_min_venta is not None:
+                excluded_params = {
+                    **params,
+                    'min_venta': effective_min_venta,
+                    'lim_excluidos': 50,
+                }
+                excluded_where = (
+                    f"{where} AND venta_ytd < %(min_venta)s "
+                    "AND COALESCE(margen_logistico_proxy,0) < 0"
+                )
+                cur.execute(
+                    f"""
+                    SELECT
+                        COUNT(*)::INT AS clientes,
+                        ROUND(COALESCE(SUM(costo_logistico_total),0)::NUMERIC,2) AS costo_total,
+                        ROUND(COALESCE(SUM(venta_ytd),0)::NUMERIC,2) AS venta_total,
+                        ROUND(COALESCE(SUM(margen_logistico_proxy),0)::NUMERIC,2) AS margen_logistico_proxy_total
+                    FROM {source}
+                    WHERE {excluded_where}
+                    """,
+                    excluded_params,
+                )
+                excluidos_resumen = dict(cur.fetchone() or excluidos_resumen)
+                cur.execute(
+                    f"""
+                    SELECT
+                        cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
+                        cluster_dpo, subcluster_logistico, autoelevador, venta_ytd, hl_ytd, pedidos_ytd,
+                        costo_logistico_total, ratio_costo_logistico_pct,
+                        margen_logistico_proxy, dropsize_bultos_ytd, pct_rechazo_pedidos,
+                        pct_rechazo_hl, hl_rechazado_ytd,
+                        'Margen logistico proxy negativo' AS motivo_principal,
+                        ARRAY[
+                            'Excluido del ranking principal por baja venta: $' || ROUND(venta_ytd::NUMERIC,0)
+                                || ' vs minimo $' || ROUND(%(min_venta)s::NUMERIC,0),
+                            'Margen logistico proxy negativo: $' || ROUND(margen_logistico_proxy::NUMERIC,0),
+                            'Costo logistico: $' || ROUND(costo_logistico_total::NUMERIC,0)
+                                || ' (' || ROUND(ratio_costo_logistico_pct::NUMERIC,2) || ' %% sobre venta)'
+                        ] AS motivos,
+                        'Cliente excluido del ranking principal por baja venta, pero con margen logistico proxy negativo.' AS explicacion
+                    FROM {source}
+                    WHERE {excluded_where}
+                    ORDER BY margen_logistico_proxy ASC NULLS LAST,
+                             ratio_costo_logistico_pct DESC NULLS LAST,
+                             costo_logistico_total DESC NULLS LAST
+                    LIMIT %(lim_excluidos)s
+                    """,
+                    excluded_params,
+                )
+                excluidos_margen_negativo = _dict_rows(cur)
+
+    costo_reportado = sum(float(r.get('costo_logistico_total') or 0) for r in rows)
+    venta_reportada = sum(float(r.get('venta_ytd') or 0) for r in rows)
+    umbrales['min_venta_efectiva'] = effective_min_venta
+    return {
+        'items': rows,
+        'resumen': {
+            'clientes_evaluados': int(umbrales.get('clientes_evaluados') or 0),
+            'clientes_en_reporte': len(rows),
+            'costo_total_evaluado': umbrales.get('costo_total_evaluado'),
+            'venta_total_evaluada': umbrales.get('venta_total_evaluada'),
+            'ratio_prom_evaluado': umbrales.get('ratio_prom_evaluado'),
+            'costo_total_reportado': round(costo_reportado, 2),
+            'venta_total_reportada': round(venta_reportada, 2),
+            'ratio_reportado': round((costo_reportado / venta_reportada * 100), 2) if venta_reportada else 0,
+            'excluidos_margen_negativo': excluidos_resumen,
+            'criterio': (
+                'Incluye todos los clientes con venta y costo logistico'
+                if incluir_outliers
+                else 'Excluye baja venta por debajo del p25 para evitar outliers'
+            ),
+        },
+        'umbrales': umbrales,
+        'excluidos_margen_negativo': excluidos_margen_negativo,
+    }
+
+
 def get_resumen_sucursal() -> list[dict]:
     ensure_tables()
     if _dpo_cache_has_rows():
@@ -2931,8 +4918,12 @@ def get_resumen_sucursal() -> list[dict]:
                            ROUND(SUM(hl_ytd)::NUMERIC,4) AS hl_total_ytd,
                            ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_logistico_total,
                            ROUND(SUM(rechazos_ytd)::NUMERIC,0) AS rechazos_total,
+                           ROUND(SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd))::NUMERIC,0) AS pedidos_rechazo_total,
+                           ROUND(SUM(COALESCE(lineas_rechazo_ytd,0))::NUMERIC,0) AS lineas_rechazo_total,
+                           ROUND(SUM(COALESCE(hl_rechazado_ytd,0))::NUMERIC,4) AS hl_rechazado_total,
                            ROUND(SUM(pedidos_ytd)::NUMERIC,0) AS pedidos_total,
-                           ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
+                           ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
+                           ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                            ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                            ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
                            ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
@@ -2969,8 +4960,12 @@ def get_resumen_sucursal() -> list[dict]:
                                    ROUND(SUM(hl_ytd)::NUMERIC,4) AS hl_total_ytd,
                                    ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_logistico_total,
                                    ROUND(SUM(rechazos_ytd)::NUMERIC,0) AS rechazos_total,
+                                   ROUND(SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd))::NUMERIC,0) AS pedidos_rechazo_total,
+                                   ROUND(SUM(COALESCE(lineas_rechazo_ytd,0))::NUMERIC,0) AS lineas_rechazo_total,
+                                   ROUND(SUM(COALESCE(hl_rechazado_ytd,0))::NUMERIC,4) AS hl_rechazado_total,
                                    ROUND(SUM(pedidos_ytd)::NUMERIC,0) AS pedidos_total,
-                                   ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
+                                   ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
+                                   ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                                    ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                                    ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
                                    ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
@@ -3010,7 +5005,12 @@ def get_resumen_localidad(sucursal: str | None = None) -> list[dict]:
                            ROUND(SUM(venta_ytd)::NUMERIC,2) AS venta_total_ytd,
                            ROUND(SUM(hl_ytd)::NUMERIC,4) AS hl_total_ytd,
                            ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_logistico_total,
-                           ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
+                           ROUND(SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd))::NUMERIC,0) AS pedidos_rechazo_total,
+                           ROUND(SUM(COALESCE(lineas_rechazo_ytd,0))::NUMERIC,0) AS lineas_rechazo_total,
+                           ROUND(SUM(COALESCE(hl_rechazado_ytd,0))::NUMERIC,4) AS hl_rechazado_total,
+                           ROUND(SUM(pedidos_ytd)::NUMERIC,0) AS pedidos_total,
+                           ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
+                           ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                            ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                            ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                            ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
@@ -3047,7 +5047,12 @@ def get_resumen_localidad(sucursal: str | None = None) -> list[dict]:
                                ROUND(SUM(venta_ytd)::NUMERIC,2) AS venta_total_ytd,
                                ROUND(SUM(hl_ytd)::NUMERIC,4) AS hl_total_ytd,
                                ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_logistico_total,
-                               ROUND(AVG(pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
+                               ROUND(SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd))::NUMERIC,0) AS pedidos_rechazo_total,
+                               ROUND(SUM(COALESCE(lineas_rechazo_ytd,0))::NUMERIC,0) AS lineas_rechazo_total,
+                               ROUND(SUM(COALESCE(hl_rechazado_ytd,0))::NUMERIC,4) AS hl_rechazado_total,
+                               ROUND(SUM(pedidos_ytd)::NUMERIC,0) AS pedidos_total,
+                               ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
+                               ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                                ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
                                ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                                ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
@@ -3480,6 +5485,624 @@ def get_evolucion_cluster(cliente: str) -> list[dict]:
         return _dict_rows(cur)
 
 
+def get_cliente_nps_detalle(cliente: str, limit: int = 200) -> dict:
+    ensure_tables()
+    cliente = str(cliente or '').strip()
+    if not cliente:
+        return {'resumen': {}, 'mensual': [], 'evaluaciones': []}
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                COALESCE(SUM(respuestas),0) AS respuestas,
+                COALESCE(SUM(promotores),0) AS promotores,
+                COALESCE(SUM(pasivos),0) AS pasivos,
+                COALESCE(SUM(detractores),0) AS detractores,
+                CASE WHEN COALESCE(SUM(respuestas),0)>0
+                     THEN ROUND(((SUM(promotores)-SUM(detractores))::NUMERIC / SUM(respuestas) * 100), 2)
+                     ELSE NULL END AS nps_indice,
+                CASE WHEN COALESCE(SUM(respuestas),0)>0
+                     THEN ROUND((SUM(score_promedio * respuestas) / SUM(respuestas))::NUMERIC, 2)
+                     ELSE NULL END AS score_promedio,
+                COALESCE(SUM(delivery_respuestas),0) AS delivery_respuestas,
+                CASE WHEN COALESCE(SUM(delivery_respuestas),0)>0
+                     THEN ROUND(((SUM(delivery_promotores)-SUM(delivery_detractores))::NUMERIC / SUM(delivery_respuestas) * 100), 2)
+                     ELSE NULL END AS delivery_nps_indice,
+                COALESCE(SUM(general_respuestas),0) AS general_respuestas,
+                CASE WHEN COALESCE(SUM(general_respuestas),0)>0
+                     THEN ROUND(((SUM(general_promotores)-SUM(general_detractores))::NUMERIC / SUM(general_respuestas) * 100), 2)
+                     ELSE NULL END AS general_nps_indice,
+                CASE WHEN COALESCE(SUM(respuestas),0)>0
+                     THEN ROUND((SUM(nps_logistico_indice * respuestas) / SUM(respuestas))::NUMERIC, 2)
+                     ELSE NULL END AS nps_logistico_indice,
+                COUNT(*) AS meses,
+                MAX(ultima_fecha) AS ultima_fecha
+            FROM seg_cliente_nps_mensual
+            WHERE cliente = %(cliente)s
+            """,
+            {'cliente': cliente},
+        )
+        resumen = dict(cur.fetchone() or {})
+
+        cur.execute(
+            """
+            SELECT periodo_anio, periodo_mes, ultima_fecha, respuestas,
+                   score_promedio, promotores, pasivos, detractores, nps_indice,
+                   delivery_respuestas, delivery_score_promedio, delivery_promotores,
+                   delivery_pasivos, delivery_detractores, delivery_nps_indice,
+                   general_respuestas, general_score_promedio, general_promotores,
+                   general_pasivos, general_detractores, general_nps_indice,
+                   nps_logistico_indice, nps_logistico_norm, top_subdrivers
+            FROM seg_cliente_nps_mensual
+            WHERE cliente = %(cliente)s
+            ORDER BY periodo_anio DESC, periodo_mes DESC
+            """,
+            {'cliente': cliente},
+        )
+        mensual = _dict_rows(cur)
+
+        cur.execute(
+            """
+            SELECT
+                e.id,
+                e.fecha_encuesta,
+                e.periodo_anio,
+                e.periodo_mes,
+                e.score,
+                e.categoria_nps,
+                e.comentario,
+                COALESCE(
+                    jsonb_agg(
+                        jsonb_build_object(
+                            'driver', COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver'),
+                            'subdriver', COALESCE(NULLIF(TRIM(d.driver_secundario),''), 'Ninguno'),
+                            'delivery', COALESCE(d.es_delivery,FALSE),
+                            'general', COALESCE(d.es_general,FALSE)
+                        )
+                        ORDER BY COALESCE(d.es_delivery,FALSE) DESC,
+                                 COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver'),
+                                 COALESCE(NULLIF(TRIM(d.driver_secundario),''), 'Ninguno')
+                    ) FILTER (WHERE d.id IS NOT NULL),
+                    '[]'::jsonb
+                ) AS drivers
+            FROM seg_cliente_nps_encuestas e
+            LEFT JOIN seg_cliente_nps_drivers d ON d.encuesta_id = e.id
+            WHERE e.cliente = %(cliente)s
+            GROUP BY e.id
+            ORDER BY e.fecha_encuesta DESC
+            LIMIT %(limit)s
+            """,
+            {'cliente': cliente, 'limit': max(1, min(int(limit or 200), 1000))},
+        )
+        evaluaciones = _dict_rows(cur)
+
+    def _iso_dt(value: Any) -> str | None:
+        if isinstance(value, datetime):
+            return value.replace(microsecond=0).isoformat(sep=' ')
+        if isinstance(value, date):
+            return datetime(value.year, value.month, value.day).isoformat(sep=' ')
+        return value
+
+    if resumen.get('ultima_fecha'):
+        resumen['ultima_fecha'] = _iso_dt(resumen.get('ultima_fecha'))
+    for row in mensual:
+        if row.get('ultima_fecha'):
+            row['ultima_fecha'] = _iso_dt(row.get('ultima_fecha'))
+    for row in evaluaciones:
+        if row.get('fecha_encuesta'):
+            row['fecha_encuesta'] = _iso_dt(row.get('fecha_encuesta'))
+    return {'resumen': resumen, 'mensual': mensual, 'evaluaciones': evaluaciones}
+
+
+_CLIENT_REPORT_LABELS = {
+    'cliente': 'Cliente',
+    'descripcion_cliente': 'Razon social',
+    'sucursal': 'Sucursal',
+    'sucursal_nombre': 'Nombre sucursal',
+    'localidad': 'Localidad',
+    'cluster_dpo': 'Cluster',
+    'subcluster_logistico': 'Subcluster logistico',
+    'autoelevador': 'Autoelevador',
+    'cliente_refrigerado': 'Cliente refrigerado',
+    'ventas_anio_actual': 'Venta actual',
+    'ventas_anio_anterior': 'Venta anterior',
+    'venta_ytd': 'Venta YTD',
+    'venta_base_mismo_per': 'Venta anterior mismo periodo',
+    'crecimiento_pct': 'Crecimiento real',
+    'crecimiento_nominal_pct': 'Crecimiento nominal',
+    'inflacion_factor': 'Factor IPC',
+    'hl_ytd': 'HL pedidos',
+    'bultos_ytd': 'Bultos',
+    'pallets_ytd': 'Pallets',
+    'up_ytd': 'UP',
+    'pedidos_ytd': 'Pedidos',
+    'dropsize_bultos_ytd': 'Drop size bultos',
+    'ticket_promedio_ytd': 'Ticket promedio',
+    'rechazos_ytd': 'Pedidos rechazados',
+    'pedidos_rechazo_ytd': 'Pedidos rechazados',
+    'lineas_rechazo_ytd': 'Lineas con rechazo',
+    'hl_rechazado_ytd': 'HL rechazados',
+    'hl_rechazado_parcial_ytd': 'HL rechazo parcial',
+    'hl_rechazado_total_ytd': 'HL rechazo total',
+    'pct_rechazo_pedidos': '% rechazo pedidos',
+    'pct_rechazo_hl': '% rechazo HL',
+    'rmd_valor': 'RMD (1-5)',
+    'otif_valor': 'OTIF',
+    'nps_valor': 'NPS',
+    'score_total': 'Score total',
+    'dim_negocio': 'Score negocio',
+    'dim_productividad': 'Score productividad',
+    'dim_servicio': 'Score servicio',
+    'dim_rentabilidad': 'Score rentabilidad',
+    'dim_geo': 'Score geo/frecuencia',
+    'pts_venta': 'Puntos venta',
+    'pts_hl': 'Puntos HL',
+    'pts_crecimiento': 'Puntos crecimiento',
+    'pts_dropsize': 'Puntos drop size',
+    'pts_rechazos': 'Puntos rechazos',
+    'pts_rmd': 'Puntos RMD',
+    'pts_nps': 'Puntos NPS',
+    'costo_entrega': 'Costo entrega',
+    'costo_almacen': 'Costo almacen',
+    'costo_logistico_total': 'Costo logistico total',
+    'ratio_costo_logistico_pct': 'Costo / venta',
+    'margen_logistico_proxy': 'Margen logistico proxy',
+    'plan_servicio': 'Plan de servicio',
+    'accion_prioritaria': 'Accion prioritaria',
+    'alerta_operativa': 'Alerta operativa',
+    'prioridad_gestion': 'Prioridad gestion',
+}
+
+_CLIENT_REPORT_KPI_FIELDS = (
+    'ventas_anio_actual', 'crecimiento_pct', 'score_total', 'ratio_costo_logistico_pct',
+    'hl_ytd', 'pedidos_ytd', 'pct_rechazo_pedidos', 'pct_rechazo_hl',
+    'rmd_valor', 'otif_valor', 'nps_valor', 'margen_logistico_proxy',
+)
+
+_CLIENT_REPORT_MAIN_FIELDS = (
+    'cliente', 'descripcion_cliente', 'sucursal_nombre', 'sucursal', 'localidad',
+    'cluster_dpo', 'subcluster_logistico', 'autoelevador', 'cliente_refrigerado',
+    'ventas_anio_actual', 'ventas_anio_anterior', 'crecimiento_pct',
+    'crecimiento_nominal_pct', 'inflacion_factor', 'hl_ytd', 'bultos_ytd',
+    'pallets_ytd', 'up_ytd', 'pedidos_ytd', 'dropsize_bultos_ytd',
+    'ticket_promedio_ytd', 'costo_logistico_total', 'ratio_costo_logistico_pct',
+    'margen_logistico_proxy', 'pedidos_rechazo_ytd', 'lineas_rechazo_ytd',
+    'hl_rechazado_ytd', 'hl_rechazado_parcial_ytd', 'hl_rechazado_total_ytd',
+    'pct_rechazo_pedidos', 'pct_rechazo_hl', 'rmd_valor', 'otif_valor',
+    'nps_valor', 'score_total',
+)
+
+_CLIENT_REPORT_SCORE_FIELDS = (
+    'dim_negocio', 'dim_productividad', 'dim_servicio', 'dim_rentabilidad', 'dim_geo',
+    'pts_venta', 'pts_hl', 'pts_crecimiento', 'pts_dropsize', 'pts_rechazos',
+    'pts_rmd', 'pts_nps',
+)
+
+
+def _plain_value(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (datetime, date)):
+        return value.isoformat(sep=' ') if isinstance(value, datetime) else value.isoformat()
+    if isinstance(value, bool):
+        return 'Si' if value else 'No'
+    if isinstance(value, (list, dict)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return value
+
+
+def _report_value(value: Any, key: str | None = None) -> str:
+    value = _plain_value(value)
+    if value is None or value == '':
+        return '-'
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        if key and key.startswith('pct_'):
+            return f'{value:,.2f}%'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        if key and key in {'crecimiento_pct', 'crecimiento_nominal_pct', 'crecimiento_real_pct', 'ratio_costo_logistico_pct', 'otif_valor'}:
+            return f'{value:,.2f}%'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        if key and key in {'ventas_anio_actual', 'ventas_anio_anterior', 'venta_ytd', 'venta_base_mismo_per', 'costo_logistico_total', 'costo_entrega', 'costo_almacen', 'margen_logistico_proxy', 'ticket_promedio_ytd'}:
+            return '$' + f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+        return f'{value:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+    return str(value)
+
+
+def _label(key: str) -> str:
+    return _CLIENT_REPORT_LABELS.get(key, key.replace('_', ' ').title())
+
+
+def _drivers_to_text(drivers: Any) -> str:
+    if not isinstance(drivers, list):
+        return ''
+    parts = []
+    for item in drivers:
+        if not isinstance(item, dict):
+            continue
+        tag = 'Delivery' if item.get('delivery') else 'General' if item.get('general') else 'NPS'
+        driver = item.get('driver') or 'Sin driver'
+        subdriver = item.get('subdriver') or 'Ninguno'
+        parts.append(f'{tag}: {driver} / {subdriver}')
+    return '; '.join(parts)
+
+
+def get_cliente_reporte_data(cliente: str, nps_limit: int = 1000) -> dict:
+    detalle = get_cliente_detalle(cliente)
+    if not detalle:
+        raise ValueError('Cliente no encontrado')
+    return {
+        'generado_at': datetime.now().replace(microsecond=0).isoformat(sep=' '),
+        'detalle': detalle,
+        'evolucion': get_evolucion_cluster(cliente),
+        'nps': get_cliente_nps_detalle(cliente, limit=nps_limit),
+    }
+
+
+def _safe_report_filename(cliente: str, ext: str) -> str:
+    raw = unicodedata.normalize('NFD', str(cliente or 'cliente'))
+    raw = ''.join(ch for ch in raw if unicodedata.category(ch) != 'Mn')
+    safe = ''.join(ch if ch.isalnum() or ch in ('-', '_') else '_' for ch in raw).strip('_') or 'cliente'
+    return f'reporte_cliente_{safe}.{ext}'
+
+
+def _style_excel_sheet(ws, widths: dict[int, int] | None = None) -> None:
+    header_fill = PatternFill('solid', fgColor='172033')
+    header_font = Font(color='FFFFFF', bold=True)
+    thin = Side(style='thin', color='D8DEE9')
+    for row in ws.iter_rows():
+        for cell in row:
+            cell.alignment = Alignment(vertical='top', wrap_text=True)
+            cell.border = Border(bottom=thin)
+            if cell.row == 1:
+                cell.fill = header_fill
+                cell.font = Font(color='FFFFFF', bold=True, size=13)
+            elif cell.row == 3:
+                cell.fill = PatternFill('solid', fgColor='EDF2F7')
+                cell.font = Font(bold=True)
+    if widths:
+        for idx, width in widths.items():
+            ws.column_dimensions[get_column_letter(idx)].width = width
+
+
+def _append_key_values(ws, title: str, rows: list[tuple[str, Any]]) -> None:
+    ws.append([title, ''])
+    ws.append([])
+    ws.append(['Campo', 'Valor'])
+    for key, value in rows:
+        ws.append([_label(key), _plain_value(value)])
+    _style_excel_sheet(ws, {1: 34, 2: 48})
+
+
+def _append_table(ws, title: str, headers: list[str], rows: list[list[Any]]) -> None:
+    ws.append([title])
+    ws.append([])
+    ws.append(headers)
+    for row in rows:
+        ws.append([_plain_value(value) for value in row])
+    _style_excel_sheet(ws, {idx: 18 for idx in range(1, len(headers) + 1)})
+
+
+def _export_cliente_reporte_xlsx(data: dict, cliente: str) -> tuple[BytesIO, str, str]:
+    detalle = data['detalle']
+    nps = data.get('nps') or {}
+    wb = Workbook()
+
+    ws = wb.active
+    ws.title = 'Resumen'
+    resumen_rows = [(key, detalle.get(key)) for key in _CLIENT_REPORT_MAIN_FIELDS]
+    resumen_rows.extend([
+        ('plan_servicio', detalle.get('plan_servicio')),
+        ('accion_prioritaria', detalle.get('accion_prioritaria')),
+        ('alerta_operativa', detalle.get('alerta_operativa')),
+        ('generado_at', data.get('generado_at')),
+    ])
+    _append_key_values(ws, 'Reporte de cliente', resumen_rows)
+
+    ws_score = wb.create_sheet('Score')
+    _append_key_values(ws_score, 'Score y dimensiones', [(key, detalle.get(key)) for key in _CLIENT_REPORT_SCORE_FIELDS])
+
+    mensual = nps.get('mensual') or []
+    ws_nps = wb.create_sheet('NPS mensual')
+    _append_table(
+        ws_nps,
+        'NPS mensual',
+        ['Periodo', 'Respuestas', 'Score prom.', 'Promotores', 'Pasivos', 'Detractores', 'NPS', 'Delivery', 'General', 'Subdrivers'],
+        [
+            [
+                f"{row.get('periodo_anio')}-{int(row.get('periodo_mes') or 0):02d}",
+                row.get('respuestas'),
+                row.get('score_promedio'),
+                row.get('promotores'),
+                row.get('pasivos'),
+                row.get('detractores'),
+                row.get('nps_indice'),
+                row.get('delivery_nps_indice'),
+                row.get('general_nps_indice'),
+                _drivers_to_text(row.get('top_subdrivers')),
+            ]
+            for row in mensual
+        ],
+    )
+
+    evaluaciones = nps.get('evaluaciones') or []
+    ws_eval = wb.create_sheet('NPS evaluaciones')
+    _append_table(
+        ws_eval,
+        'Evaluaciones NPS',
+        ['Fecha', 'Periodo', 'Score', 'Categoria', 'Drivers / subdrivers', 'Comentario'],
+        [
+            [
+                row.get('fecha_encuesta'),
+                f"{row.get('periodo_anio')}-{int(row.get('periodo_mes') or 0):02d}",
+                row.get('score'),
+                row.get('categoria_nps'),
+                _drivers_to_text(row.get('drivers')),
+                row.get('comentario'),
+            ]
+            for row in evaluaciones
+        ],
+    )
+
+    evolucion = data.get('evolucion') or []
+    ws_evo = wb.create_sheet('Evolucion')
+    _append_table(
+        ws_evo,
+        'Evolucion mensual',
+        ['Periodo', 'Cluster', 'Subcluster', 'Score', 'Venta', 'Crecimiento', 'RMD', 'OTIF', 'NPS', 'Fecha calculo'],
+        [
+            [
+                f"{row.get('periodo_anio')}-{int(row.get('periodo_mes') or 0):02d}",
+                row.get('cluster_dpo'),
+                row.get('subcluster_logistico'),
+                row.get('score_total'),
+                row.get('venta_ytd'),
+                row.get('crecimiento_pct'),
+                row.get('rmd_valor'),
+                row.get('otif_valor'),
+                row.get('nps_valor'),
+                row.get('fecha_calculo'),
+            ]
+            for row in evolucion
+        ],
+    )
+
+    ws_raw = wb.create_sheet('Datos completos')
+    _append_key_values(ws_raw, 'Datos completos del cliente', [(key, detalle.get(key)) for key in detalle.keys()])
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio, _safe_report_filename(cliente, 'xlsx'), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def _xml_escape(value: Any) -> str:
+    text = str(value if value is not None else '-')
+    return (
+        text.replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('\n', '<br/>')
+    )
+
+
+def _pdf_p(value: Any, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(_xml_escape(value), style)
+
+
+def _pdf_table(headers: list[str], rows: list[list[Any]], styles: dict[str, ParagraphStyle], widths: list[float] | None = None) -> Table:
+    data_rows = [[_pdf_p(h, styles['th']) for h in headers]]
+    data_rows.extend([[_pdf_p(_report_value(value), styles['td']) for value in row] for row in rows])
+    table = Table(data_rows, colWidths=widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#172033')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#D8DEE9')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F7FAFC')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def _export_cliente_reporte_pdf(data: dict, cliente: str) -> tuple[BytesIO, str, str]:
+    detalle = data['detalle']
+    nps = data.get('nps') or {}
+    bio = BytesIO()
+    doc = SimpleDocTemplate(
+        bio,
+        pagesize=A4,
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.0 * cm,
+        bottomMargin=1.0 * cm,
+        title=f"Reporte cliente {cliente}",
+    )
+    base = getSampleStyleSheet()
+    styles = {
+        'title': ParagraphStyle('TitleCustom', parent=base['Title'], fontSize=18, leading=22, textColor=colors.HexColor('#172033'), spaceAfter=8),
+        'subtitle': ParagraphStyle('SubtitleCustom', parent=base['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#667085'), spaceAfter=10),
+        'section': ParagraphStyle('SectionCustom', parent=base['Heading2'], fontSize=11, leading=14, textColor=colors.HexColor('#172033'), spaceBefore=10, spaceAfter=6),
+        'normal': ParagraphStyle('NormalCustom', parent=base['Normal'], fontSize=8, leading=10, textColor=colors.HexColor('#172033')),
+        'th': ParagraphStyle('HeaderCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER),
+        'td': ParagraphStyle('DataCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033')),
+        'card': ParagraphStyle('Card', parent=base['Normal'], fontSize=8, leading=11, textColor=colors.HexColor('#172033'), alignment=TA_CENTER),
+        'right': ParagraphStyle('Right', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033'), alignment=TA_RIGHT),
+    }
+
+    story: list[Any] = []
+    story.append(Paragraph('Reporte de cliente', styles['title']))
+    story.append(Paragraph(
+        f"<b>{_xml_escape(detalle.get('cliente'))}</b> - {_xml_escape(detalle.get('descripcion_cliente') or '')}<br/>"
+        f"{_xml_escape(detalle.get('sucursal_nombre') or detalle.get('sucursal'))} | {_xml_escape(detalle.get('localidad') or 'Sin localidad')} | "
+        f"{_xml_escape(detalle.get('cluster_dpo') or '-')} / {_xml_escape(detalle.get('subcluster_logistico') or '-')}"
+        f"<br/>Generado: {_xml_escape(data.get('generado_at'))}",
+        styles['subtitle'],
+    ))
+
+    card_cells = []
+    for key in _CLIENT_REPORT_KPI_FIELDS:
+        label = _label(key)
+        value = _report_value(detalle.get(key), key)
+        card_cells.append(Paragraph(f'<font color="#667085" size="7">{_xml_escape(label)}</font><br/><b><font size="12">{_xml_escape(value)}</font></b>', styles['card']))
+    card_rows = [card_cells[i:i + 3] for i in range(0, len(card_cells), 3)]
+    while card_rows and len(card_rows[-1]) < 3:
+        card_rows[-1].append('')
+    cards = Table(card_rows, colWidths=[6.0 * cm, 6.0 * cm, 6.0 * cm])
+    cards.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F7FAFC')),
+        ('BOX', (0, 0), (-1, -1), 0.45, colors.HexColor('#D8DEE9')),
+        ('INNERGRID', (0, 0), (-1, -1), 0.45, colors.HexColor('#D8DEE9')),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
+    ]))
+    story.append(cards)
+
+    story.append(Paragraph('Operacion y rentabilidad', styles['section']))
+    op_rows = [(key, detalle.get(key)) for key in (
+        'ventas_anio_actual', 'ventas_anio_anterior', 'crecimiento_pct', 'crecimiento_nominal_pct',
+        'inflacion_factor', 'hl_ytd', 'bultos_ytd', 'pallets_ytd', 'pedidos_ytd',
+        'dropsize_bultos_ytd', 'costo_logistico_total', 'ratio_costo_logistico_pct',
+        'margen_logistico_proxy',
+    )]
+    story.append(_pdf_table(['Campo', 'Valor'], [[_label(k), _report_value(v, k)] for k, v in op_rows], styles, [8.5 * cm, 9.5 * cm]))
+
+    story.append(Paragraph('Rechazos', styles['section']))
+    rec_rows = [(key, detalle.get(key)) for key in (
+        'pedidos_rechazo_ytd', 'lineas_rechazo_ytd', 'pct_rechazo_pedidos',
+        'hl_rechazado_ytd', 'hl_rechazado_parcial_ytd', 'hl_rechazado_total_ytd', 'pct_rechazo_hl',
+    )]
+    story.append(_pdf_table(['Campo', 'Valor'], [[_label(k), _report_value(v, k)] for k, v in rec_rows], styles, [8.5 * cm, 9.5 * cm]))
+
+    story.append(Paragraph('Score', styles['section']))
+    story.append(_pdf_table(['Dimension', 'Valor'], [[_label(k), _report_value(detalle.get(k), k)] for k in _CLIENT_REPORT_SCORE_FIELDS], styles, [8.5 * cm, 9.5 * cm]))
+
+    story.append(Paragraph('Plan de servicio', styles['section']))
+    story.append(_pdf_table(
+        ['Campo', 'Detalle'],
+        [
+            ['Plan de servicio', detalle.get('plan_servicio') or '-'],
+            ['Accion prioritaria', detalle.get('accion_prioritaria') or '-'],
+            ['Alerta operativa', detalle.get('alerta_operativa') or '-'],
+        ],
+        styles,
+        [5.0 * cm, 13.0 * cm],
+    ))
+
+    resumen_nps = nps.get('resumen') or {}
+    story.append(PageBreak())
+    story.append(Paragraph('NPS y servicio', styles['section']))
+    story.append(_pdf_table(
+        ['Metrica', 'Valor'],
+        [
+            ['Respuestas', resumen_nps.get('respuestas')],
+            ['Score promedio', resumen_nps.get('score_promedio')],
+            ['NPS logistico', resumen_nps.get('nps_logistico_indice')],
+            ['NPS general', resumen_nps.get('nps_indice')],
+            ['Delivery respuestas', resumen_nps.get('delivery_respuestas')],
+            ['Delivery NPS', resumen_nps.get('delivery_nps_indice')],
+            ['General respuestas', resumen_nps.get('general_respuestas')],
+            ['General NPS', resumen_nps.get('general_nps_indice')],
+        ],
+        styles,
+        [8.5 * cm, 9.5 * cm],
+    ))
+
+    mensual = nps.get('mensual') or []
+    story.append(Paragraph('NPS mensual', styles['section']))
+    if mensual:
+        story.append(_pdf_table(
+            ['Periodo', 'Resp.', 'Score', 'NPS', 'Delivery', 'General'],
+            [
+                [
+                    f"{row.get('periodo_anio')}-{int(row.get('periodo_mes') or 0):02d}",
+                    row.get('respuestas'),
+                    row.get('score_promedio'),
+                    row.get('nps_indice'),
+                    row.get('delivery_nps_indice'),
+                    row.get('general_nps_indice'),
+                ]
+                for row in mensual
+            ],
+            styles,
+            [3.0 * cm, 2.4 * cm, 2.8 * cm, 2.8 * cm, 3.5 * cm, 3.5 * cm],
+        ))
+    else:
+        story.append(Paragraph('Sin evaluaciones NPS mensuales para este cliente.', styles['normal']))
+
+    evaluaciones = nps.get('evaluaciones') or []
+    story.append(Paragraph('Evaluaciones NPS', styles['section']))
+    if evaluaciones:
+        story.append(_pdf_table(
+            ['Fecha', 'Score', 'Categoria', 'Drivers / subdrivers', 'Comentario'],
+            [
+                [
+                    row.get('fecha_encuesta'),
+                    row.get('score'),
+                    row.get('categoria_nps'),
+                    _drivers_to_text(row.get('drivers')),
+                    row.get('comentario'),
+                ]
+                for row in evaluaciones
+            ],
+            styles,
+            [3.0 * cm, 1.5 * cm, 2.5 * cm, 5.8 * cm, 5.2 * cm],
+        ))
+    else:
+        story.append(Paragraph('Sin evaluaciones NPS detalladas para este cliente.', styles['normal']))
+
+    evolucion = data.get('evolucion') or []
+    story.append(PageBreak())
+    story.append(Paragraph('Evolucion mensual', styles['section']))
+    if evolucion:
+        story.append(_pdf_table(
+            ['Periodo', 'Cluster', 'Subcluster', 'Score', 'Venta', 'RMD', 'OTIF', 'NPS'],
+            [
+                [
+                    f"{row.get('periodo_anio')}-{int(row.get('periodo_mes') or 0):02d}",
+                    row.get('cluster_dpo'),
+                    row.get('subcluster_logistico'),
+                    row.get('score_total'),
+                    row.get('venta_ytd'),
+                    row.get('rmd_valor'),
+                    row.get('otif_valor'),
+                    row.get('nps_valor'),
+                ]
+                for row in evolucion
+            ],
+            styles,
+            [2.4 * cm, 2.9 * cm, 3.2 * cm, 2.0 * cm, 3.0 * cm, 1.7 * cm, 1.7 * cm, 1.7 * cm],
+        ))
+    else:
+        story.append(Paragraph('Sin historico mensual de cluster para este cliente.', styles['normal']))
+
+    def _footer(canvas, doc_obj):
+        canvas.saveState()
+        canvas.setFont('Helvetica', 7)
+        canvas.setFillColor(colors.HexColor('#667085'))
+        canvas.drawRightString(19.7 * cm, 0.6 * cm, f'Pagina {doc_obj.page}')
+        canvas.drawString(1.2 * cm, 0.6 * cm, 'Segmentacion DPO - Reporte de cliente')
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=_footer, onLaterPages=_footer)
+    bio.seek(0)
+    return bio, _safe_report_filename(cliente, 'pdf'), 'application/pdf'
+
+
+def export_cliente_reporte(cliente: str, formato: str = 'xlsx') -> tuple[BytesIO, str, str]:
+    formato = (formato or 'xlsx').strip().lower()
+    if formato in {'excel', 'xls'}:
+        formato = 'xlsx'
+    if formato not in {'xlsx', 'pdf'}:
+        raise ValueError('Formato no soportado. Use xlsx o pdf.')
+    data = get_cliente_reporte_data(cliente)
+    if formato == 'pdf':
+        return _export_cliente_reporte_pdf(data, cliente)
+    return _export_cliente_reporte_xlsx(data, cliente)
+
+
 def get_evolucion_mensual_clusters(
     anio: int | None = None,
     sucursal: str | None = None,
@@ -3668,14 +6291,18 @@ def recalcular_clusters(
     with pg_cursor() as cur:
         cur.execute("""
             SELECT cliente, descripcion_cliente, sucursal AS sucursal_id, localidad,
-                   cluster_dpo, subcluster_logistico,
+                   cluster_dpo, subcluster_logistico, cliente_refrigerado,
                    score_total, dim_negocio, dim_productividad, dim_servicio,
                    dim_rentabilidad, dim_geo,
                    venta_base_mismo_per, venta_ytd, bultos_ytd, pallets_ytd,
-                   up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor, otif_valor,
+                   up_ytd, hl_ytd, rechazos_ytd, pedidos_rechazo_ytd,
+                   lineas_rechazo_ytd, hl_rechazado_ytd,
+                   hl_rechazado_parcial_ytd, hl_rechazado_total_ytd,
+                   nps_valor, rmd_valor, otif_valor,
                    costo_entrega, costo_almacen, margen_logistico_proxy,
-                   crecimiento_pct, costo_logistico_total, ratio_costo_logistico_pct,
-                   pedidos_ytd, dropsize_bultos_ytd, pct_rechazo_pedidos
+                   crecimiento_pct, crecimiento_nominal_pct, crecimiento_real_pct,
+                   inflacion_factor, costo_logistico_total, ratio_costo_logistico_pct,
+                   pedidos_ytd, dropsize_bultos_ytd, pct_rechazo_pedidos, pct_rechazo_hl
             FROM seg_cliente_dpo_cache
             ORDER BY score_total DESC NULLS LAST
         """)
@@ -3695,15 +6322,18 @@ def recalcular_clusters(
         (
             r['cliente'], r['descripcion_cliente'], r['sucursal_id'], r['localidad'],
             periodo_anio, periodo_mes,
-            r['cluster_dpo'], r['subcluster_logistico'],
+            r['cluster_dpo'], r['subcluster_logistico'], r['cliente_refrigerado'],
             r['score_total'], r['dim_negocio'], r['dim_productividad'],
             r['dim_servicio'], r['dim_rentabilidad'], r['dim_geo'],
             r['venta_base_mismo_per'], r['venta_ytd'], r['bultos_ytd'],
             r['pallets_ytd'], r['up_ytd'], r['hl_ytd'], r['rechazos_ytd'],
-            r['nps_valor'], r['rmd_valor'], r['otif_valor'], r['costo_entrega'],
+            r['pedidos_rechazo_ytd'], r['lineas_rechazo_ytd'],
+            r['hl_rechazado_ytd'], r['hl_rechazado_parcial_ytd'],
+            r['hl_rechazado_total_ytd'], r['nps_valor'], r['rmd_valor'], r['otif_valor'], r['costo_entrega'],
             r['costo_almacen'], r['margen_logistico_proxy'],
-            r['crecimiento_pct'], r['costo_logistico_total'], r['ratio_costo_logistico_pct'],
-            r['pedidos_ytd'], r['dropsize_bultos_ytd'], r['pct_rechazo_pedidos'],
+            r['crecimiento_pct'], r['crecimiento_nominal_pct'], r['crecimiento_real_pct'],
+            r['inflacion_factor'], r['costo_logistico_total'], r['ratio_costo_logistico_pct'],
+            r['pedidos_ytd'], r['dropsize_bultos_ytd'], r['pct_rechazo_pedidos'], r['pct_rechazo_hl'],
             version, ejecutado_por,
         )
         for r in rows
@@ -3718,19 +6348,24 @@ def recalcular_clusters(
                 """INSERT INTO seg_cliente_cluster_historico (
                        cliente, descripcion_cliente, sucursal_id, localidad,
                        periodo_anio, periodo_mes,
-                       cluster_dpo, subcluster_logistico,
+                       cluster_dpo, subcluster_logistico, cliente_refrigerado,
                        score_total, dim_negocio, dim_productividad, dim_servicio,
                        dim_rentabilidad, dim_geo,
                        venta_base_mismo_periodo, venta_ytd, bultos_ytd, pallets_ytd,
-                       up_ytd, hl_ytd, rechazos_ytd, nps_valor, rmd_valor, otif_valor,
+                       up_ytd, hl_ytd, rechazos_ytd, pedidos_rechazo_ytd,
+                       lineas_rechazo_ytd, hl_rechazado_ytd,
+                       hl_rechazado_parcial_ytd, hl_rechazado_total_ytd,
+                       nps_valor, rmd_valor, otif_valor,
                        costo_entrega, costo_almacen, margen_logistico_proxy,
-                       crecimiento_pct, costo_logistico_total, ratio_costo_logistico,
-                       pedidos_ytd, dropsize_ytd, pct_rechazo_pedidos,
+                       crecimiento_pct, crecimiento_nominal_pct, crecimiento_real_pct,
+                       inflacion_factor, costo_logistico_total, ratio_costo_logistico,
+                       pedidos_ytd, dropsize_ytd, pct_rechazo_pedidos, pct_rechazo_hl,
                        version_regla, proceso
                    ) VALUES %s
                    ON CONFLICT (cliente, periodo_anio, periodo_mes) DO UPDATE SET
                        cluster_dpo           = EXCLUDED.cluster_dpo,
                        subcluster_logistico  = EXCLUDED.subcluster_logistico,
+                       cliente_refrigerado   = EXCLUDED.cliente_refrigerado,
                        score_total           = EXCLUDED.score_total,
                        dim_negocio           = EXCLUDED.dim_negocio,
                        dim_productividad     = EXCLUDED.dim_productividad,
@@ -3744,6 +6379,11 @@ def recalcular_clusters(
                        up_ytd                = EXCLUDED.up_ytd,
                        hl_ytd                = EXCLUDED.hl_ytd,
                        rechazos_ytd          = EXCLUDED.rechazos_ytd,
+                       pedidos_rechazo_ytd   = EXCLUDED.pedidos_rechazo_ytd,
+                       lineas_rechazo_ytd    = EXCLUDED.lineas_rechazo_ytd,
+                       hl_rechazado_ytd      = EXCLUDED.hl_rechazado_ytd,
+                       hl_rechazado_parcial_ytd = EXCLUDED.hl_rechazado_parcial_ytd,
+                       hl_rechazado_total_ytd = EXCLUDED.hl_rechazado_total_ytd,
                        nps_valor             = EXCLUDED.nps_valor,
                        rmd_valor             = EXCLUDED.rmd_valor,
                        otif_valor            = EXCLUDED.otif_valor,
@@ -3751,11 +6391,15 @@ def recalcular_clusters(
                        costo_almacen         = EXCLUDED.costo_almacen,
                        margen_logistico_proxy = EXCLUDED.margen_logistico_proxy,
                        crecimiento_pct       = EXCLUDED.crecimiento_pct,
+                       crecimiento_nominal_pct = EXCLUDED.crecimiento_nominal_pct,
+                       crecimiento_real_pct  = EXCLUDED.crecimiento_real_pct,
+                       inflacion_factor      = EXCLUDED.inflacion_factor,
                        costo_logistico_total = EXCLUDED.costo_logistico_total,
                        ratio_costo_logistico = EXCLUDED.ratio_costo_logistico,
                        pedidos_ytd           = EXCLUDED.pedidos_ytd,
                        dropsize_ytd          = EXCLUDED.dropsize_ytd,
                        pct_rechazo_pedidos   = EXCLUDED.pct_rechazo_pedidos,
+                       pct_rechazo_hl        = EXCLUDED.pct_rechazo_hl,
                        fecha_calculo         = NOW(),
                        version_regla         = EXCLUDED.version_regla,
                        proceso               = EXCLUDED.proceso""",

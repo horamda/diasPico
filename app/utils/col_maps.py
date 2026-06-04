@@ -120,6 +120,7 @@ DETALLE_MAP: dict[str, list[str]] = {
 
 CLIENTES_MAP: dict[str, list[str]] = {
     'cliente': ['cliente', 'cod cliente', 'codigo cliente', 'id cliente'],
+    'descripcion': ['descripcion', 'desc', 'tipo cliente', 'segmento cliente'],
     'sucursal': ['sucursal'],
     'razon_social': ['razon social', 'razon_social', 'razon'],
     'nombre_fantasia': ['nombre de fantasia', 'nombre fantasia', 'nombre de fantasía', 'fantasia'],

@@ -9,7 +9,7 @@
   <script>
     // Registrar globalmente y deshabilitar por defecto — solo se activa donde se configura
     document.addEventListener("DOMContentLoaded", function() {
-      if (window.ChartDataLabels) {
+      if (window.Chart && window.ChartDataLabels) {
         Chart.register(ChartDataLabels);
         Chart.defaults.set("plugins.datalabels", { display: false });
       }
@@ -268,6 +268,7 @@
       font-weight: 700;
     }
 
+    .kpi-head > span { min-width: 0; }
     .kpi-head svg { width: 17px; height: 17px; }
     .kpi-value { font-size: 27px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
     .kpi-sub { color: var(--muted); font-size: 12px; font-family: var(--mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -299,6 +300,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
     }
 
     .panel-title {
@@ -313,6 +315,82 @@
     .panel-title svg { width: 17px; height: 17px; color: var(--muted); flex: 0 0 auto; }
     .panel-meta { color: var(--muted); font-family: var(--mono); font-size: 12px; white-space: nowrap; }
     .panel-body { padding: 14px; min-width: 0; }
+    .help-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+      vertical-align: middle;
+    }
+    .help-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 auto;
+      width: 16px;
+      height: 16px;
+      color: var(--muted);
+      cursor: help;
+      outline: none;
+    }
+    .help-tip svg { width: 14px; height: 14px; }
+    .help-tip::after {
+      content: attr(data-help);
+      position: absolute;
+      z-index: 80;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      width: max-content;
+      max-width: min(360px, 80vw);
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #111827;
+      color: #fff;
+      box-shadow: var(--shadow);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-transform: none;
+      white-space: normal;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease, transform .12s ease;
+    }
+    .help-tip::before {
+      content: "";
+      position: absolute;
+      z-index: 81;
+      left: 50%;
+      bottom: calc(100% + 3px);
+      transform: translateX(-50%) rotate(45deg);
+      width: 8px;
+      height: 8px;
+      background: #111827;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .12s ease;
+    }
+    .help-tip:hover::after,
+    .help-tip:focus::after {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-2px);
+    }
+    .help-tip:hover::before,
+    .help-tip:focus::before { opacity: 1; }
+    th .help-tip::after {
+      top: calc(100% + 8px);
+      bottom: auto;
+    }
+    th .help-tip::before {
+      top: calc(100% + 3px);
+      bottom: auto;
+    }
+    th .help-label { justify-content: inherit; }
+    th.num .help-label { justify-content: flex-end; width: 100%; }
     .chart-box { height: 270px; position: relative; }
     .chart-box.tall { height: 330px; }
     .map-toolbar { display: grid; grid-template-columns: repeat(3, minmax(140px, 1fr)); gap: 8px; margin-bottom: 10px; }
@@ -362,10 +440,18 @@
     .muted { color: var(--muted); }
     .client-main { font-weight: 750; }
     .client-sub { margin-top: 2px; font-size: 12px; color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .client-flags {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
 
     .badge {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
       min-height: 24px;
       padding: 3px 8px;
       border-radius: 6px;
@@ -382,6 +468,8 @@
     .b-inactivo { color: #4b5563; background: #f1f5f9; border-color: #d5dde8; }
     .b-temp { color: #0f766e; background: #e8fffb; border-color: #b8efe8; }
     .b-eficiente { color: #087443; background: #e8f7ef; border-color: #bfe8d0; }
+    .b-refrigerado { color: #075985; background: #e0f2fe; border-color: #bae6fd; }
+    .b-auto { color: #065f46; background: #ecfdf5; border-color: #a7f3d0; }
     .b-rentable { color: #1d4ed8; background: #eaf1ff; border-color: #c8d8ff; }
     .b-potencial { color: #6d28d9; background: #f3e8ff; border-color: #dfc2ff; }
     .b-caro { color: #965f00; background: #fff6df; border-color: #f7dfa0; }
@@ -445,6 +533,44 @@
       display: inline-block;
     }
 
+    .global-loading {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 90;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 40px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translateY(8px);
+      pointer-events: none;
+      transition: opacity .15s ease, transform .15s ease;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .global-loading.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .global-loading span {
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--line);
+      border-top-color: var(--blue);
+      border-radius: 999px;
+      animation: spin .7s linear infinite;
+      flex: 0 0 auto;
+    }
+
     .error {
       color: var(--red);
       background: #fff4f2;
@@ -490,6 +616,7 @@
 
     .drawer-title { margin: 0; font-size: 17px; line-height: 1.25; }
     .drawer-sub { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .drawer-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .drawer-body { overflow: auto; padding: 16px; display: grid; gap: 14px; align-content: start; }
 
     .metric-grid {
@@ -507,7 +634,22 @@
     }
 
     .metric label { display: block; color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; }
-    .metric strong { display: block; margin-top: 7px; font-size: 18px; font-family: var(--mono); }
+    .metric label .help-label { display: inline-flex; }
+    .metric strong { display: block; margin-top: 7px; font-size: 18px; font-family: var(--mono); overflow-wrap: anywhere; }
+    .metric-detail,
+    .kpi-detail,
+    .cell-sub {
+      display: block;
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      font-family: var(--mono);
+      font-weight: 600;
+    }
+    .metric-detail b,
+    .kpi-detail b,
+    .cell-sub b { color: var(--text); font-weight: 750; }
 
     .dimension { display: grid; gap: 8px; }
     .dimension-row { display: grid; grid-template-columns: 150px 1fr 48px; gap: 8px; align-items: center; font-size: 12px; }
@@ -546,6 +688,27 @@
       padding: 11px 12px;
       font-size: 13px;
       line-height: 1.45;
+    }
+
+    .reason-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      max-width: 420px;
+    }
+
+    .reason-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 3px 7px;
+      border: 1px solid var(--line-soft);
+      border-radius: 6px;
+      background: var(--panel-2);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      white-space: normal;
     }
 
     .config-grid {
@@ -609,6 +772,29 @@
     .upload-status.ok { color: var(--green); }
     .upload-status.err { color: var(--red); }
 
+    .template-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .format-help {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .format-help code {
+      font-family: var(--mono);
+      color: var(--text);
+      background: var(--panel);
+      border: 1px solid var(--line-soft);
+      border-radius: 5px;
+      padding: 1px 5px;
+    }
+
     .tag-row {
       display: flex;
       align-items: center;
@@ -652,6 +838,9 @@
       .top-actions .btn { flex: 0 0 44px; width: 44px; min-width: 0; padding: 0; }
       .top-actions .btn span { display: none; }
       .content { padding: 12px; }
+      .panel-head { align-items: flex-start; }
+      .panel-head .inline-filters { width: 100%; justify-content: space-between; }
+      .panel-meta { white-space: normal; }
       .toolbar { grid-template-columns: 1fr; }
       .filters, .config-grid, .weights-grid, .metric-grid, .upload-grid { grid-template-columns: 1fr; }
       .map-toolbar, .map-kpis { grid-template-columns: 1fr; }
@@ -660,6 +849,24 @@
       .search-wrap { width: 100%; }
       .inline-filters .control { width: 100%; }
       .dimension-row { grid-template-columns: 1fr; }
+      .drawer { right: -100%; width: 100%; }
+      .drawer-head { grid-template-columns: 1fr; padding: 14px; }
+      .drawer-actions { justify-content: flex-start; }
+      .drawer-body { padding: 12px; }
+      .global-loading { left: 12px; right: 12px; bottom: 12px; }
+      .help-tip::after {
+        left: auto;
+        right: 0;
+        transform: translateY(0);
+        max-width: 78vw;
+      }
+      .help-tip::before {
+        left: auto;
+        right: 4px;
+        transform: rotate(45deg);
+      }
+      .help-tip:hover::after,
+      .help-tip:focus::after { transform: translateY(-2px); }
       .brand h1 { white-space: normal; }
       .brand p { white-space: normal; }
     }
@@ -705,9 +912,9 @@
             <select class="control" id="sortFilter">
               <option value="venta_ytd">Venta YTD</option>
               <option value="score_total">Score</option>
-              <option value="crecimiento_pct">Crecimiento</option>
+              <option value="crecimiento_pct">Crecimiento real</option>
               <option value="ratio_costo_logistico_pct">Costo logistico</option>
-              <option value="pct_rechazo_pedidos">Rechazos</option>
+              <option value="pct_rechazo_hl">Rechazos HL</option>
             </select>
           </div>
           <div class="field">
@@ -729,7 +936,9 @@
         <button class="tab" data-tab="clients"><i data-lucide="users"></i>Clientes</button>
         <button class="tab" data-tab="territory"><i data-lucide="map"></i>Territorio</button>
         <button class="tab" data-tab="service"><i data-lucide="clipboard-list"></i>Plan</button>
+        <button class="tab" data-tab="costs"><i data-lucide="truck"></i>Costos</button>
         <button class="tab" data-tab="evolution"><i data-lucide="activity"></i>Evolucion</button>
+        <button class="tab" data-tab="quality"><i data-lucide="shield-check"></i>Calidad</button>
         <button class="tab" data-tab="data"><i data-lucide="upload"></i>Carga</button>
         <button class="tab" data-tab="settings"><i data-lucide="sliders-horizontal"></i>Parametros</button>
       </nav>
@@ -754,8 +963,30 @@
       <section class="view" id="view-clients">
         <article class="panel">
           <div class="panel-head">
+            <div class="panel-title"><i data-lucide="clipboard-check"></i>Tarjeta NPS / RMD por cliente</div>
+            <div class="panel-meta">Detalle de servicio</div>
+          </div>
+          <div class="panel-body">
+            <div class="upload-grid">
+              <div class="field">
+                <label for="clientCardInput">Cliente</label>
+                <input class="control" id="clientCardInput" list="clientCardOptions" placeholder="Codigo, razon social o localidad">
+                <datalist id="clientCardOptions"></datalist>
+              </div>
+              <button class="btn primary" id="clientCardBtn"><i data-lucide="search"></i>Ver tarjeta</button>
+            </div>
+            <div id="clientServiceCard" style="margin-top:12px"></div>
+          </div>
+        </article>
+        <article class="panel">
+          <div class="panel-head">
             <div class="panel-title"><i data-lucide="users"></i>Cartera de clientes</div>
-            <div class="panel-meta" id="clientsMeta"></div>
+            <div class="inline-filters">
+              <div class="panel-meta" id="clientsMeta"></div>
+              <a class="btn" id="clientsExportXlsx" href="/api/segmentacion/clientes/export" title="Exportar cartera en Excel">
+                <i data-lucide="file-spreadsheet"></i><span>Excel</span>
+              </a>
+            </div>
           </div>
           <div class="table-wrap" id="clientsTable"></div>
         </article>
@@ -793,9 +1024,9 @@
                 <div class="field">
                   <label for="mapLimit">Max puntos</label>
                   <select class="control" id="mapLimit">
-                    <option value="5000">5000</option>
-                    <option value="3000">3000</option>
                     <option value="1000">1000</option>
+                    <option value="3000">3000</option>
+                    <option value="5000">5000</option>
                   </select>
                 </div>
               </div>
@@ -833,6 +1064,21 @@
         </article>
       </section>
 
+      <section class="view" id="view-costs">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="truck"></i>Reporte de costo de atencion</div>
+            <div class="panel-meta" id="costReportMeta"></div>
+          </div>
+          <div class="panel-body">
+            <div class="metric-grid" id="costSummary"></div>
+          </div>
+          <div class="table-wrap" id="costReportTable"></div>
+          <div class="panel-body" id="costExcludedNote"></div>
+          <div class="table-wrap" id="costExcludedTable"></div>
+        </article>
+      </section>
+
       <section class="view" id="view-evolution">
         <div class="grid-2">
           <article class="panel">
@@ -853,6 +1099,33 @@
             <div class="table-wrap" id="auditTable"></div>
           </article>
         </div>
+      </section>
+
+      <section class="view" id="view-quality">
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="shield-check"></i>Calidad de datos</div>
+              <div class="panel-meta" id="qualityMeta"></div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="qualitySummary"></div>
+              <div id="qualityAlerts" style="margin-top:12px"></div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="database"></i>Versiones y cache</div>
+            </div>
+            <div class="table-wrap" id="qualityVersions"></div>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="list-checks"></i>Cobertura por fuente</div>
+          </div>
+          <div class="table-wrap" id="qualityTable"></div>
+        </article>
       </section>
 
       <section class="view" id="view-data">
@@ -942,7 +1215,18 @@
                 </button>
               </div>
               <div class="upload-status" id="serviceUploadStatus">
-                CSV con cliente y al menos una columna OTIF, RMD o NPS. OTIF debe estar en porcentaje 0-100.
+                CSV vigente para actualizar el valor actual del cliente.
+              </div>
+              <div class="template-actions" aria-label="Plantillas vigentes">
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/rmd/vigente"><i data-lucide="download"></i>Plantilla RMD</a>
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/otif/vigente"><i data-lucide="download"></i>Plantilla OTIF</a>
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/nps/vigente"><i data-lucide="download"></i>Plantilla NPS</a>
+              </div>
+              <div class="format-help">
+                Tipo: <code>.csv</code> UTF-8, separador recomendado <code>;</code>.
+                Columnas validas: <code>cliente</code> y una o mas columnas <code>RMD</code>, <code>OTIF</code>, <code>NPS</code>.
+                Fechas opcionales: <code>fecha_rmd</code>, <code>fecha_otif</code>, <code>fecha_nps</code>.
+                OTIF debe venir como porcentaje 0-100. RMD debe venir como decimal 1-5.
               </div>
             </div>
           </article>
@@ -952,6 +1236,127 @@
             </div>
             <div class="panel-body">
               <div class="metric-grid" id="serviceUploadSummary"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="history"></i>Historico OTIF / RMD / NPS</div>
+              <div class="panel-meta">CSV</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="serviceHistoryFile">Archivo</label>
+                  <input class="control" id="serviceHistoryFile" type="file" accept=".csv,text/csv">
+                </div>
+                <button class="btn primary" id="serviceHistoryUploadBtn">
+                  <i data-lucide="upload"></i>Subir historico
+                </button>
+              </div>
+              <div class="upload-status" id="serviceHistoryUploadStatus">
+                CSV historico para guardar valores por cliente, ano y mes.
+              </div>
+              <div class="template-actions" aria-label="Plantillas historicas">
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/rmd/historico"><i data-lucide="download"></i>Historico RMD</a>
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/otif/historico"><i data-lucide="download"></i>Historico OTIF</a>
+                <a class="btn" href="/api/segmentacion/plantillas/servicio/nps/historico"><i data-lucide="download"></i>Historico NPS</a>
+              </div>
+              <div class="format-help">
+                Tipo: <code>.csv</code> UTF-8, separador recomendado <code>;</code>.
+                Formato largo valido: <code>cliente</code>, <code>anio</code>, <code>mes</code> y la metrica
+                <code>RMD</code>, <code>OTIF</code> o <code>NPS</code>. <code>mes</code> debe ser 1-12.
+                Para dato anual usar <code>mes=0</code>. RMD debe venir como decimal 1-5. Fechas opcionales: <code>fecha_rmd</code>, <code>fecha_otif</code>, <code>fecha_nps</code>.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="database"></i>Resultado historico</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="serviceHistoryUploadSummary"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="trending-up"></i>IPC inflacion</div>
+              <div class="panel-meta">CSV</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="inflationFile">Archivo</label>
+                  <input class="control" id="inflationFile" type="file" accept=".csv,text/csv">
+                </div>
+                <button class="btn primary" id="inflationUploadBtn">
+                  <i data-lucide="upload"></i>Subir IPC
+                </button>
+              </div>
+              <div class="upload-status" id="inflationUploadStatus">
+                Tabla mensual de IPC para calcular crecimiento real. Ya incluye base oficial enero 2025 a abril 2026.
+              </div>
+              <div class="template-actions" aria-label="Plantilla IPC">
+                <a class="btn" href="/api/segmentacion/plantillas/inflacion"><i data-lucide="download"></i>Plantilla IPC</a>
+              </div>
+              <div class="format-help">
+                Tipo: <code>.csv</code> UTF-8, separador recomendado <code>;</code>.
+                Columnas: <code>anio</code>, <code>mes</code>, <code>inflacion_pct</code>. Ejemplo: <code>2026;4;2,6</code>.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="database"></i>Resultado IPC</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="inflationUploadSummary"></div>
+              <div class="table-wrap" id="inflationTable" style="margin-top:12px"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="message-square-text"></i>NPS detallado</div>
+              <div class="panel-meta">CSV / Excel</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="npsDetailFile">Archivo</label>
+                  <input class="control" id="npsDetailFile" type="file" accept=".csv,text/csv,.xlsx,.xlsm">
+                </div>
+                <button class="btn primary" id="npsDetailUploadBtn">
+                  <i data-lucide="upload"></i>Subir NPS
+                </button>
+              </div>
+              <div class="upload-status" id="npsDetailUploadStatus">
+                Archivo con encuestas NPS, score, driver primario, subdriver y comentario.
+              </div>
+              <div class="template-actions" aria-label="Plantilla NPS detallado">
+                <a class="btn" href="/api/segmentacion/plantillas/nps-detallado"><i data-lucide="download"></i>Plantilla NPS detallado</a>
+              </div>
+              <div class="format-help">
+                Para Excel se toma la hoja <code>BASE NPS</code>. Columnas requeridas:
+                <code>id_cliente</code>, <code>FECHA ENC</code> y <code>SCORE</code>.
+                Columnas recomendadas: <code>DRIVER PRIMARIO</code>, <code>DRIVER SECUNDARIO</code>,
+                <code>COMENTARIO</code>, <code>NOMBRE CLIENTE</code> y <code>DESC LOCALIDAD</code>.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="bar-chart-3"></i>Resultado NPS</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="npsDetailUploadSummary"></div>
             </div>
           </article>
         </div>
@@ -973,15 +1378,137 @@
         <h2 class="drawer-title" id="drawerTitle">Cliente</h2>
         <div class="drawer-sub" id="drawerSub"></div>
       </div>
-      <button class="btn icon" id="closeDrawerBtn" title="Cerrar"><i data-lucide="x"></i></button>
+      <div class="drawer-actions">
+        <a class="btn" id="clientExportXlsx" href="#" title="Exportar Excel"><i data-lucide="file-spreadsheet"></i><span>Excel</span></a>
+        <a class="btn" id="clientExportPdf" href="#" title="Exportar PDF"><i data-lucide="file-down"></i><span>PDF</span></a>
+        <button class="btn icon" id="closeDrawerBtn" title="Cerrar"><i data-lucide="x"></i></button>
+      </div>
     </div>
     <div class="drawer-body" id="drawerBody"></div>
   </aside>
+
+  <div class="global-loading" id="globalLoading"><span></span><strong>Actualizando datos</strong></div>
 
   <script>
     const $ = (id) => document.getElementById(id);
     const CLUSTERS = ["Ganador", "En crecimiento", "Basico", "Ventas bajas"];
     const CLUSTER_COLORS = ["#198754", "#2563eb", "#d99106", "#d04444"];
+    const HELP_TEXT = {
+      "Cliente": "Codigo y razon social del cliente. Se usa como llave para unir ventas, servicio, NPS, RMD, OTIF y atributos.",
+      "Clientes": "Cantidad de clientes activos dentro de los filtros actuales. Excluye anulados y rutas temporales.",
+      "Clientes activos": "Cantidad de clientes activos DPO en la localidad o sucursal filtrada.",
+      "% sucursal": "Clientes de la localidad / clientes activos de la sucursal * 100.",
+      "Sucursal": "Sucursal operativa del cliente o del grupo.",
+      "Localidad": "Localidad registrada para el cliente.",
+      "Cluster": "Grupo DPO calculado por venta y crecimiento: Ganador, En crecimiento, Basico o Ventas bajas. REF/Refrigerado se mantiene como Ganador operativo.",
+      "Subcluster": "Etiqueta operativa adicional: Refrigerado, Caro de servir, Complejo, Alto potencial, Eficiente, Rentable o Estandar.",
+      "Ganador": "Clientes de alto valor/crecimiento o clientes REF/Refrigerados. Para ruteo tienen prioridad de inventario, ventana y seguimiento OTIF.",
+      "Venta": "Venta neta del periodo actual filtrado.",
+      "Venta actual": "Venta YTD del periodo actual. Formula: suma importe neto entre fecha_desde y fecha_hasta.",
+      "Venta anterior": "Venta del periodo base comparable, normalmente el mismo rango de fechas del anio anterior.",
+      "Venta ant.": "Venta del periodo base comparable, normalmente el mismo rango de fechas del anio anterior.",
+      "Venta ant. IPC": "Venta anterior ajustada por inflacion. Formula: venta_anterior * factor IPC acumulado.",
+      "Venta minima": "Umbral minimo de venta usado para separar clientes de baja venta y evitar outliers en el ranking de costos.",
+      "Crec. real": "Crecimiento ajustado por inflacion. Formula: ((venta_actual / venta_anterior_ajustada_IPC) - 1) * 100.",
+      "Crec. nom.": "Crecimiento sin ajuste inflacionario. Formula: ((venta_actual / venta_anterior) - 1) * 100.",
+      "Crec. nominal": "Crecimiento sin ajuste inflacionario. Formula: ((venta_actual / venta_anterior) - 1) * 100.",
+      "Factor IPC": "Factor acumulado de inflacion. Formula: producto mensual de (1 + inflacion_pct / 100).",
+      "HL": "Hectolitros vendidos en el periodo actual.",
+      "Bultos": "Bultos vendidos en el periodo actual.",
+      "Pallets": "Pallets estimados/vendidos segun conversion de articulos.",
+      "Pedidos": "Cantidad de pedidos del periodo actual.",
+      "Drop": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
+      "Drop size": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
+      "P25 drop size": "Percentil 25 del drop size. Los clientes por debajo tienen entregas pequenas y suelen ser mas caros de atender.",
+      "Auto": "Indica si el cliente tiene autoelevador. Reduce complejidad operativa de descarga.",
+      "Autoelevador": "Porcentaje o marca de clientes con autoelevador. Ayuda a estimar dificultad de descarga y costo operativo.",
+      "Costo": "Costo logistico calculado para el periodo. Formula: costo_entrega + costo_almacen.",
+      "Costo logistico": "Costo total logistico. Formula: (HL * costo_entrega_hl) + (HL * costo_almacen_hl).",
+      "Costo %": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
+      "Costo / venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
+      "Costo/venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
+      "Ratio reportado": "Promedio costo/venta de los clientes incluidos en el reporte de costos.",
+      "Costo reportado": "Suma del costo logistico de los clientes incluidos en el reporte de costos.",
+      "P75 costo/venta": "Percentil 75 del ratio costo/venta. Por encima de este umbral se considera costo alto.",
+      "Margen": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total.",
+      "Margen proxy": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total. Es una aproximacion operativa, no rentabilidad contable.",
+      "Rechazo": "Muestra rechazo por pedidos y, en la segunda linea, rechazo por HL.",
+      "Rechazo pedidos": "Pedidos con rechazo / pedidos totales * 100. Usa criterios de rechazo activos.",
+      "Rechazo HL": "HL rechazados / HL pedidos * 100. Es el indicador principal de rechazo para score operativo.",
+      "HL rechazado": "Hectolitros rechazados con criterios validos de rechazo.",
+      "RMD": "Indicador de servicio importado por cliente en escala decimal 1-5. Se usa en comparacion de clusters y aporta al score si esta cargado.",
+      "RMD prom.": "Promedio RMD de los clientes filtrados con dato cargado. Escala 1-5, no porcentaje.",
+      "RMD vigente": "Ultimo valor RMD disponible para el cliente. Escala 1-5, admite decimales.",
+      "OTIF": "On Time In Full. Formula: entregas a tiempo y completas / entregas evaluadas * 100.",
+      "OTIF prom.": "Promedio OTIF de clientes filtrados. Requiere archivo OTIF cargado; no se infiere desde ventas.",
+      "NPS": "Net Promoter Score. Formula: % promotores - % detractores. En clientes tambien puede verse el valor NPS importado.",
+      "NPS prom.": "Promedio NPS de clientes filtrados con dato cargado.",
+      "NPS logistico": "NPS calculado desde respuestas y subdrivers logisticos, con foco en Delivery y General.",
+      "NPS general": "NPS general del cliente. Formula: % promotores - % detractores sobre respuestas generales.",
+      "Delivery": "Subdriver logistico de entrega. Mide respuestas asociadas a cumplimiento, completitud y experiencia de entrega.",
+      "General": "Driver/subdriver general de NPS, separado para distinguir experiencia global de entrega.",
+      "Respuestas": "Cantidad de encuestas/respuestas NPS consideradas.",
+      "Score NPS prom.": "Promedio simple del score de encuesta NPS entre 0 y 10.",
+      "Score": "Score DPO 0-100. Combina negocio, productividad, servicio, rentabilidad y geo/frecuencia con pesos parametrizables.",
+      "Score prom.": "Promedio del score DPO 0-100 para los clientes filtrados.",
+      "Indice": "Indice de costo de servicio. Sube cuando hay alto costo/venta, margen negativo, bajo drop, rechazos o mal servicio.",
+      "Motivo principal": "Principal causa por la cual el cliente aparece como costoso o complejo de atender.",
+      "Explicacion": "Detalle operativo de los factores que explican el costo o complejidad del cliente.",
+      "Prioridad": "Orden operativo sugerido para gestion/ruteo. 1 es mayor prioridad.",
+      "Plan de servicio": "Instruccion logistica sugerida segun cluster, costo, servicio y complejidad.",
+      "Accion prioritaria": "Proxima accion recomendada para ventas/operaciones.",
+      "Alerta": "Condicion critica detectada: OTIF bajo, rechazo alto, caida fuerte, refrigerado con riesgo u otra alerta.",
+      "Periodo": "Rango actual de calculo y comparacion del modulo.",
+      "Estado general": "Resultado consolidado del diagnostico de calidad de datos.",
+      "Cache": "Cobertura de cache de segmentacion respecto de clientes con venta.",
+      "Servicio historico": "Cobertura de RMD, OTIF o NPS historico sobre clientes con venta.",
+      "Alertas": "Cantidad de advertencias de calidad de datos detectadas.",
+      "Fuente": "Tabla, archivo o proceso que alimenta el modulo.",
+      "Estado": "Estado de la fuente o control: OK, advertencia o critico.",
+      "Valor": "Cantidad o valor diagnosticado para la fuente.",
+      "Cobertura": "Porcentaje de clientes o registros cubiertos por esa fuente.",
+      "Detalle": "Explicacion del control o condicion detectada.",
+      "Version": "Version de regla, esquema o migracion aplicada al modulo.",
+      "Usuario": "Usuario o proceso que ejecuto el recalculo o la carga.",
+      "Procesados": "Clientes procesados en la corrida de auditoria.",
+      "Crec.": "Cantidad de clientes clasificados como En crecimiento en la corrida.",
+      "Basico": "Cantidad de clientes clasificados como Basico.",
+      "Bajas": "Cantidad de clientes clasificados como Ventas bajas.",
+      "ms": "Duracion de la corrida en milisegundos.",
+      "IPC mensual": "Variacion mensual de IPC cargada para calcular crecimiento real.",
+      "Actualizado": "Fecha de ultima actualizacion del dato.",
+      "Periodos IPC": "Cantidad de meses IPC cargados en la tabla de inflacion.",
+      "Desde": "Primer periodo disponible en la fuente o carga.",
+      "Hasta": "Ultimo periodo disponible en la fuente o carga.",
+      "Ultimo IPC": "Ultima variacion mensual IPC cargada.",
+      "Leidos": "Cantidad de filas leidas desde el archivo importado.",
+      "Leídos": "Cantidad de filas leidas desde el archivo importado.",
+      "Importados": "Cantidad de registros insertados o actualizados correctamente.",
+      "Actualizados": "Cantidad de clientes o registros actualizados por la carga.",
+      "Activos": "Clientes marcados como activos en la fuente de promotores o padron.",
+      "Inactivos / excluidos": "Clientes que quedaron inactivos o fuera del universo activo DPO.",
+      "Filas historicas": "Cantidad de filas historicas de servicio guardadas por cliente y periodo.",
+      "Filas leidas": "Cantidad de filas procesadas desde el archivo.",
+      "Vigentes": "Cantidad de valores vigentes actualizados a partir del historico.",
+      "Encuestas": "Cantidad de encuestas NPS importadas.",
+      "Drivers": "Cantidad de drivers/subdrivers NPS importados.",
+      "Periodos": "Cantidad de periodos distintos cubiertos por la carga.",
+      "Descartados": "Filas omitidas por falta de datos obligatorios o formato invalido.",
+      "Con autoelevador": "Clientes marcados con autoelevador en la base de atributos.",
+      "HL autoelevador": "HL asociados a clientes con autoelevador.",
+      "Ahorro estimado": "Ahorro operativo estimado por atender clientes con autoelevador frente a escenario sin autoelevador.",
+      "Costo autoelevador": "Costo logistico asociado a clientes con autoelevador.",
+      "Acompanantes estimados": "Estimacion operativa de acompanantes requeridos segun clientes sin autoelevador y volumen.",
+      "Clientes con venta": "Clientes con venta dentro del periodo actual usado por segmentacion.",
+      "Promotores": "Respuestas NPS con score 9 o 10.",
+      "Pasivos": "Respuestas NPS con score 7 u 8.",
+      "Detractores": "Respuestas NPS con score entre 0 y 6.",
+      "Criterio": "Regla usada por el reporte para incluir o separar clientes, por ejemplo baja venta bajo p25.",
+      "Fecha": "Fecha de medicion o encuesta.",
+      "Categoria": "Clasificacion NPS: Promoter 9-10, Passive 7-8, Detractor 0-6.",
+      "Drivers / subdrivers": "Motivos evaluados en la encuesta NPS. Delivery y General se separan para analisis logistico.",
+      "Comentario": "Texto abierto de la encuesta o registro fuente."
+    };
     const state = {
       clusters: [],
       plan: [],
@@ -989,16 +1516,23 @@
       localitySummary: [],
       activeLocalitySummary: [],
       mapRows: [],
+      costReport: { items: [], resumen: {}, umbrales: {} },
       autoResumen: {},
       params: {},
       weights: [],
       audit: [],
       evolution: [],
+      inflation: [],
+      quality: { fuentes: [], resumen: {}, alertas: [], versiones: [] },
+      sectionSignatures: {},
       charts: {},
       map: null,
       mapLayerGroup: null,
       activeTab: "overview",
-      loading: false
+      loading: false,
+      loadSeq: 0,
+      evolutionSeq: 0,
+      loadTimer: null
     };
 
     function canonicalCluster(value) {
@@ -1013,11 +1547,12 @@
       return canonicalCluster(value) === "Basico" ? "Basico" : canonicalCluster(value);
     }
 
-    function money(value) {
+    function money(value, digits = 0) {
       const n = Number(value || 0);
-      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toLocaleString("es-AR", { maximumFractionDigits: 1 }) + "M";
-      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toLocaleString("es-AR", { maximumFractionDigits: 0 }) + "K";
-      return "$" + n.toLocaleString("es-AR", { maximumFractionDigits: 0 });
+      const opts = { minimumFractionDigits: digits, maximumFractionDigits: digits };
+      if (Math.abs(n) >= 1000000) return "$" + (n / 1000000).toLocaleString("es-AR", opts) + "M";
+      if (Math.abs(n) >= 1000) return "$" + (n / 1000).toLocaleString("es-AR", opts) + "K";
+      return "$" + n.toLocaleString("es-AR", opts);
     }
 
     function num(value, digits = 0) {
@@ -1025,13 +1560,95 @@
       return Number(value).toLocaleString("es-AR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
     }
 
-    function pct(value, digits = 1) {
+    function pct(value, digits = 2) {
       if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "-";
       return num(value, digits) + "%";
     }
 
+    function moneyCard(value) {
+      return money(value, 2);
+    }
+
+    function numCard(value) {
+      return num(value, 2);
+    }
+
+    function pctCard(value) {
+      return pct(value, 2);
+    }
+
+    function firstNumeric(row, keys) {
+      for (const key of keys) {
+        const value = row?.[key];
+        if (value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value))) {
+          return Number(value);
+        }
+      }
+      return 0;
+    }
+
+    function salesComparison(row) {
+      const current = firstNumeric(row, ["ventas_anio_actual", "venta_ytd"]);
+      const previous = firstNumeric(row, ["ventas_anio_anterior", "venta_base_mismo_per", "venta_anio_base"]);
+      const factor = firstNumeric(row, ["inflacion_factor"]);
+      return {
+        current,
+        previous,
+        factor: factor > 0 ? factor : null,
+        previousAdjusted: previous > 0 && factor > 0 ? previous * factor : null
+      };
+    }
+
+    function aggregateSalesComparison(rows) {
+      return rows.reduce((acc, row) => {
+        const cmp = salesComparison(row);
+        acc.current += cmp.current;
+        acc.previous += cmp.previous;
+        if (cmp.previousAdjusted !== null) acc.previousAdjusted += cmp.previousAdjusted;
+        return acc;
+      }, { current: 0, previous: 0, previousAdjusted: 0 });
+    }
+
+    function growthPct(current, previous) {
+      return Number(previous || 0) > 0 ? ((Number(current || 0) / Number(previous) - 1) * 100) : null;
+    }
+
+    function comparisonDetail(previous, current, formatter = moneyCard, previousLabel = "Ant.", currentLabel = "Act.") {
+      return `<span class="metric-detail">${previousLabel}: <b>${formatter(previous)}</b> | ${currentLabel}: <b>${formatter(current)}</b></span>`;
+    }
+
+    function salesDetail(row, includeAdjusted = true) {
+      const cmp = salesComparison(row);
+      const adjusted = includeAdjusted && cmp.previousAdjusted !== null
+        ? ` | Ant. IPC: <b>${moneyCard(cmp.previousAdjusted)}</b>`
+        : "";
+      return `<span class="metric-detail">Ant.: <b>${moneyCard(cmp.previous)}</b>${adjusted} | Act.: <b>${moneyCard(cmp.current)}</b></span>`;
+    }
+
+    function salesDetailFromValues(cmp, includeAdjusted = true) {
+      const adjusted = includeAdjusted && Number(cmp.previousAdjusted || 0) > 0
+        ? ` | Ant. IPC: <b>${moneyCard(cmp.previousAdjusted)}</b>`
+        : "";
+      return `<span class="kpi-detail">Ant.: <b>${moneyCard(cmp.previous)}</b>${adjusted} | Act.: <b>${moneyCard(cmp.current)}</b></span>`;
+    }
+
     function esc(value) {
       return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    }
+
+    function helpFor(label, key = null) {
+      return HELP_TEXT[key || label] || HELP_TEXT[label] || "";
+    }
+
+    function helpLabel(label, key = null) {
+      const text = helpFor(label, key);
+      if (!text) return esc(label);
+      return `<span class="help-label"><span>${esc(label)}</span><span class="help-tip" tabindex="0" role="img" aria-label="${esc(text)}" data-help="${esc(text)}"><i data-lucide="circle-help"></i></span></span>`;
+    }
+
+    function thHelp(label, className = "", key = null) {
+      const cls = className ? ` class="${esc(className)}"` : "";
+      return `<th${cls}>${helpLabel(label, key)}</th>`;
     }
 
     function dateInputValue(value) {
@@ -1050,11 +1667,63 @@
       if (v === "Ventas bajas") return "b-bajas";
       const s = String(value || "").toLowerCase();
       if (s.includes("eficiente")) return "b-eficiente";
+      if (s.includes("refriger")) return "b-refrigerado";
       if (s.includes("rentable")) return "b-rentable";
       if (s.includes("potencial")) return "b-potencial";
+      if (s.includes("costo") || s.includes("margen") || s.includes("drop")) return "b-caro";
       if (s.includes("caro")) return "b-caro";
       if (s.includes("complejo")) return "b-complejo";
       return "b-estandar";
+    }
+
+    function flagValue(value) {
+      if (value === true || value === 1) return true;
+      const v = String(value ?? "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return ["1", "true", "si", "s", "yes", "y"].includes(v);
+    }
+
+    function hasMetricValue(value) {
+      return value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value));
+    }
+
+    function rmdText(value) {
+      return hasMetricValue(value) ? num(value, 2) : "Sin dato";
+    }
+
+    function npsText(value) {
+      return hasMetricValue(value) ? num(value, 2) : "Sin dato";
+    }
+
+    function rmdColor(value) {
+      if (!hasMetricValue(value)) return "var(--muted)";
+      const n = Number(value);
+      if (n >= 4) return "var(--green)";
+      if (n >= 3) return "var(--amber)";
+      return "var(--red)";
+    }
+
+    function rmdBadge(value) {
+      const cls = !hasMetricValue(value) ? "b-estandar" : Number(value) >= 4 ? "b-eficiente" : Number(value) >= 3 ? "b-basico" : "b-caro";
+      return `<span class="badge ${cls}">RMD ${esc(rmdText(value))}</span>`;
+    }
+
+    function npsBadge(value) {
+      const cls = !hasMetricValue(value) ? "b-estandar" : Number(value) >= 50 ? "b-eficiente" : Number(value) >= 0 ? "b-basico" : "b-complejo";
+      return `<span class="badge ${cls}">NPS ${esc(npsText(value))}</span>`;
+    }
+
+    function hasAutoelevador(row) {
+      return flagValue(row?.autoelevador) || flagValue(row?.tiene_autoelevador);
+    }
+
+    function autoBadge(row) {
+      return hasAutoelevador(row)
+        ? `<span class="badge b-auto"><i data-lucide="forklift"></i>Auto</span>`
+        : `<span class="badge b-estandar">Sin auto</span>`;
+    }
+
+    function clientServiceBadges(row) {
+      return `<div class="client-flags">${autoBadge(row)}${rmdBadge(row?.rmd_valor)}${npsBadge(row?.nps_valor)}</div>`;
     }
 
     function scoreColor(value) {
@@ -1067,7 +1736,7 @@
     function scoreBar(value) {
       const n = Math.max(0, Math.min(100, Number(value || 0)));
       const color = scoreColor(n);
-      return `<div class="score"><div class="track"><div class="fill" style="width:${n}%;background:${color}"></div></div><span style="color:${color}">${num(n, 1)}</span></div>`;
+      return `<div class="score"><div class="track"><div class="fill" style="width:${n}%;background:${color}"></div></div><span style="color:${color}">${num(n, 2)}</span></div>`;
     }
 
     async function api(path, options, timeoutMs = 30000) {
@@ -1086,78 +1755,208 @@
       }
     }
 
-    function setLoading(on) {
+    function setGlobalLoading(on, message = "Actualizando datos") {
+      const global = $("globalLoading");
+      if (!global) return;
+      global.classList.toggle("show", Boolean(on));
+      const label = global.querySelector("strong");
+      if (label) label.textContent = message;
+    }
+
+    function setLoading(on, message = "Actualizando datos") {
       state.loading = on;
       $("recalcBtn").disabled = on;
       $("reloadBtn").disabled = on;
       if ($("backfillHistoryBtn")) $("backfillHistoryBtn").disabled = on;
       if ($("autoUploadBtn")) $("autoUploadBtn").disabled = on;
       if ($("serviceUploadBtn")) $("serviceUploadBtn").disabled = on;
+      if ($("serviceHistoryUploadBtn")) $("serviceHistoryUploadBtn").disabled = on;
+      if ($("inflationUploadBtn")) $("inflationUploadBtn").disabled = on;
+      if ($("npsDetailUploadBtn")) $("npsDetailUploadBtn").disabled = on;
+      if ($("clientCardBtn")) $("clientCardBtn").disabled = on;
+      setGlobalLoading(on, message);
     }
 
     function queryString() {
-      const branch = $("branchFilter").value;
-      const cluster = $("clusterFilter").value;
+      const branch = selectedBranch();
       const params = new URLSearchParams();
       params.set("limit", "5000");
       if (branch !== "TODAS") params.set("sucursal", branch);
-      if (cluster) params.set("cluster", cluster);
       return "?" + params.toString();
     }
 
     async function loadData() {
-      setLoading(true);
+      const seq = ++state.loadSeq;
+      setLoading(true, "Trayendo datos del tablero...");
       try {
         const qs = queryString();
-        const branch = $("branchFilter").value;
-        const locQs = branch !== "TODAS" ? `?sucursal=${encodeURIComponent(branch)}` : "";
-        const mapWeight = $("mapWeight") ? $("mapWeight").value : "hl";
-        const mapLimit = $("mapLimit") ? Number($("mapLimit").value || 5000) : 5000;
-        const mapParams = new URLSearchParams({ peso: mapWeight, limit: String(mapLimit) });
-        if (branch !== "TODAS") mapParams.set("sucursal", branch);
-        const cluster = $("clusterFilter").value;
-        if (cluster) mapParams.set("cluster", cluster);
         const results = await Promise.allSettled([
-          api(`/api/segmentacion/plan-servicio${qs}`, undefined, 20000),
-          api("/api/segmentacion/resumen/sucursal", undefined, 20000),
-          api(`/api/segmentacion/resumen/localidad${locQs}`, undefined, 20000),
-          api(`/api/segmentacion/resumen/activos-localidad${locQs}`, undefined, 20000),
-          api("/api/segmentacion/parametros", undefined, 12000),
-          api(`/api/segmentacion/mapa/clientes?${mapParams.toString()}`, undefined, 20000),
-          api(`/api/segmentacion/autoelevador/resumen${locQs}`, undefined, 20000)
+          api(`/api/segmentacion/plan-servicio${qs}`, undefined, 45000),
+          api("/api/segmentacion/resumen/sucursal", undefined, 25000),
+          api("/api/segmentacion/periodo", undefined, 12000)
         ]);
-        const [planR, branchR, localityR, activeLocR, paramsR, mapR, autoR] = results;
+        const [planR, branchR, periodR] = results;
         const failed = [];
         const take = (r, fallback, label) => {
           if (r.status === "fulfilled") return r.value;
           failed.push(label);
           return fallback;
         };
+        if (planR.status !== "fulfilled") {
+          throw new Error(`No se pudo cargar el plan de clientes: ${planR.reason?.message || "timeout o error de red"}`);
+        }
         const plan = take(planR, [], "plan");
         const branchSummary = take(branchR, [], "sucursales");
-        const localitySummary = take(localityR, [], "localidades");
-        const activeLocalitySummary = take(activeLocR, [], "activos/localidad");
-        const params = take(paramsR, {}, "parametros");
-        const mapRows = take(mapR, [], "mapa");
-        const autoResumen = take(autoR, {}, "autoelevador");
+        const periodo = take(periodR, state.params.periodo || {}, "periodo");
+        if (seq !== state.loadSeq) return;
         state.plan = normalizeRows(plan);
         state.clusters = [...state.plan];
         state.branchSummary = normalizeRows(branchSummary);
-        state.localitySummary = normalizeRows(localitySummary);
-        state.activeLocalitySummary = activeLocalitySummary || [];
-        state.mapRows = mapRows || [];
-        state.autoResumen = autoResumen || {};
-        state.params = params || {};
+        state.params = { ...(state.params || {}), periodo: periodo || {} };
         fillBranches();
         renderAll();
         if (failed.length) {
-          $("periodBadge").innerHTML = `<i data-lucide="alert-triangle"></i><span>Carga parcial: ${esc(failed.join(", "))}</span>`;
+          $("periodBadge").innerHTML = `<i data-lucide="alert-triangle"></i><span>Base cargada; pendiente: ${esc(failed.join(", "))}</span>`;
           if (window.lucide) lucide.createIcons();
         }
+        await loadSecondaryData(seq, state.activeTab, true);
       } catch (error) {
+        if (seq !== state.loadSeq) return;
         showGlobalError(error.message);
       } finally {
-        setLoading(false);
+        if (seq === state.loadSeq) setLoading(false);
+      }
+    }
+
+    async function loadSecondaryData(seq, tab = state.activeTab, force = false) {
+      if (!["territory", "data", "costs", "quality", "settings", "evolution"].includes(tab)) return;
+      const signature = tabCacheSignature(tab);
+      if (tab !== "evolution" && !force && state.sectionSignatures[tab] === signature) {
+        if (seq === state.loadSeq && state.activeTab === tab) renderTabContent(tab);
+        return;
+      }
+      if (tab === "evolution") {
+        setGlobalLoading(true, "Actualizando evolucion...");
+        try {
+          await loadEvolution();
+        } finally {
+          if (seq === state.loadSeq) setGlobalLoading(false);
+        }
+        return;
+      }
+
+      const branch = selectedBranch();
+      const locQs = branch !== "TODAS" ? `?sucursal=${encodeURIComponent(branch)}` : "";
+      const mapWeight = $("mapWeight") ? $("mapWeight").value : "hl";
+      const mapLimit = $("mapLimit") ? Number($("mapLimit").value || 1000) : 1000;
+      const mapParams = new URLSearchParams({ peso: mapWeight, limit: String(mapLimit) });
+      if (branch !== "TODAS") mapParams.set("sucursal", branch);
+      const failed = [];
+      const tasks = [];
+
+      if (tab === "territory") {
+        tasks.push(
+          {
+            label: "localidades",
+            run: () => api(`/api/segmentacion/resumen/localidad${locQs}`, undefined, 30000),
+            apply: (data) => { state.localitySummary = normalizeRows(data); }
+          },
+          {
+            label: "activos/localidad",
+            run: () => api(`/api/segmentacion/resumen/activos-localidad${locQs}`, undefined, 30000),
+            apply: (data) => {
+              state.activeLocalitySummary = data || [];
+              fillBranches();
+              safeRender("sucursales activas", renderActiveBranchTags);
+            }
+          },
+          {
+            label: "autoelevador",
+            run: () => api(`/api/segmentacion/autoelevador/resumen${locQs}`, undefined, 25000),
+            apply: (data) => {
+              state.autoResumen = data || {};
+              safeRender("kpis", renderKpis);
+            }
+          },
+          {
+            label: "mapa",
+            run: () => api(`/api/segmentacion/mapa/clientes?${mapParams.toString()}`, undefined, 45000),
+            apply: (data) => { state.mapRows = data || []; }
+          }
+        );
+      } else if (tab === "data") {
+        tasks.push(
+          {
+            label: "autoelevador",
+            run: () => api(`/api/segmentacion/autoelevador/resumen${locQs}`, undefined, 25000),
+            apply: (data) => {
+              state.autoResumen = data || {};
+              safeRender("kpis", renderKpis);
+            }
+          },
+          {
+            label: "ipc",
+            run: () => api("/api/segmentacion/inflacion?limit=36", undefined, 20000),
+            apply: (data) => { state.inflation = data || []; }
+          }
+        );
+      } else if (tab === "costs") {
+        const costParams = new URLSearchParams({ limit: "80" });
+        if (branch !== "TODAS") costParams.set("sucursal", branch);
+        tasks.push({
+          label: "costos",
+          run: () => api(`/api/segmentacion/reporte/costos-atencion?${costParams.toString()}`, undefined, 45000),
+          apply: (data) => { state.costReport = data || { items: [], resumen: {}, umbrales: {} }; }
+        });
+      } else if (tab === "quality") {
+        tasks.push({
+          label: "calidad",
+          run: () => api("/api/segmentacion/calidad-datos", undefined, 30000),
+          apply: (data) => { state.quality = data || { fuentes: [], resumen: {}, alertas: [], versiones: [] }; }
+        });
+      } else if (tab === "settings") {
+        tasks.push(
+          {
+            label: "parametros",
+            run: () => api("/api/segmentacion/parametros", undefined, 30000),
+            apply: (data) => {
+              state.params = { ...(state.params || {}), ...(data || {}) };
+              safeRender("periodo", renderPeriodBadge);
+            }
+          },
+          {
+            label: "pesos",
+            run: () => api("/api/segmentacion/score-pesos", undefined, 30000),
+            apply: (data) => { state.weights = Array.isArray(data) ? data : []; }
+          }
+        );
+      }
+
+      if (!tasks.length) return;
+      setGlobalLoading(true, {
+        territory: "Actualizando territorio...",
+        data: "Actualizando carga complementaria...",
+        costs: "Actualizando costos...",
+        quality: "Actualizando calidad...",
+        settings: "Actualizando parametros..."
+      }[tab] || "Actualizando datos complementarios...");
+      try {
+        const results = await Promise.allSettled(tasks.map((task) => task.run()));
+        if (seq !== state.loadSeq) return;
+        results.forEach((result, index) => {
+          const task = tasks[index];
+          if (result.status === "fulfilled") {
+            task.apply(result.value);
+          } else {
+            failed.push(task.label);
+            console.warn(`No se pudo cargar ${task.label}`, result.reason);
+          }
+        });
+        if (!failed.length) state.sectionSignatures[tab] = signature;
+        if (state.activeTab === tab) renderTabContent(tab);
+        if (failed.length) console.warn(`Carga complementaria parcial: ${failed.join(", ")}`);
+      } finally {
+        if (seq === state.loadSeq) setGlobalLoading(false);
       }
     }
 
@@ -1166,7 +1965,7 @@
     }
 
     function showGlobalError(message) {
-      ["branchSummary", "clientsTable", "serviceTable", "localityTable", "territoryMap"].forEach((id) => {
+      ["branchSummary", "clientsTable", "clientServiceCard", "serviceTable", "costReportTable", "costExcludedTable", "localityTable", "territoryMap", "qualityTable", "qualityVersions", "inflationTable"].forEach((id) => {
         const el = $(id);
         if (el) el.innerHTML = `<div class="error">${esc(message)}</div>`;
       });
@@ -1190,10 +1989,30 @@
       return row ? `${row.sucursal_nombre} (${id})` : id;
     }
 
+    function selectedBranch() {
+      return $("branchFilter")?.value || "TODAS";
+    }
+
+    function selectedCluster() {
+      return canonicalCluster($("clusterFilter")?.value || "");
+    }
+
+    function passesGlobalFilters(row) {
+      const branch = selectedBranch();
+      const cluster = selectedCluster();
+      if (branch !== "TODAS" && String(row.sucursal || "") !== branch) return false;
+      if (cluster && canonicalCluster(row.cluster_dpo) !== cluster) return false;
+      return true;
+    }
+
+    function filteredPlanRows() {
+      return [...state.plan].filter(passesGlobalFilters);
+    }
+
     function filteredClients() {
       const q = $("searchInput").value.trim().toLowerCase();
       const sortKey = $("sortFilter").value;
-      let rows = [...state.clusters];
+      let rows = [...state.clusters].filter(passesGlobalFilters);
       if (q) {
         rows = rows.filter((row) => {
           const haystack = `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase();
@@ -1204,18 +2023,237 @@
       return rows;
     }
 
+    function updateClientsExportLink() {
+      const link = $("clientsExportXlsx");
+      if (!link) return;
+      const params = new URLSearchParams();
+      const branch = selectedBranch();
+      const cluster = selectedCluster();
+      const q = $("searchInput")?.value.trim() || "";
+      const sort = $("sortFilter")?.value || "venta_ytd";
+      if (branch && branch !== "TODAS") params.set("sucursal", branch);
+      if (cluster) params.set("cluster", cluster);
+      if (q) params.set("q", q);
+      if (sort) params.set("sort", sort);
+      params.set("limit", "50000");
+      link.href = `/api/segmentacion/clientes/export?${params.toString()}`;
+    }
+
+    function renderClientCardOptions() {
+      const options = $("clientCardOptions");
+      if (!options) return;
+      const rows = [...state.clusters].filter(passesGlobalFilters)
+        .sort((a, b) => String(a.cliente || "").localeCompare(String(b.cliente || ""), "es", { numeric: true }))
+        .slice(0, 5000);
+      options.innerHTML = rows.map((row) => {
+        const label = `${row.cliente || ""} - ${row.descripcion_cliente || ""}${row.localidad ? ` (${row.localidad})` : ""}`;
+        return `<option value="${esc(label)}"></option>`;
+      }).join("");
+    }
+
+    function findClientCardRow() {
+      const raw = $("clientCardInput")?.value.trim() || "";
+      if (!raw) return null;
+      const firstToken = raw.split(" - ")[0].trim();
+      const q = raw.toLowerCase();
+      const rows = [...state.clusters].filter(passesGlobalFilters);
+      return rows.find((row) => String(row.cliente || "") === firstToken)
+        || rows.find((row) => {
+          const haystack = `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase();
+          return haystack.includes(q);
+        });
+    }
+
+    function renderServiceMiniHistory(evolution) {
+      const rows = Array.isArray(evolution) ? evolution.slice(0, 6) : [];
+      if (!rows.length) return `<div class="empty">Sin historico mensual de servicio para este cliente.</div>`;
+      return `
+        <div class="table-wrap" style="margin-top:12px;">
+          <table>
+            <thead><tr>${thHelp("Periodo")}${thHelp("Cluster")}${thHelp("RMD", "num")}${thHelp("NPS", "num")}${thHelp("Score", "num")}</tr></thead>
+            <tbody>${rows.map((row) => `
+              <tr>
+                <td>${periodLabel(row)}</td>
+                <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+                <td class="num">${rmdText(row.rmd_valor)}</td>
+                <td class="num" style="color:${npsColor(row.nps_valor)}">${num(row.nps_valor, 2)}</td>
+                <td>${scoreBar(row.score_total)}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderClientServiceCard(row, npsData, evolution) {
+      const resumen = npsData?.resumen || {};
+      const mensual = Array.isArray(npsData?.mensual) ? npsData.mensual : [];
+      const lastNps = mensual[0] || {};
+      const subdrivers = Array.isArray(lastNps.top_subdrivers) ? lastNps.top_subdrivers : [];
+      const cmp = salesComparison(row);
+      const realGrowth = growthPct(cmp.current, cmp.previousAdjusted);
+      const nominalGrowth = growthPct(cmp.current, cmp.previous);
+      const realDetail = cmp.previousAdjusted !== null
+        ? comparisonDetail(cmp.previousAdjusted, cmp.current, moneyCard, "Ant. IPC", "Act.")
+        : salesDetail(row, false);
+      $("clientServiceCard").innerHTML = `
+        <div class="note">
+          <div style="display:flex;align-items:flex-start;gap:10px;justify-content:space-between;flex-wrap:wrap;">
+            <div>
+              <strong>${esc(row.cliente || "-")} - ${esc(row.descripcion_cliente || "")}</strong><br>
+              <span class="muted">${esc(branchLabel(row.sucursal) || "-")} | ${esc(row.localidad || "Sin localidad")}</span>
+              <div style="margin-top:8px;">${autoBadge(row)}</div>
+            </div>
+            <button class="btn" id="clientCardOpenDrawerBtn"><i data-lucide="panel-right-open"></i>Detalle</button>
+          </div>
+          <div class="metric-grid" style="margin-top:12px;">
+            ${metric("Venta actual", moneyCard(cmp.current), "var(--blue)", salesDetail(row, true))}
+            ${metric("Crec. real", realGrowth === null ? "Sin base" : pctCard(realGrowth), realGrowth === null ? "var(--muted)" : realGrowth >= 0 ? "var(--green)" : "var(--red)", realDetail)}
+            ${metric("Crec. nominal", nominalGrowth === null ? "Sin base" : pctCard(nominalGrowth), nominalGrowth === null ? "var(--muted)" : nominalGrowth >= 0 ? "var(--green)" : "var(--red)", comparisonDetail(cmp.previous, cmp.current, moneyCard, "Ant.", "Act."))}
+            ${metric("RMD vigente", rmdText(row.rmd_valor), rmdColor(row.rmd_valor))}
+            ${metric("Autoelevador", hasAutoelevador(row) ? "Si" : "No", hasAutoelevador(row) ? "var(--green)" : "var(--muted)")}
+            ${metric("NPS logistico", numCard(resumen.nps_logistico_indice), npsColor(resumen.nps_logistico_indice))}
+            ${metric("NPS general", numCard(resumen.nps_indice), npsColor(resumen.nps_indice))}
+            ${metric("Delivery", `${num(resumen.delivery_respuestas || 0)} | ${numCard(resumen.delivery_nps_indice)}`, npsColor(resumen.delivery_nps_indice))}
+            ${metric("Respuestas", num(resumen.respuestas || 0))}
+            ${metric("Score NPS prom.", numCard(resumen.score_promedio))}
+          </div>
+          ${subdrivers.length ? `
+            <div style="margin-top:12px;">
+              ${subdrivers.slice(0, 5).map((item) => `<span class="badge ${item.delivery ? "b-caro" : "b-estandar"}">${esc(item.subdriver || item.driver || "NPS")} (${num(item.respuestas || 0)})</span>`).join(" ")}
+            </div>
+          ` : ""}
+          ${renderServiceMiniHistory(evolution)}
+        </div>
+      `;
+      const btn = $("clientCardOpenDrawerBtn");
+      if (btn) btn.addEventListener("click", () => openClient(row.cliente));
+      if (window.lucide) lucide.createIcons();
+    }
+
+    async function buildClientServiceCard() {
+      const target = $("clientServiceCard");
+      const btn = $("clientCardBtn");
+      const row = findClientCardRow();
+      if (!row) {
+        if (target) target.innerHTML = `<div class="error">Selecciona un cliente valido.</div>`;
+        return;
+      }
+      if (btn) btn.disabled = true;
+      setGlobalLoading(true, "Trayendo tarjeta NPS / RMD...");
+      if (target) target.innerHTML = `<div class="loading"><span></span></div>`;
+      try {
+        const [npsR, evolutionR] = await Promise.allSettled([
+          api(`/api/segmentacion/cliente/${encodeURIComponent(row.cliente)}/nps?limit=80`, undefined, 20000),
+          api(`/api/segmentacion/cliente/${encodeURIComponent(row.cliente)}/evolucion`, undefined, 20000)
+        ]);
+        const npsData = npsR.status === "fulfilled" ? npsR.value : { resumen: {}, mensual: [], evaluaciones: [] };
+        const evolution = evolutionR.status === "fulfilled" ? evolutionR.value : [];
+        renderClientServiceCard(row, npsData, evolution);
+      } catch (error) {
+        if (target) target.innerHTML = `<div class="error">${esc(error.message)}</div>`;
+      } finally {
+        if (btn) btn.disabled = false;
+        setGlobalLoading(false);
+      }
+    }
+
+    function safeRender(name, fn) {
+      try {
+        const result = fn();
+        if (result && typeof result.catch === "function") {
+          result.catch((error) => console.error(`Error renderizando ${name}`, error));
+        }
+      } catch (error) {
+        console.error(`Error renderizando ${name}`, error);
+      }
+    }
+
+    function tabCacheSignature(tab) {
+      const branch = selectedBranch();
+      const mapWeight = $("mapWeight") ? $("mapWeight").value : "hl";
+      const mapLimit = $("mapLimit") ? Number($("mapLimit").value || 1000) : 1000;
+      const year = $("yearFilter") ? $("yearFilter").value : "";
+      switch (tab) {
+        case "territory":
+          return `${branch}|${mapWeight}|${mapLimit}`;
+        case "data":
+        case "costs":
+          return branch;
+        case "quality":
+        case "settings":
+          return "global";
+        case "evolution":
+          return `${year}|${branch}`;
+        default:
+          return "";
+      }
+    }
+
+    function invalidateSectionCache() {
+      state.sectionSignatures = {};
+    }
+
+    function renderTabContent(tab) {
+      if (tab === "overview") {
+        safeRender("graficos resumen", renderOverviewCharts);
+        safeRender("resumen sucursal", renderBranchSummary);
+      } else if (tab === "clients") {
+        safeRender("clientes", renderClients);
+      } else if (tab === "territory") {
+        safeRender("territorio", renderTerritory);
+      } else if (tab === "service") {
+        safeRender("plan", renderService);
+      } else if (tab === "settings") {
+        safeRender("parametros", () => renderSettings());
+      } else if (tab === "data") {
+        safeRender("carga", renderData);
+      } else if (tab === "costs") {
+        safeRender("costos", renderCosts);
+      } else if (tab === "quality") {
+        safeRender("calidad", renderQuality);
+      } else if (tab === "evolution") {
+        safeRender("evolution", renderEvolution);
+        safeRender("auditoria", renderAudit);
+      }
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderFilterDependentViews() {
+      safeRender("kpis", renderKpis);
+      safeRender("sucursales activas", renderActiveBranchTags);
+      safeRender("graficos resumen", renderOverviewCharts);
+      safeRender("resumen sucursal", renderBranchSummary);
+      safeRender("opciones cliente", renderClientCardOptions);
+      safeRender("clientes", renderClients);
+      safeRender("territorio", renderTerritory);
+      safeRender("plan", renderService);
+      safeRender("costos", renderCosts);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function scheduleLoadData(delay = 120) {
+      state.loadSeq += 1;
+      if (state.loadTimer) clearTimeout(state.loadTimer);
+      state.loadTimer = setTimeout(() => {
+        state.loadTimer = null;
+        loadData();
+      }, delay);
+    }
+
     function renderAll() {
-      renderPeriodBadge();
-      renderKpis();
-      renderActiveBranchTags();
-      renderOverviewCharts();
-      renderBranchSummary();
-      renderClients();
-      renderTerritory();
-      renderService();
-      renderData();
-      if (state.activeTab === "settings") renderSettings();
-      if (state.activeTab === "evolution") loadEvolution();
+      safeRender("periodo", renderPeriodBadge);
+      safeRender("kpis", renderKpis);
+      safeRender("sucursales activas", renderActiveBranchTags);
+      safeRender("graficos resumen", renderOverviewCharts);
+      safeRender("resumen sucursal", renderBranchSummary);
+      safeRender("opciones cliente", renderClientCardOptions);
+      safeRender("clientes", renderClients);
+      safeRender("territorio", renderTerritory);
+      safeRender("plan", renderService);
+      safeRender("costos", renderCosts);
+      safeRender("calidad", renderQuality);
+      safeRender("carga", renderData);
       if (window.lucide) lucide.createIcons();
     }
 
@@ -1233,22 +2271,36 @@
       const costo = agg.reduce((sum, row) => sum + row.costo, 0);
       const scoreWeight = agg.reduce((sum, row) => sum + row.scoreWeighted, 0);
       const avgScore = total ? scoreWeight / total : 0;
-      const autoPct = Number(state.autoResumen.pct_clientes_autoelevador || 0);
+      const visiblePlan = filteredPlanRows();
+      const autoCount = visiblePlan.filter(hasAutoelevador).length;
+      const autoPct = visiblePlan.length ? autoCount / visiblePlan.length * 100 : Number(state.autoResumen.pct_clientes_autoelevador || 0);
       const avgOtif = avgPlanMetric("otif_valor");
       const hasOtif = avgOtif !== null && avgOtif !== undefined;
+      const avgRmd = avgPlanMetric("rmd_valor");
+      const hasRmd = avgRmd !== null && avgRmd !== undefined;
+      const avgNps = avgPlanMetric("nps_valor");
+      const hasNps = avgNps !== null && avgNps !== undefined;
+      const salesCmp = aggregateSalesComparison(visiblePlan);
+      const realGrowth = growthPct(salesCmp.current, salesCmp.previousAdjusted);
+      const nominalGrowth = growthPct(salesCmp.current, salesCmp.previous);
       const items = [
-        { label: "Clientes", value: num(total), sub: `${money(venta)} venta YTD`, icon: "users", color: "var(--violet)" },
+        { label: "Clientes", value: num(total), sub: `${moneyCard(venta)} venta actual`, detail: salesDetailFromValues(salesCmp, true), icon: "users", color: "var(--violet)" },
+        { label: "Crec. real", value: realGrowth === null ? "Sin base" : pctCard(realGrowth), sub: "venta actual vs anterior ajustada", detail: salesDetailFromValues(salesCmp, true), icon: "trending-up", color: realGrowth === null ? "var(--muted)" : realGrowth >= 0 ? "var(--green)" : "var(--red)" },
+        { label: "Crec. nominal", value: nominalGrowth === null ? "Sin base" : pctCard(nominalGrowth), sub: "venta actual vs anterior", detail: salesDetailFromValues(salesCmp, false), icon: "line-chart", color: nominalGrowth === null ? "var(--muted)" : nominalGrowth >= 0 ? "var(--green)" : "var(--red)" },
         { label: "Ganador", value: countCluster("Ganador"), sub: shareCluster("Ganador"), icon: "trophy", color: "var(--green)" },
-        { label: "OTIF prom.", value: hasOtif ? pct(avgOtif, 1) : "Sin datos", sub: hasOtif ? "entrega en fecha y completa" : "cargar CSV OTIF / RMD / NPS", icon: "check-circle-2", color: hasOtif && avgOtif >= 90 ? "var(--green)" : "var(--amber)" },
-        { label: "Autoelevador", value: pct(autoPct, 1), sub: `${num(state.autoResumen.clientes_autoelevador || 0)} clientes`, icon: "forklift", color: "var(--blue)" },
-        { label: "Costo logistico", value: money(costo), sub: `${pct(venta ? costo / venta * 100 : 0)} sobre venta`, icon: "truck", color: "var(--amber)" },
-        { label: "Score prom.", value: num(avgScore, 1), sub: "escala 0-100", icon: "gauge", color: scoreColor(avgScore) }
+        { label: "OTIF prom.", value: hasOtif ? pctCard(avgOtif) : "Sin datos", sub: hasOtif ? "entrega en fecha y completa" : "cargar CSV OTIF / RMD / NPS", icon: "check-circle-2", color: hasOtif && avgOtif >= 90 ? "var(--green)" : "var(--amber)" },
+        { label: "RMD prom.", value: hasRmd ? numCard(avgRmd) : "Sin datos", sub: hasRmd ? "escala 1-5" : "cargar archivo RMD", icon: "clipboard-check", color: rmdColor(avgRmd) },
+        { label: "NPS prom.", value: hasNps ? numCard(avgNps) : "Sin datos", sub: hasNps ? "logistico ponderado" : "cargar NPS detallado", icon: "message-square-text", color: hasNps ? npsColor(avgNps) : "var(--amber)" },
+        { label: "Autoelevador", value: pctCard(autoPct), sub: `${num(visiblePlan.length ? autoCount : (state.autoResumen.clientes_autoelevador || 0))} clientes`, icon: "forklift", color: "var(--blue)" },
+        { label: "Costo logistico", value: moneyCard(costo), sub: `${pctCard(venta ? costo / venta * 100 : 0)} sobre venta`, detail: `<span class="kpi-detail">Costo: <b>${moneyCard(costo)}</b> | Venta act.: <b>${moneyCard(venta)}</b></span>`, icon: "truck", color: "var(--amber)" },
+        { label: "Score prom.", value: numCard(avgScore), sub: "escala 0-100", icon: "gauge", color: scoreColor(avgScore) }
       ];
       $("kpiGrid").innerHTML = items.map((item) => `
         <article class="kpi">
-          <div class="kpi-head"><span>${esc(item.label)}</span><i data-lucide="${item.icon}" style="color:${item.color}"></i></div>
+          <div class="kpi-head"><span>${helpLabel(item.label)}</span><i data-lucide="${item.icon}" style="color:${item.color}"></i></div>
           <div class="kpi-value" style="color:${item.color}">${item.value}</div>
           <div class="kpi-sub">${esc(item.sub)}</div>
+          ${item.detail || ""}
         </article>
       `).join("");
     }
@@ -1287,11 +2339,11 @@
       if (!total) return "-";
       const item = agg.find((row) => row.cluster === cluster);
       const count = item ? item.clientes : 0;
-      return pct(count / total * 100);
+      return pctCard(count / total * 100);
     }
 
     function avgPlanMetric(key) {
-      const values = state.plan
+      const values = filteredPlanRows()
         .map((row) => row[key])
         .filter((value) => value !== null && value !== undefined && value !== "" && !Number.isNaN(Number(value)))
         .map(Number);
@@ -1305,11 +2357,25 @@
       $("clusterTotalMeta").textContent = `${num(agg.reduce((sum, row) => sum + row.clientes, 0))} clientes`;
       renderChart("clusterChart", "doughnut", {
         labels: CLUSTERS,
-        datasets: [{ data: counts, backgroundColor: CLUSTER_COLORS.map((c) => c + "cc"), borderColor: "#fff", borderWidth: 2 }]
-      }, { cutout: "62%" });
+        datasets: [{
+          data: counts,
+          backgroundColor: CLUSTER_COLORS.map((c) => c + "cc"),
+          borderColor: "#fff",
+          borderWidth: 2,
+          valueFormatter: (value, ctx) => `${ctx.chart.data.labels[ctx.dataIndex]}\n${num(value)}`
+        }]
+      }, { cutout: "58%" });
       renderChart("salesChart", "bar", {
         labels: CLUSTERS,
-        datasets: [{ label: "Venta YTD", data: sales.map((v) => v / 1000000), backgroundColor: CLUSTER_COLORS.map((c) => c + "66"), borderColor: CLUSTER_COLORS, borderWidth: 2, borderRadius: 6 }]
+        datasets: [{
+          label: "Venta YTD",
+          data: sales.map((v) => v / 1000000),
+          backgroundColor: CLUSTER_COLORS.map((c) => c + "66"),
+          borderColor: CLUSTER_COLORS,
+          borderWidth: 2,
+          borderRadius: 6,
+          valueFormatter: (value) => `$${num(value, 2)}M`
+        }]
       }, { scales: moneyAxis("M") });
     }
 
@@ -1322,11 +2388,11 @@
         scoreWeighted: 0
       }]));
       if (state.branchSummary.length) {
-        const branch = $("branchFilter").value;
-        const selectedCluster = canonicalCluster($("clusterFilter").value);
+        const branch = selectedBranch();
+        const selectedClusterValue = selectedCluster();
         state.branchSummary
           .filter((row) => branch === "TODAS" || row.sucursal === branch)
-          .filter((row) => !selectedCluster || canonicalCluster(row.cluster_dpo) === selectedCluster)
+          .filter((row) => !selectedClusterValue || canonicalCluster(row.cluster_dpo) === selectedClusterValue)
           .forEach((row) => {
             const cluster = canonicalCluster(row.cluster_dpo);
             if (!map[cluster]) return;
@@ -1337,7 +2403,7 @@
             map[cluster].scoreWeighted += Number(row.score_prom || 0) * clientes;
           });
       } else {
-        state.clusters.forEach((row) => {
+        state.clusters.filter(passesGlobalFilters).forEach((row) => {
           const cluster = canonicalCluster(row.cluster_dpo);
           if (!map[cluster]) return;
           map[cluster].clientes += 1;
@@ -1349,18 +2415,71 @@
       return CLUSTERS.map((cluster) => map[cluster]);
     }
 
+    function branchClusterSalesMap() {
+      const map = new Map();
+      filteredPlanRows().forEach((row) => {
+        const key = `${row.sucursal || ""}||${canonicalCluster(row.cluster_dpo)}`;
+        const current = map.get(key) || { current: 0, previous: 0, previousAdjusted: 0 };
+        const cmp = salesComparison(row);
+        current.current += cmp.current;
+        current.previous += cmp.previous;
+        if (cmp.previousAdjusted !== null) current.previousAdjusted += cmp.previousAdjusted;
+        map.set(key, current);
+      });
+      return map;
+    }
+
+    function renderChartUnavailable(canvasId, message = "Grafico no disponible") {
+      const canvas = $(canvasId);
+      const box = canvas ? canvas.parentElement : null;
+      if (box) box.innerHTML = `<div class="empty">${esc(message)}</div>`;
+    }
+
+    function chartDataLabels(type) {
+      return {
+        display: (ctx) => {
+          const value = ctx.dataset.data?.[ctx.dataIndex];
+          return value !== null && value !== undefined && !Number.isNaN(Number(value)) && Number(value) !== 0;
+        },
+        color: type === "doughnut" ? "#fff" : (ctx) => {
+          const color = ctx.dataset.borderColor;
+          return Array.isArray(color) ? color[ctx.dataIndex] : color || "#172033";
+        },
+        anchor: type === "doughnut" ? "center" : "end",
+        align: type === "doughnut" ? "center" : "top",
+        offset: type === "doughnut" ? 0 : 2,
+        clamp: true,
+        clip: false,
+        textAlign: "center",
+        font: { size: 10, weight: "700" },
+        formatter: (value, ctx) => {
+          const formatter = ctx.dataset.valueFormatter;
+          if (typeof formatter === "function") return formatter(value, ctx);
+          return Number.isInteger(Number(value)) ? num(value) : num(value, 2);
+        },
+      };
+    }
+
     function renderChart(canvasId, type, data, extraOptions = {}) {
+      const canvas = $(canvasId);
+      if (!canvas) return;
+      if (typeof Chart === "undefined") {
+        renderChartUnavailable(canvasId, "Grafico no disponible: no se cargo Chart.js");
+        return;
+      }
       if (state.charts[canvasId]) state.charts[canvasId].destroy();
       const baseOptions = {
         responsive: true,
         maintainAspectRatio: false,
+        layout: { padding: type === "doughnut" ? 6 : { top: 22, right: 8, left: 8 } },
         plugins: {
           legend: { position: "bottom", labels: { usePointStyle: true, boxWidth: 8, color: "#667085", font: { size: 12 } } },
-          tooltip: { callbacks: {} }
+          tooltip: { callbacks: {} },
+          datalabels: chartDataLabels(type),
         },
         scales: type === "doughnut" ? undefined : defaultScales()
       };
-      state.charts[canvasId] = new Chart($(canvasId), { type, data, options: { ...baseOptions, ...extraOptions } });
+      state.charts[canvasId] = new Chart(canvas, { type, data, options: { ...baseOptions, ...extraOptions, plugins: { ...baseOptions.plugins, ...(extraOptions.plugins || {}) } } });
     }
 
     function defaultScales() {
@@ -1377,11 +2496,12 @@
     }
 
     function renderBranchSummary() {
-      const branch = $("branchFilter").value;
-      const selectedCluster = canonicalCluster($("clusterFilter").value);
+      const branch = selectedBranch();
+      const selectedClusterValue = selectedCluster();
       const rows = state.branchSummary
         .filter((row) => branch === "TODAS" || row.sucursal === branch)
-        .filter((row) => !selectedCluster || canonicalCluster(row.cluster_dpo) === selectedCluster);
+        .filter((row) => !selectedClusterValue || canonicalCluster(row.cluster_dpo) === selectedClusterValue);
+      const salesByBranchCluster = branchClusterSalesMap();
       $("branchMeta").textContent = `${num(rows.length)} filas`;
       if (!rows.length) {
         $("branchSummary").innerHTML = `<div class="empty">Sin datos por sucursal</div>`;
@@ -1390,28 +2510,37 @@
       $("branchSummary").innerHTML = `
         <table>
           <thead><tr>
-            <th>Sucursal</th><th>Cluster</th><th class="num">Clientes</th><th class="num">Venta</th><th class="num">HL</th><th class="num">Costo</th><th class="num">Rechazo</th><th class="num">RMD</th><th class="num">OTIF</th><th>Score</th>
+            ${thHelp("Sucursal")}${thHelp("Cluster")}${thHelp("Clientes", "num")}${thHelp("Venta actual", "num")}${thHelp("Venta ant.", "num")}${thHelp("Crec. real", "num")}${thHelp("HL", "num")}${thHelp("Costo", "num")}${thHelp("Rechazo", "num")}${thHelp("RMD", "num")}${thHelp("OTIF", "num")}${thHelp("NPS", "num")}${thHelp("Score")}
           </tr></thead>
-          <tbody>${rows.map((row) => `
-            <tr>
-              <td>${esc(branchLabel(row.sucursal) || "-")}</td>
-              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
-              <td class="num">${num(row.cantidad_clientes)}</td>
-              <td class="num">${money(row.venta_total_ytd)}</td>
-              <td class="num">${num(row.hl_total_ytd, 1)}</td>
-              <td class="num">${money(row.costo_logistico_total)}</td>
-              <td class="num">${pct(row.pct_rechazo_prom)}</td>
-              <td class="num">${pct(row.rmd_prom)}</td>
-              <td class="num">${pct(row.otif_prom)}</td>
-              <td>${scoreBar(row.score_prom)}</td>
-            </tr>
-          `).join("")}</tbody>
+          <tbody>${rows.map((row) => {
+            const key = `${row.sucursal || ""}||${canonicalCluster(row.cluster_dpo)}`;
+            const cmp = salesByBranchCluster.get(key) || { current: Number(row.venta_total_ytd || 0), previous: 0, previousAdjusted: 0 };
+            const realGrowth = growthPct(cmp.current, cmp.previousAdjusted);
+            return `
+              <tr>
+                <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+                <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+                <td class="num">${num(row.cantidad_clientes)}</td>
+                <td class="num">${money(cmp.current || row.venta_total_ytd)}</td>
+                <td class="num">${money(cmp.previous)}</td>
+                <td class="num" style="color:${realGrowth === null ? "var(--muted)" : realGrowth >= 0 ? "var(--green)" : "var(--red)"}">${realGrowth === null ? "-" : pctCard(realGrowth)}</td>
+                <td class="num">${num(row.hl_total_ytd, 2)}</td>
+                <td class="num">${money(row.costo_logistico_total)}</td>
+                <td class="num">${pct(row.pct_rechazo_prom)}<span class="cell-sub">HL ${pct(row.pct_rechazo_hl_prom)}</span></td>
+                <td class="num">${rmdText(row.rmd_prom)}</td>
+                <td class="num">${pct(row.otif_prom)}</td>
+                <td class="num" style="color:${npsColor(row.nps_prom)}">${num(row.nps_prom, 2)}</td>
+                <td>${scoreBar(row.score_prom)}</td>
+              </tr>
+            `;
+          }).join("")}</tbody>
         </table>
       `;
     }
 
     function renderClients() {
       const rows = filteredClients();
+      updateClientsExportLink();
       const total = aggregateClusters().reduce((sum, row) => sum + row.clientes, 0);
       $("clientsMeta").textContent = total ? `${num(rows.length)} cargados de ${num(total)}` : `${num(rows.length)} clientes`;
       if (!rows.length) {
@@ -1421,40 +2550,44 @@
       $("clientsTable").innerHTML = `
         <table>
           <thead><tr>
-            <th>Cliente</th><th>Sucursal</th><th>Cluster</th><th>Subcluster</th><th>Score</th><th class="num">Venta</th><th class="num">Crec.</th><th class="num">HL</th><th class="num">Drop size</th><th class="num">Costo %</th><th class="num">Rechazo</th><th class="num">RMD</th><th class="num">OTIF</th>
+            ${thHelp("Cliente")}${thHelp("Sucursal")}${thHelp("Cluster")}${thHelp("Subcluster")}${thHelp("Auto")}${thHelp("RMD", "num")}${thHelp("NPS", "num")}${thHelp("Score")}${thHelp("Venta", "num")}${thHelp("Crec. real", "num")}${thHelp("Crec. nom.", "num")}${thHelp("HL", "num")}${thHelp("Drop size", "num")}${thHelp("Costo %", "num")}${thHelp("Rechazo", "num")}${thHelp("OTIF", "num")}
           </tr></thead>
           <tbody>${rows.slice(0, 500).map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
-              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div>${clientServiceBadges(row)}</td>
               <td>${esc(branchLabel(row.sucursal) || "-")}</td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
               <td><span class="badge ${badgeClass(row.subcluster_logistico)}">${esc(row.subcluster_logistico || "Estandar")}</span></td>
+              <td>${autoBadge(row)}</td>
+              <td class="num">${rmdText(row.rmd_valor)}</td>
+              <td class="num" style="color:${npsColor(row.nps_valor)}">${npsText(row.nps_valor)}</td>
               <td>${scoreBar(row.score_total)}</td>
-              <td class="num">${money(row.venta_ytd)}</td>
+              <td class="num">${money(row.venta_ytd)}<span class="cell-sub">Ant. ${money(salesComparison(row).previous)}</span></td>
               <td class="num" style="color:${Number(row.crecimiento_pct || 0) >= 0 ? "var(--green)" : "var(--red)"}">${pct(row.crecimiento_pct)}</td>
-              <td class="num">${num(row.hl_ytd, 1)}</td>
-              <td class="num">${num(row.dropsize_bultos_ytd, 1)}</td>
+              <td class="num">${pct(row.crecimiento_nominal_pct)}</td>
+              <td class="num">${num(row.hl_ytd, 2)}</td>
+              <td class="num">${num(row.dropsize_bultos_ytd, 2)}</td>
               <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
-              <td class="num">${pct(row.pct_rechazo_pedidos)}</td>
-              <td class="num">${pct(row.rmd_valor)}</td>
+              <td class="num">${pct(row.pct_rechazo_pedidos)}<span class="cell-sub">HL ${pct(row.pct_rechazo_hl)}</span></td>
               <td class="num">${pct(row.otif_valor)}</td>
             </tr>
           `).join("")}</tbody>
         </table>
       `;
       $("clientsTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      if (window.lucide) lucide.createIcons();
     }
 
     function renderTerritory() {
-      const selectedCluster = canonicalCluster($("clusterFilter").value);
-      const rows = selectedCluster ? aggregateClusterLocalities(selectedCluster) : aggregateActiveLocalities();
+      const selectedClusterValue = selectedCluster();
+      const rows = selectedClusterValue ? aggregateClusterLocalities(selectedClusterValue) : aggregateActiveLocalities();
       $("localityMeta").textContent = `${num(rows.length)} localidades`;
       if (!rows.length) {
         $("localityTable").innerHTML = `<div class="empty">Sin resumen por localidad</div>`;
       } else {
         $("localityTable").innerHTML = `
           <table>
-            <thead><tr><th>Sucursal</th><th>Localidad</th><th class="num">Clientes activos</th><th class="num">% sucursal</th><th>Cluster</th><th class="num">Venta</th><th class="num">HL</th><th>Score</th></tr></thead>
+            <thead><tr>${thHelp("Sucursal")}${thHelp("Localidad")}${thHelp("Clientes activos", "num")}${thHelp("% sucursal", "num")}${thHelp("Cluster")}${thHelp("Venta", "num")}${thHelp("HL", "num")}${thHelp("Score")}</tr></thead>
             <tbody>${rows.slice(0, 160).map((row) => `
               <tr>
                 <td>${esc(branchLabel(row.sucursal) || "-")}</td>
@@ -1463,7 +2596,7 @@
                 <td class="num">${pct(row.pct_localidad_sucursal || 0)}</td>
                 <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "Todos")}</span></td>
                 <td class="num">${money(row.venta_total_ytd)}</td>
-                <td class="num">${num(row.hl_total_ytd, 1)}</td>
+                <td class="num">${num(row.hl_total_ytd, 2)}</td>
                 <td>${scoreBar(row.score_prom)}</td>
               </tr>
             `).join("")}</tbody>
@@ -1572,7 +2705,7 @@
       initMap();
       if (!state.map || !state.mapLayerGroup) return;
       state.mapLayerGroup.clearLayers();
-      const rows = (state.mapRows || []).filter((row) => Number(row.latitud) && Number(row.longitud));
+      const rows = (state.mapRows || []).filter((row) => passesGlobalFilters(row) && Number(row.latitud) && Number(row.longitud));
       if (!rows.length) {
         $("mapMeta").textContent = "Sin coordenadas";
         $("mapAutoPct").textContent = "-";
@@ -1602,25 +2735,29 @@
           Cluster: ${esc(clusterLabel(row.cluster_dpo) || "-")}<br>
           Sucursal: ${esc(branchLabel(row.sucursal) || "-")}<br>
           Localidad: ${esc(row.localidad || "-")}<br>
-          HL: ${num(row.hl, 1)} | Pallets: ${num(row.pallets, 1)}<br>
-          Venta: ${money(row.venta)} | Bultos: ${num(row.bultos, 1)}<br>
+          HL: ${num(row.hl, 2)} | Pallets: ${num(row.pallets, 2)}<br>
+          Venta: ${money(row.venta)} | Bultos: ${num(row.bultos, 2)}<br>
           Autoelevador: ${row.tiene_autoelevador ? "Si" : "No"}
         `);
         marker.addTo(state.mapLayerGroup);
       });
       if (bounds.length) state.map.fitBounds(bounds, { padding: [24, 24], maxZoom: 11 });
       $("mapMeta").textContent = `${num(rows.length)} puntos | peso ${$("mapWeight").value.toUpperCase()}`;
-      $("mapAutoPct").textContent = pct(state.autoResumen.pct_clientes_autoelevador || 0, 1);
-      $("mapAutoHl").textContent = num(state.autoResumen.hl_autoelevador || 0, 1);
-      $("mapAutoCost").textContent = money(state.autoResumen.costo_autoelevador || 0);
-      $("mapAutoSave").textContent = money(state.autoResumen.ahorro_estimado || 0);
+      $("mapAutoPct").textContent = pctCard(state.autoResumen.pct_clientes_autoelevador || 0);
+      $("mapAutoHl").textContent = numCard(state.autoResumen.hl_autoelevador || 0);
+      $("mapAutoCost").textContent = moneyCard(state.autoResumen.costo_autoelevador || 0);
+      $("mapAutoSave").textContent = moneyCard(state.autoResumen.ahorro_estimado || 0);
       setTimeout(() => state.map && state.map.invalidateSize(), 40);
     }
 
     function renderService() {
       const priority = $("priorityFilter").value;
       const onlyAlerts = $("alertFilter").value === "alertas";
-      let rows = [...state.plan];
+      const q = $("searchInput").value.trim().toLowerCase();
+      let rows = filteredPlanRows();
+      if (q) {
+        rows = rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q));
+      }
       if (priority) rows = rows.filter((row) => String(row.prioridad_gestion || "") === priority);
       if (onlyAlerts) rows = rows.filter((row) => row.alerta_operativa);
       rows.sort((a, b) => Number(a.prioridad_gestion || 9) - Number(b.prioridad_gestion || 9) || Number(b.score_total || 0) - Number(a.score_total || 0));
@@ -1630,46 +2767,253 @@
       }
       $("serviceTable").innerHTML = `
         <table>
-          <thead><tr><th>Cliente</th><th>Cluster</th><th>Prioridad</th><th>Plan de servicio</th><th>Accion prioritaria</th><th>Alerta</th><th>Score</th></tr></thead>
+          <thead><tr>${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Auto")}${thHelp("Prioridad")}${thHelp("Plan de servicio")}${thHelp("Accion prioritaria")}${thHelp("Alerta")}${thHelp("RMD", "num")}${thHelp("NPS", "num")}${thHelp("Score")}</tr></thead>
           <tbody>${rows.slice(0, 500).map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
               <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td>${autoBadge(row)}</td>
               <td class="num">${num(row.prioridad_gestion)}</td>
               <td style="white-space:normal;min-width:260px;">${esc(row.plan_servicio || "-")}</td>
               <td style="white-space:normal;min-width:260px;">${esc(row.accion_prioritaria || "-")}</td>
               <td style="white-space:normal;min-width:180px;">${esc(row.alerta_operativa || "-")}</td>
+              <td class="num">${rmdText(row.rmd_valor)}</td>
+              <td class="num" style="color:${npsColor(row.nps_valor)}">${num(row.nps_valor, 2)}</td>
               <td>${scoreBar(row.score_total)}</td>
             </tr>
           `).join("")}</tbody>
         </table>
       `;
       $("serviceTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderCosts() {
+      const report = state.costReport || { items: [], resumen: {}, umbrales: {} };
+      const resumen = report.resumen || {};
+      const umbrales = report.umbrales || {};
+      const excluded = Array.isArray(report.excluidos_margen_negativo) ? report.excluidos_margen_negativo : [];
+      const excludedSummary = resumen.excluidos_margen_negativo || {};
+      const q = $("searchInput").value.trim().toLowerCase();
+      let rows = Array.isArray(report.items) ? [...report.items] : [];
+      if (q) {
+        rows = rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q));
+      }
+      $("costReportMeta").textContent = `${num(rows.length)} de ${num(resumen.clientes_evaluados || 0)} evaluados`;
+      $("costSummary").innerHTML = `
+        ${metric("Costo reportado", moneyCard(resumen.costo_total_reportado || 0))}
+        ${metric("Ratio reportado", pctCard(resumen.ratio_reportado || 0), Number(resumen.ratio_reportado || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--amber)")}
+        ${metric("P75 costo/venta", pctCard(umbrales.p75_ratio || 0))}
+        ${metric("P25 drop size", num(umbrales.p25_dropsize || 0, 2))}
+        ${metric("Venta minima", moneyCard(umbrales.min_venta_efectiva || 0))}
+        ${metric("Criterio", esc(resumen.criterio || "-"))}
+      `;
+      if (!rows.length) {
+        $("costReportTable").innerHTML = `<div class="empty">Sin clientes costosos para los filtros actuales</div>`;
+      } else {
+        $("costReportTable").innerHTML = `
+          <table>
+            <thead><tr>
+              ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Auto")}${thHelp("Indice", "num")}${thHelp("Motivo principal")}${thHelp("Explicacion")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}${thHelp("Rechazo", "num")}${thHelp("Margen", "num")}
+            </tr></thead>
+            <tbody>${rows.map((row) => {
+              const reasons = Array.isArray(row.motivos) ? row.motivos : [];
+              const explanation = reasons.length
+                ? `<div class="reason-list">${reasons.slice(0, 4).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div>`
+                : `<span class="muted">${esc(row.explicacion || "-")}</span>`;
+              return `
+                <tr class="clickable" data-client="${esc(row.cliente)}">
+                  <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+                  <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+                  <td>${autoBadge(row)}</td>
+                  <td class="num">${num(row.indice_costo_servicio, 2)}</td>
+                  <td><span class="badge ${badgeClass(row.motivo_principal)}">${esc(row.motivo_principal || "-")}</span></td>
+                  <td style="white-space:normal;min-width:340px;">${explanation}</td>
+                  <td class="num">${money(row.costo_logistico_total)}</td>
+                  <td class="num" style="color:${Number(row.ratio_costo_logistico_pct || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--text)"}">${pct(row.ratio_costo_logistico_pct)}</td>
+                  <td class="num">${money(row.venta_ytd)}</td>
+                  <td class="num">${num(row.pedidos_ytd)}</td>
+                  <td class="num">${num(row.dropsize_bultos_ytd, 2)}</td>
+                  <td class="num">${pct(row.pct_rechazo_pedidos)}<span class="cell-sub">HL ${pct(row.pct_rechazo_hl)}</span></td>
+                  <td class="num" style="color:${Number(row.margen_logistico_proxy || 0) < 0 ? "var(--red)" : "var(--green)"}">${money(row.margen_logistico_proxy)}</td>
+                </tr>
+              `;
+            }).join("")}</tbody>
+          </table>
+        `;
+        $("costReportTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      }
+      renderCostExcluded(excluded, excludedSummary, q);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderCostExcluded(rows, summary, q) {
+      const filtered = q
+        ? rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q))
+        : rows;
+      const total = Number(summary.clientes || 0);
+      if (!total) {
+        $("costExcludedNote").innerHTML = "";
+        $("costExcludedTable").innerHTML = "";
+        return;
+      }
+      $("costExcludedNote").innerHTML = `
+        <div class="note" style="border-color:#ffc9c2;background:#fff4f2;color:var(--red);">
+          <strong>Excluidos por baja venta con margen logistico proxy negativo</strong><br>
+          ${num(total)} clientes quedaron fuera del ranking principal por baja venta, pero tienen margen logistico proxy negativo.
+          Margen proxy total: ${money(summary.margen_logistico_proxy_total || 0)}. Costo asociado: ${money(summary.costo_total || 0)}.
+        </div>
+      `;
+      if (!filtered.length) {
+        $("costExcludedTable").innerHTML = `<div class="empty">La busqueda no coincide con los excluidos por margen proxy negativo</div>`;
+        return;
+      }
+      $("costExcludedTable").innerHTML = `
+        <table>
+          <thead><tr>
+            ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Auto")}${thHelp("Motivo principal")}${thHelp("Margen proxy", "num")}${thHelp("Venta", "num")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}
+          </tr></thead>
+          <tbody>${filtered.map((row) => `
+            <tr class="clickable" data-client="${esc(row.cliente)}">
+              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td>${autoBadge(row)}</td>
+              <td style="white-space:normal;min-width:340px;">
+                <div class="reason-list">${(Array.isArray(row.motivos) ? row.motivos : [row.explicacion || "-"]).slice(0, 3).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div>
+              </td>
+              <td class="num" style="color:var(--red)">${money(row.margen_logistico_proxy)}</td>
+              <td class="num">${money(row.venta_ytd)}</td>
+              <td class="num">${money(row.costo_logistico_total)}</td>
+              <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
+              <td class="num">${num(row.pedidos_ytd)}</td>
+              <td class="num">${num(row.dropsize_bultos_ytd, 2)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+      $("costExcludedTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function qualityColor(status) {
+      const s = String(status || "").toLowerCase();
+      if (s === "ok") return "var(--green)";
+      if (s === "advertencia") return "var(--amber)";
+      if (s === "critico") return "var(--red)";
+      return "var(--muted)";
+    }
+
+    function qualityLabel(status) {
+      const s = String(status || "").toLowerCase();
+      if (s === "ok") return "OK";
+      if (s === "advertencia") return "Advertencia";
+      if (s === "critico") return "Critico";
+      if (s === "sin_base") return "Sin base";
+      return status || "-";
+    }
+
+    function qualityBadge(status) {
+      const color = qualityColor(status);
+      return `<span class="badge" style="color:${color};border-color:${color}55;background:${color}14">${esc(qualityLabel(status))}</span>`;
+    }
+
+    function shortDateTime(value) {
+      if (!value) return "-";
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) return esc(String(value).slice(0, 19));
+      return parsed.toLocaleString("es-AR", {
+        year: "numeric", month: "2-digit", day: "2-digit",
+        hour: "2-digit", minute: "2-digit"
+      });
+    }
+
+    function renderQuality() {
+      const q = state.quality || { fuentes: [], resumen: {}, alertas: [], versiones: [] };
+      const resumen = q.resumen || {};
+      const periodo = q.periodo || {};
+      const fuentes = Array.isArray(q.fuentes) ? q.fuentes : [];
+      const alertas = Array.isArray(q.alertas) ? q.alertas : [];
+      const periodLabel = `${dateInputValue(periodo.fecha_desde) || "-"} / ${dateInputValue(periodo.fecha_hasta) || "-"}`;
+      if ($("qualityMeta")) $("qualityMeta").textContent = `${qualityLabel(q.estado_general)} · ${num(fuentes.length)} fuentes`;
+      if ($("qualitySummary")) {
+        $("qualitySummary").innerHTML = `
+          ${metric("Estado general", esc(qualityLabel(q.estado_general)), qualityColor(q.estado_general))}
+          ${metric("Periodo", esc(periodLabel))}
+          ${metric("Clientes con venta", num(resumen.clientes_ventas || 0), "var(--blue)")}
+          ${metric("Cache", pctCard(resumen.cache_cobertura_pct), qualityColor((resumen.cache_cobertura_pct || 0) >= 95 ? "ok" : "advertencia"))}
+          ${metric("Servicio historico", pctCard(resumen.servicio_historico_cobertura_pct), qualityColor((resumen.servicio_historico_cobertura_pct || 0) >= 80 ? "ok" : "advertencia"))}
+          ${metric("Alertas", num(alertas.length), alertas.length ? "var(--amber)" : "var(--green)")}
+        `;
+      }
+      if ($("qualityAlerts")) {
+        $("qualityAlerts").innerHTML = alertas.length
+          ? `<div class="note" style="border-color:#ffe0a3;background:#fff9ea;color:var(--amber);"><strong>Alertas de calidad</strong><br>${alertas.slice(0, 8).map(esc).join("<br>")}</div>`
+          : `<div class="note" style="border-color:#bbf7d0;background:#f0fdf4;color:var(--green);"><strong>Sin alertas criticas</strong><br>Las fuentes principales tienen datos para el periodo activo.</div>`;
+      }
+      if ($("qualityTable")) {
+        if (!fuentes.length) {
+          $("qualityTable").innerHTML = `<div class="empty">Sin diagnostico de fuentes disponible</div>`;
+        } else {
+          $("qualityTable").innerHTML = `
+            <table>
+              <thead><tr>
+                ${thHelp("Fuente")}${thHelp("Estado", "", "Estado")}${thHelp("Valor", "num")}${thHelp("Cobertura", "num")}${thHelp("Detalle")}${thHelp("Fecha")}
+              </tr></thead>
+              <tbody>${fuentes.map((row) => `
+                <tr>
+                  <td><div class="client-main">${esc(row.nombre || row.id || "-")}</div><div class="client-sub">${esc(row.id || "")}</div></td>
+                  <td>${qualityBadge(row.estado)}</td>
+                  <td class="num">${num(row.valor)}</td>
+                  <td class="num">${pct(row.cobertura_pct)}</td>
+                  <td style="white-space:normal;min-width:320px">${esc(row.detalle || "-")}</td>
+                  <td>${shortDateTime(row.updated_at)}</td>
+                </tr>
+              `).join("")}</tbody>
+            </table>
+          `;
+        }
+      }
+      const versions = Array.isArray(q.versiones) ? q.versiones : [];
+      if ($("qualityVersions")) {
+        $("qualityVersions").innerHTML = versions.length
+          ? `<table>
+              <thead><tr>${thHelp("Version")}${thHelp("Fecha")}</tr></thead>
+              <tbody>${versions.map((row) => `<tr><td>${esc(row.version || "-")}</td><td>${shortDateTime(row.applied_at)}</td></tr>`).join("")}</tbody>
+            </table>`
+          : `<div class="empty">Sin versiones registradas</div>`;
+      }
     }
 
     async function loadEvolution() {
+      const seq = ++state.evolutionSeq;
       try {
         const year = $("yearFilter").value;
-        const branch = $("branchFilter").value;
+        const branch = selectedBranch();
         const qs = new URLSearchParams({ anio: year });
         if (branch !== "TODAS") qs.set("sucursal", branch);
         const [evolution, audit] = await Promise.all([
           api(`/api/segmentacion/evolucion-mensual?${qs.toString()}`),
           api("/api/segmentacion/auditoria?limit=30")
         ]);
+        if (seq !== state.evolutionSeq) return;
         state.evolution = normalizeRows(evolution);
         state.audit = audit || [];
         renderEvolution();
         renderAudit();
       } catch (error) {
+        if (seq !== state.evolutionSeq) return;
         $("auditTable").innerHTML = `<div class="error">${esc(error.message)}</div>`;
       }
     }
 
     function renderEvolution() {
       const rows = state.evolution;
-      const months = [...new Set(rows.map((row) => Number(row.periodo_mes || 0)))].filter(Boolean).sort((a, b) => a - b);
-      const labels = months.map((month) => ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][month - 1] || `M${month}`);
+      const rawMonths = [...new Set(rows.map((row) => Number(row.periodo_mes || 0)))]
+        .filter((month) => Number.isFinite(month))
+        .sort((a, b) => a - b);
+      const realMonths = rawMonths.filter((month) => month > 0);
+      const months = realMonths.length ? realMonths : rawMonths.filter((month) => month === 0);
+      const labels = months.map((month) => month === 0 ? "YTD" : (["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"][month - 1] || `M${month}`));
       const datasets = CLUSTERS.map((cluster, idx) => ({
         label: cluster,
         data: months.map((month) => {
@@ -1688,6 +3032,10 @@
       if (state.charts["evolutionChart"]) state.charts["evolutionChart"].destroy();
       const canvas = $("evolutionChart");
       if (!canvas) return;
+      if (typeof Chart === "undefined") {
+        renderChartUnavailable("evolutionChart", "Grafico no disponible: no se cargo Chart.js");
+        return;
+      }
 
       state.charts["evolutionChart"] = new Chart(canvas, {
         type: "line",
@@ -1729,7 +3077,7 @@
       }
       $("auditTable").innerHTML = `
         <table>
-          <thead><tr><th>Fecha</th><th>Usuario</th><th>Periodo</th><th class="num">Procesados</th><th class="num">Ganador</th><th class="num">Crec.</th><th class="num">Basico</th><th class="num">Bajas</th><th class="num">ms</th></tr></thead>
+          <thead><tr>${thHelp("Fecha")}${thHelp("Usuario")}${thHelp("Periodo")}${thHelp("Procesados", "num")}${thHelp("Ganador", "num")}${thHelp("Crec.", "num")}${thHelp("Basico", "num")}${thHelp("Bajas", "num")}${thHelp("ms", "num")}</tr></thead>
           <tbody>${rows.map((row) => `
             <tr>
               <td>${esc(String(row.ejecutado_at || "").slice(0, 19).replace("T", " "))}</td>
@@ -1772,7 +3120,7 @@
         <div class="section">
           <div class="section-head">
             <div class="section-title"><i data-lucide="gauge"></i>Pesos del score</div>
-            <div class="panel-meta">${num(weightTotal(), 1)} puntos</div>
+            <div class="panel-meta">${num(weightTotal(), 2)} puntos</div>
           </div>
           <div class="weights-grid">${renderWeights()}</div>
         </div>
@@ -1832,7 +3180,7 @@
     }
 
     async function saveSettings(recalculate) {
-      setLoading(true);
+      setLoading(true, recalculate ? "Guardando y recalculando..." : "Guardando parametros...");
       try {
         state.params = await api("/api/segmentacion/parametros", {
           method: "PUT",
@@ -1889,7 +3237,7 @@
     }
 
     async function handleRecalculate() {
-      setLoading(true);
+      setLoading(true, "Recalculando clusterizacion...");
       try {
         await recalculateClusters();
         state.activeTab === "evolution" && await loadEvolution();
@@ -1917,7 +3265,7 @@
     async function backfillHistory() {
       const end = activeHistoryEnd();
       if (!confirm(`Recalcular historico mensual desde enero 2025 hasta ${String(end.mes).padStart(2, "0")}/${end.anio}?`)) return;
-      setLoading(true);
+      setLoading(true, "Recalculando historico mensual...");
       try {
         const result = await api("/api/segmentacion/historico/recalcular", {
           method: "POST",
@@ -1948,19 +3296,54 @@
       el.textContent = message;
     }
 
+    function renderInflationTable() {
+      const rows = [...(state.inflation || [])]
+        .sort((a, b) => (Number(a.periodo_anio || 0) - Number(b.periodo_anio || 0))
+          || (Number(a.periodo_mes || 0) - Number(b.periodo_mes || 0)));
+      const summaryEl = $("inflationUploadSummary");
+      const tableEl = $("inflationTable");
+      if (!summaryEl || !tableEl) return;
+      const first = rows[0];
+      const last = rows[rows.length - 1];
+      summaryEl.innerHTML = `
+        ${metric("Periodos IPC", num(rows.length), rows.length ? "var(--blue)" : "var(--amber)")}
+        ${metric("Desde", first ? `${num(first.periodo_mes)}/${num(first.periodo_anio)}` : "-")}
+        ${metric("Hasta", last ? `${num(last.periodo_mes)}/${num(last.periodo_anio)}` : "-")}
+        ${metric("Ultimo IPC", last ? pctCard(last.inflacion_pct) : "-")}
+      `;
+      if (!rows.length) {
+        tableEl.innerHTML = `<div class="empty">Sin IPC cargado.</div>`;
+        return;
+      }
+      tableEl.innerHTML = `
+        <table>
+          <thead><tr>${thHelp("Periodo")}${thHelp("IPC mensual", "num")}${thHelp("Fuente")}${thHelp("Actualizado")}</tr></thead>
+          <tbody>${rows.map((row) => `
+            <tr>
+              <td>${num(row.periodo_mes)}/${num(row.periodo_anio)}</td>
+              <td class="num">${pct(row.inflacion_pct, 3)}</td>
+              <td>${esc(row.fuente || "-")}</td>
+              <td>${shortDateTime(row.updated_at)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
     function renderData() {
       if (!$("autoUploadSummary")) return;
       const total = Number(state.autoResumen.clientes_total || state.autoResumen.clientes_totales || 0);
       const auto = Number(state.autoResumen.clientes_autoelevador || 0);
-      $("autoSummaryMeta").textContent = total ? `${pct(auto / total * 100, 1)} cobertura` : "Sin datos";
+      $("autoSummaryMeta").textContent = total ? `${pctCard(auto / total * 100)} cobertura` : "Sin datos";
       $("autoUploadSummary").innerHTML = `
         ${metric("Clientes", num(total))}
         ${metric("Con autoelevador", num(auto))}
-        ${metric("HL autoelevador", num(state.autoResumen.hl_autoelevador || 0, 1))}
-        ${metric("Ahorro estimado", money(state.autoResumen.ahorro_estimado || 0), "var(--green)")}
-        ${metric("Costo autoelevador", money(state.autoResumen.costo_autoelevador || 0))}
+        ${metric("HL autoelevador", numCard(state.autoResumen.hl_autoelevador || 0))}
+        ${metric("Ahorro estimado", moneyCard(state.autoResumen.ahorro_estimado || 0), "var(--green)")}
+        ${metric("Costo autoelevador", moneyCard(state.autoResumen.costo_autoelevador || 0))}
         ${metric("Acompanantes estimados", num(state.autoResumen.acompanantes_estimados || 0))}
       `;
+      renderInflationTable();
     }
 
     async function uploadPromotores() {
@@ -2007,6 +3390,7 @@
       }
       const btn = $("serviceUploadBtn");
       if (btn) btn.disabled = true;
+      setGlobalLoading(true, "Importando RMD / OTIF / NPS...");
       if (statusEl) statusEl.textContent = "Procesando...";
       if (summaryEl) summaryEl.innerHTML = "";
       try {
@@ -2027,6 +3411,118 @@
         if (statusEl) statusEl.textContent = "Error: " + error.message;
       } finally {
         if (btn) btn.disabled = false;
+        setGlobalLoading(false);
+      }
+    }
+
+    async function uploadServicioHistorico() {
+      const file = $("serviceHistoryFile")?.files[0];
+      const statusEl = $("serviceHistoryUploadStatus");
+      const summaryEl = $("serviceHistoryUploadSummary");
+      if (!file) {
+        if (statusEl) statusEl.textContent = "Selecciona un CSV historico para subir";
+        return;
+      }
+      const btn = $("serviceHistoryUploadBtn");
+      if (btn) btn.disabled = true;
+      setGlobalLoading(true, "Importando historico de servicio...");
+      if (statusEl) statusEl.textContent = "Procesando historico...";
+      if (summaryEl) summaryEl.innerHTML = "";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const result = await api("/api/segmentacion/servicio/historico/import", {
+          method: "POST",
+          body: form
+        }, 120000);
+        if (statusEl) statusEl.textContent = `Completado: ${result.leidos} filas leidas`;
+        if (summaryEl) summaryEl.innerHTML = `
+          ${metric("Filas historicas", num(result.importados))}
+          ${metric("Clientes", num(result.clientes), "var(--blue)")}
+          ${metric("Periodos", num(result.periodos), "var(--amber)")}
+          ${metric("Vigentes", num(result.vigentes_actualizados), "var(--green)")}
+        `;
+        await loadData();
+      } catch (error) {
+        if (statusEl) statusEl.textContent = "Error: " + error.message;
+      } finally {
+        if (btn) btn.disabled = false;
+        setGlobalLoading(false);
+      }
+    }
+
+    async function uploadInflacion() {
+      const file = $("inflationFile")?.files[0];
+      const statusEl = $("inflationUploadStatus");
+      const summaryEl = $("inflationUploadSummary");
+      if (!file) {
+        if (statusEl) statusEl.textContent = "Selecciona un CSV de IPC para subir";
+        return;
+      }
+      const btn = $("inflationUploadBtn");
+      if (btn) btn.disabled = true;
+      setGlobalLoading(true, "Importando IPC y recalculando...");
+      if (statusEl) statusEl.textContent = "Procesando IPC...";
+      if (summaryEl) summaryEl.innerHTML = "";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const result = await api("/api/segmentacion/inflacion/import", {
+          method: "POST",
+          body: form
+        }, 180000);
+        if (statusEl) statusEl.textContent = `Completado: ${num(result.importados || 0)} periodos IPC`;
+        if (summaryEl) summaryEl.innerHTML = `
+          ${metric("Leidos", num(result.leidos || 0))}
+          ${metric("Importados", num(result.importados || 0), "var(--blue)")}
+          ${metric("Desde", esc(result.desde || "-"))}
+          ${metric("Hasta", esc(result.hasta || "-"))}
+          ${metric("Cache", result.segmentacion_cache ? "Refrescada" : "Pendiente", result.segmentacion_cache ? "var(--green)" : "var(--amber)")}
+        `;
+        await loadData();
+      } catch (error) {
+        if (statusEl) statusEl.textContent = "Error: " + error.message;
+      } finally {
+        if (btn) btn.disabled = false;
+        setGlobalLoading(false);
+      }
+    }
+
+    async function uploadNpsDetallado() {
+      const file = $("npsDetailFile")?.files[0];
+      const statusEl = $("npsDetailUploadStatus");
+      const summaryEl = $("npsDetailUploadSummary");
+      if (!file) {
+        if (statusEl) statusEl.textContent = "Selecciona un archivo NPS para subir";
+        return;
+      }
+      const btn = $("npsDetailUploadBtn");
+      if (btn) btn.disabled = true;
+      setGlobalLoading(true, "Importando NPS detallado...");
+      if (statusEl) statusEl.textContent = "Procesando NPS detallado...";
+      if (summaryEl) summaryEl.innerHTML = "";
+      try {
+        const form = new FormData();
+        form.append("file", file);
+        const result = await api("/api/segmentacion/nps-detallado/import", {
+          method: "POST",
+          body: form
+        }, 180000);
+        if (statusEl) statusEl.textContent = `Completado: ${num(result.encuestas_importadas || 0)} encuestas`;
+        if (summaryEl) summaryEl.innerHTML = `
+          ${metric("Filas leidas", num(result.leidos || result.filas || 0))}
+          ${metric("Encuestas", num(result.encuestas_importadas || 0), "var(--blue)")}
+          ${metric("Drivers", num(result.drivers_importados || 0), "var(--amber)")}
+          ${metric("Clientes", num(result.clientes || 0), "var(--green)")}
+          ${metric("Periodos", num(result.periodos || 0))}
+          ${metric("Descartados", num(result.descartados || 0), Number(result.descartados || 0) ? "var(--red)" : "var(--text)")}
+        `;
+        await loadData();
+      } catch (error) {
+        if (statusEl) statusEl.textContent = "Error: " + error.message;
+      } finally {
+        if (btn) btn.disabled = false;
+        setGlobalLoading(false);
       }
     }
 
@@ -2039,7 +3535,7 @@
       const form = new FormData();
       form.append("file", file);
       form.append("fuente", $("autoSource").value || "dashboard");
-      setLoading(true);
+      setLoading(true, "Importando autoelevador...");
       setUploadStatus("Subiendo autoelevador...");
       try {
         const result = await api("/api/segmentacion/autoelevador/import", {
@@ -2066,16 +3562,110 @@
       $("drawerOverlay").classList.add("open");
       $("clientDrawer").classList.add("open");
       try {
-        const data = await api(`/api/segmentacion/cliente/${encodeURIComponent(clientId)}`);
-        renderDrawer(data);
+        const [detailR, npsR] = await Promise.allSettled([
+          api(`/api/segmentacion/cliente/${encodeURIComponent(clientId)}`),
+          api(`/api/segmentacion/cliente/${encodeURIComponent(clientId)}/nps?limit=200`)
+        ]);
+        if (detailR.status !== "fulfilled") throw detailR.reason;
+        renderDrawer(detailR.value, npsR.status === "fulfilled" ? npsR.value : null);
       } catch (error) {
         $("drawerBody").innerHTML = `<div class="error">${esc(error.message)}</div>`;
       }
     }
 
-    function renderDrawer(data) {
+    function npsColor(value) {
+      if (value === null || value === undefined || value === "" || Number.isNaN(Number(value))) return "var(--muted)";
+      const n = Number(value);
+      if (n >= 50) return "var(--green)";
+      if (n >= 0) return "var(--amber)";
+      return "var(--red)";
+    }
+
+    function periodLabel(row) {
+      const y = row.periodo_anio || "";
+      const m = String(row.periodo_mes || "").padStart(2, "0");
+      return y && m ? `${y}-${m}` : "-";
+    }
+
+    function renderDriverList(drivers) {
+      const items = Array.isArray(drivers) ? drivers : [];
+      if (!items.length) return "-";
+      return items.slice(0, 8).map((item) => {
+        const tag = item.delivery ? "Delivery" : item.general ? "General" : "NPS";
+        return `<div style="margin-bottom:4px;"><span class="badge ${item.delivery ? "b-caro" : item.general ? "b-estandar" : "b-eficiente"}">${tag}</span> ${esc(item.driver || "Sin driver")} / ${esc(item.subdriver || "Ninguno")}</div>`;
+      }).join("");
+    }
+
+    function renderNpsDetail(npsData) {
+      const mensual = Array.isArray(npsData?.mensual) ? npsData.mensual : [];
+      const evaluaciones = Array.isArray(npsData?.evaluaciones) ? npsData.evaluaciones : [];
+      const resumen = npsData?.resumen || {};
+      if (!mensual.length && !evaluaciones.length) {
+        return `
+          <div class="section">
+            <div class="section-head"><div class="section-title"><i data-lucide="message-square-text"></i>NPS</div></div>
+            <div class="empty">Sin evaluaciones NPS detalladas para este cliente.</div>
+          </div>
+        `;
+      }
+      return `
+        <div class="section">
+          <div class="section-head"><div class="section-title"><i data-lucide="message-square-text"></i>NPS detallado</div></div>
+          <div class="metric-grid">
+            ${metric("Respuestas", num(resumen.respuestas || 0))}
+            ${metric("NPS logistico", numCard(resumen.nps_logistico_indice), npsColor(resumen.nps_logistico_indice))}
+            ${metric("NPS general", numCard(resumen.nps_indice), npsColor(resumen.nps_indice))}
+            ${metric("Delivery", `${num(resumen.delivery_respuestas || 0)} | ${numCard(resumen.delivery_nps_indice)}`, npsColor(resumen.delivery_nps_indice))}
+            ${metric("General", `${num(resumen.general_respuestas || 0)} | ${numCard(resumen.general_nps_indice)}`, npsColor(resumen.general_nps_indice))}
+          </div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr>${thHelp("Periodo")}${thHelp("Respuestas", "num")}${thHelp("Score NPS prom.", "num")}${thHelp("Promotores", "num")}${thHelp("Pasivos", "num")}${thHelp("Detractores", "num")}${thHelp("NPS", "num")}${thHelp("Delivery", "num")}${thHelp("General", "num")}</tr></thead>
+              <tbody>${mensual.map((row) => `
+                <tr>
+                  <td>${periodLabel(row)}</td>
+                  <td class="num">${num(row.respuestas)}</td>
+                  <td class="num">${num(row.score_promedio, 2)}</td>
+                  <td class="num">${num(row.promotores)}</td>
+                  <td class="num">${num(row.pasivos)}</td>
+                  <td class="num">${num(row.detractores)}</td>
+                  <td class="num" style="color:${npsColor(row.nps_indice)}">${num(row.nps_indice, 2)}</td>
+                  <td class="num" style="color:${npsColor(row.delivery_nps_indice)}">${num(row.delivery_nps_indice, 2)}</td>
+                  <td class="num" style="color:${npsColor(row.general_nps_indice)}">${num(row.general_nps_indice, 2)}</td>
+                </tr>
+              `).join("")}</tbody>
+            </table>
+          </div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr>${thHelp("Fecha")}${thHelp("Score", "num")}${thHelp("Categoria")}${thHelp("Drivers / subdrivers")}${thHelp("Comentario")}</tr></thead>
+              <tbody>${evaluaciones.map((row) => `
+                <tr>
+                  <td>${esc(String(row.fecha_encuesta || "").slice(0, 16))}</td>
+                  <td class="num">${num(row.score, 0)}</td>
+                  <td><span class="badge ${row.categoria_nps === "Promoter" ? "b-ganador" : row.categoria_nps === "Passive" ? "b-basico" : "b-bajas"}">${esc(row.categoria_nps || "-")}</span></td>
+                  <td style="white-space:normal;min-width:260px;">${renderDriverList(row.drivers)}</td>
+                  <td style="white-space:normal;min-width:220px;">${esc(row.comentario || "-")}</td>
+                </tr>
+              `).join("")}</tbody>
+            </table>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderDrawer(data, npsData = null) {
       $("drawerTitle").textContent = data.cliente || "Cliente";
       $("drawerSub").textContent = data.descripcion_cliente || "";
+      const exportClient = encodeURIComponent(data.cliente || "");
+      if ($("clientExportXlsx")) $("clientExportXlsx").href = `/api/segmentacion/cliente/${exportClient}/export?formato=xlsx`;
+      if ($("clientExportPdf")) $("clientExportPdf").href = `/api/segmentacion/cliente/${exportClient}/export?formato=pdf`;
+      const cmp = salesComparison(data);
+      const realGrowth = growthPct(cmp.current, cmp.previousAdjusted);
+      const nominalGrowth = growthPct(cmp.current, cmp.previous);
+      const realDetail = cmp.previousAdjusted !== null
+        ? comparisonDetail(cmp.previousAdjusted, cmp.current, moneyCard, "Ant. IPC", "Act.")
+        : salesDetail(data, false);
       const dims = [
         ["Negocio", data.dim_negocio, 35],
         ["Productividad", data.dim_productividad, 20],
@@ -2087,6 +3677,7 @@
         <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
           <span class="badge ${badgeClass(data.cluster_dpo)}">${esc(clusterLabel(data.cluster_dpo) || "-")}</span>
           <span class="badge ${badgeClass(data.subcluster_logistico)}">${esc(data.subcluster_logistico || "Estandar")}</span>
+          ${autoBadge(data)}
           <div style="margin-left:auto;min-width:160px;">${scoreBar(data.score_total)}</div>
         </div>
         ${data.alerta_operativa ? `<div class="note" style="border-color:#ffc9c2;background:#fff4f2;color:var(--red);">${esc(data.alerta_operativa)}</div>` : ""}
@@ -2096,32 +3687,41 @@
             ${dims.map(([label, value, max]) => {
               const val = Number(value || 0);
               const width = Math.max(0, Math.min(100, val / max * 100));
-              return `<div class="dimension-row"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%;background:${scoreColor(width)}"></div></div><strong class="num">${num(val, 1)}</strong></div>`;
+              return `<div class="dimension-row"><span>${label}</span><div class="track"><div class="fill" style="width:${width}%;background:${scoreColor(width)}"></div></div><strong class="num">${num(val, 2)}</strong></div>`;
             }).join("")}
           </div>
         </div>
         <div class="metric-grid">
-          ${metric("Venta YTD", money(data.venta_ytd))}
-          ${metric("Crecimiento", pct(data.crecimiento_pct), Number(data.crecimiento_pct || 0) >= 0 ? "var(--green)" : "var(--red)")}
-          ${metric("HL", num(data.hl_ytd, 1))}
-          ${metric("Bultos", num(data.bultos_ytd, 1))}
+          ${metric("Venta actual", moneyCard(cmp.current), "var(--blue)", salesDetail(data, true))}
+          ${metric("Venta anterior", moneyCard(cmp.previous))}
+          ${metric("Venta ant. IPC", cmp.previousAdjusted === null ? "Sin IPC" : moneyCard(cmp.previousAdjusted))}
+          ${metric("Crec. real", realGrowth === null ? "Sin base" : pctCard(realGrowth), realGrowth === null ? "var(--muted)" : realGrowth >= 0 ? "var(--green)" : "var(--red)", realDetail)}
+          ${metric("Crec. nominal", nominalGrowth === null ? "Sin base" : pctCard(nominalGrowth), nominalGrowth === null ? "var(--muted)" : nominalGrowth >= 0 ? "var(--green)" : "var(--red)", comparisonDetail(cmp.previous, cmp.current, moneyCard, "Ant.", "Act."))}
+          ${metric("Factor IPC", data.inflacion_factor ? numCard(data.inflacion_factor) : "Sin IPC")}
+          ${metric("HL", numCard(data.hl_ytd))}
+          ${metric("Bultos", numCard(data.bultos_ytd))}
           ${metric("Pedidos", num(data.pedidos_ytd))}
-          ${metric("Drop size", num(data.dropsize_bultos_ytd, 1))}
-          ${metric("Costo logistico", money(data.costo_logistico_total))}
-          ${metric("Costo / venta", pct(data.ratio_costo_logistico_pct))}
-          ${metric("Rechazo", pct(data.pct_rechazo_pedidos))}
-          ${metric("RMD", pct(data.rmd_valor))}
-          ${metric("OTIF", pct(data.otif_valor), Number(data.otif_valor || 0) >= 90 ? "var(--green)" : "var(--amber)")}
-          ${metric("Margen proxy", money(data.margen_logistico_proxy), Number(data.margen_logistico_proxy || 0) >= 0 ? "var(--green)" : "var(--red)")}
+          ${metric("Drop size", numCard(data.dropsize_bultos_ytd))}
+          ${metric("Autoelevador", hasAutoelevador(data) ? "Si" : "No", hasAutoelevador(data) ? "var(--green)" : "var(--muted)")}
+          ${metric("Costo logistico", moneyCard(data.costo_logistico_total))}
+          ${metric("Costo / venta", pctCard(data.ratio_costo_logistico_pct))}
+          ${metric("Rechazo pedidos", pctCard(data.pct_rechazo_pedidos))}
+          ${metric("Rechazo HL", pctCard(data.pct_rechazo_hl))}
+          ${metric("HL rechazado", numCard(data.hl_rechazado_ytd))}
+          ${metric("RMD", rmdText(data.rmd_valor), rmdColor(data.rmd_valor))}
+          ${metric("OTIF", pctCard(data.otif_valor), Number(data.otif_valor || 0) >= 90 ? "var(--green)" : "var(--amber)")}
+          ${metric("NPS", numCard(data.nps_valor), npsColor(data.nps_valor))}
+          ${metric("Margen proxy", moneyCard(data.margen_logistico_proxy), Number(data.margen_logistico_proxy || 0) >= 0 ? "var(--green)" : "var(--red)")}
         </div>
         <div class="note"><strong>Plan de servicio</strong><br>${esc(data.plan_servicio || "-")}</div>
         <div class="note"><strong>Accion prioritaria</strong><br>${esc(data.accion_prioritaria || "-")}</div>
+        ${renderNpsDetail(npsData)}
       `;
       if (window.lucide) lucide.createIcons();
     }
 
-    function metric(label, value, color = "var(--text)") {
-      return `<div class="metric"><label>${esc(label)}</label><strong style="color:${color}">${value}</strong></div>`;
+    function metric(label, value, color = "var(--text)", detail = "") {
+      return `<div class="metric"><label>${helpLabel(label)}</label><strong style="color:${color}">${value}</strong>${detail || ""}</div>`;
     }
 
     function closeDrawer() {
@@ -2133,29 +3733,59 @@
       state.activeTab = tab;
       document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.tab === tab));
       document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${tab}`));
-      if (tab === "settings") renderSettings();
-      if (tab === "data") renderData();
-      if (tab === "evolution") loadEvolution();
+      renderTabContent(tab);
       if (tab === "territory") setTimeout(() => state.map && state.map.invalidateSize(), 40);
-      if (window.lucide) lucide.createIcons();
+      loadSecondaryData(state.loadSeq, tab);
+    }
+
+    function on(id, eventName, handler) {
+      const el = $(id);
+      if (el) el.addEventListener(eventName, handler);
     }
 
     function bindEvents() {
       document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
-      ["branchFilter", "clusterFilter"].forEach((id) => $(id).addEventListener("change", loadData));
-      ["sortFilter", "searchInput"].forEach((id) => $(id).addEventListener("input", () => renderClients()));
-      ["mapWeight", "mapLimit"].forEach((id) => $(id).addEventListener("change", loadData));
-      $("mapLayer").addEventListener("change", renderMap);
-      $("priorityFilter").addEventListener("change", renderService);
-      $("alertFilter").addEventListener("change", renderService);
-      $("yearFilter").addEventListener("change", loadEvolution);
-      $("reloadBtn").addEventListener("click", loadData);
-      $("recalcBtn").addEventListener("click", handleRecalculate);
-      if ($("backfillHistoryBtn")) $("backfillHistoryBtn").addEventListener("click", backfillHistory);
-      $("autoUploadBtn").addEventListener("click", uploadAutoelevador);
-      if ($("serviceUploadBtn")) $("serviceUploadBtn").addEventListener("click", uploadServicio);
-      $("drawerOverlay").addEventListener("click", closeDrawer);
-      $("closeDrawerBtn").addEventListener("click", closeDrawer);
+      on("branchFilter", "change", () => {
+        renderFilterDependentViews();
+        scheduleLoadData();
+      });
+      on("clusterFilter", "change", () => {
+        renderFilterDependentViews();
+      });
+      on("sortFilter", "change", () => {
+        safeRender("opciones cliente", renderClientCardOptions);
+        safeRender("clientes", renderClients);
+        safeRender("plan", renderService);
+        safeRender("costos", renderCosts);
+      });
+      on("searchInput", "input", () => {
+        safeRender("opciones cliente", renderClientCardOptions);
+        safeRender("clientes", renderClients);
+        safeRender("plan", renderService);
+        safeRender("costos", renderCosts);
+      });
+      ["mapWeight", "mapLimit"].forEach((id) => on(id, "change", () => {
+        safeRender("territorio", renderTerritory);
+        scheduleLoadData();
+      }));
+      on("mapLayer", "change", () => safeRender("mapa", renderMap));
+      on("priorityFilter", "change", () => safeRender("plan", renderService));
+      on("alertFilter", "change", () => safeRender("plan", renderService));
+      on("yearFilter", "change", loadEvolution);
+      on("reloadBtn", "click", loadData);
+      on("recalcBtn", "click", handleRecalculate);
+      on("clientCardBtn", "click", buildClientServiceCard);
+      if ($("clientCardInput")) $("clientCardInput").addEventListener("keydown", (event) => {
+        if (event.key === "Enter") buildClientServiceCard();
+      });
+      on("backfillHistoryBtn", "click", backfillHistory);
+      on("autoUploadBtn", "click", uploadAutoelevador);
+      on("serviceUploadBtn", "click", uploadServicio);
+      on("serviceHistoryUploadBtn", "click", uploadServicioHistorico);
+      on("inflationUploadBtn", "click", uploadInflacion);
+      on("npsDetailUploadBtn", "click", uploadNpsDetallado);
+      on("drawerOverlay", "click", closeDrawer);
+      on("closeDrawerBtn", "click", closeDrawer);
     }
 
     document.addEventListener("DOMContentLoaded", () => {

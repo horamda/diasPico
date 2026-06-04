@@ -7,6 +7,12 @@ from app.utils.coerce import to_date
 
 bp = Blueprint('eventos', __name__, url_prefix='/api/eventos')
 
+
+def _clear_dashboard_caches():
+    cache_svc.clear('picos:')
+    cache_svc.clear('portal:')
+
+
 _DDL = """
     CREATE TABLE IF NOT EXISTS eventos_especiales (
         id          SERIAL PRIMARY KEY,
@@ -85,7 +91,7 @@ def agregar():
                 RETURNING id
             """, (fd, sucursal, desc))
             row = cur.fetchone()
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'ok': True, 'id': row[0]})
 
 
@@ -94,5 +100,5 @@ def eliminar(evento_id: int):
     with pg_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM eventos_especiales WHERE id = %s", (evento_id,))
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'ok': True})

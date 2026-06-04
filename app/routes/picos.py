@@ -10,6 +10,11 @@ def _cached(key: str, factory):
     return cache_svc.get_or_set(f'picos:{key}:{params}', factory, ttl_seconds=120)
 
 
+def _clear_dashboard_caches():
+    cache_svc.clear('picos:')
+    cache_svc.clear('portal:')
+
+
 @bp.get('/calendario')
 def calendario():
     sucursal = request.args.get('sucursal', 'TODAS')
@@ -154,7 +159,34 @@ def ausentismo_mensual_post():
     data = request.get_json(force=True) or {}
     try:
         rows = pico_svc.guardar_ausentismo_mensual(data)
+        _clear_dashboard_caches()
         return jsonify({'ok': True, 'meses': rows})
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.post('/ausentismo-mensual/import')
+def ausentismo_mensual_import():
+    try:
+        if request.files.get('file'):
+            file = request.files['file']
+            raw = file.read()
+            try:
+                text = raw.decode('utf-8-sig')
+            except UnicodeDecodeError:
+                text = raw.decode('latin-1')
+            data = {
+                'empresa_id': request.form.get('empresa_id', '1'),
+                'sucursal_id': request.form.get('sucursal_id', request.form.get('sucursal', 'TODAS')),
+                'texto': text,
+            }
+        else:
+            data = request.get_json(force=True) or {}
+        result = pico_svc.importar_ausentismo_historico(data)
+        _clear_dashboard_caches()
+        return jsonify({'ok': True, **result})
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
@@ -189,6 +221,7 @@ def periodos_criticos_post():
     data = request.get_json(force=True) or {}
     try:
         saved = pico_svc.guardar_periodo_critico(data)
+        _clear_dashboard_caches()
         return jsonify(saved), 201
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
@@ -200,6 +233,7 @@ def periodos_criticos_post():
 def periodos_criticos_delete(periodo_id: int):
     try:
         pico_svc.eliminar_periodo_critico(periodo_id)
+        _clear_dashboard_caches()
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500

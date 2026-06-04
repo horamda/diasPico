@@ -76,6 +76,39 @@ def test_get_autoelevador_resumen_smoke(client, monkeypatch):
     assert "clientes_totales" in payload["data"]
 
 
+def test_get_reporte_costos_atencion_smoke(client, monkeypatch):
+    captured = {}
+
+    def fake_report(**kwargs):
+        captured.update(kwargs)
+        return {
+            "items": [],
+            "excluidos_margen_negativo": [],
+            "resumen": {"clientes_evaluados": 0},
+            "umbrales": {},
+        }
+
+    monkeypatch.setattr(segmentacion.svc, "get_reporte_costos_atencion", fake_report)
+
+    res = client.get(
+        "/api/segmentacion/reporte/costos-atencion"
+        "?sucursal=1&cluster=Ganador&limit=25&incluir_outliers=1&min_venta=1000"
+    )
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["items"] == []
+    assert payload["data"]["excluidos_margen_negativo"] == []
+    assert captured == {
+        "sucursal": "1",
+        "cluster": "Ganador",
+        "limit": 25,
+        "incluir_outliers": True,
+        "min_venta": 1000.0,
+    }
+
+
 def test_get_resumen_activos_localidad_smoke(client, monkeypatch):
     sample = [
         {
@@ -96,6 +129,218 @@ def test_get_resumen_activos_localidad_smoke(client, monkeypatch):
     assert payload["ok"] is True
     assert isinstance(payload["data"], list)
     assert payload["data"][0]["clientes_activos_localidad"] == 12
+
+
+def test_get_calidad_datos_smoke(client, monkeypatch):
+    sample = {
+        "estado_general": "advertencia",
+        "alertas": ["Servicio historico: revisar cobertura"],
+        "resumen": {"clientes_ventas": 10, "fuentes_advertencia": 1},
+        "fuentes": [
+            {
+                "id": "servicio_historico",
+                "nombre": "Historico OTIF / RMD / NPS",
+                "estado": "advertencia",
+                "valor": 4,
+                "cobertura_pct": 40.0,
+            }
+        ],
+        "versiones": [],
+    }
+    monkeypatch.setattr(segmentacion.svc, "get_calidad_datos", lambda: sample)
+
+    res = client.get("/api/segmentacion/calidad-datos")
+    assert res.status_code == 200
+
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["estado_general"] == "advertencia"
+    assert payload["data"]["fuentes"][0]["id"] == "servicio_historico"
+
+
+def test_get_plantilla_servicio_vigente_rmd(client):
+    res = client.get("/api/segmentacion/plantillas/servicio/rmd/vigente")
+
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["Content-Type"]
+    assert "plantilla_rmd_vigente.csv" in res.headers["Content-Disposition"]
+    text = res.data.decode("utf-8-sig")
+    assert text.splitlines()[0] == "cliente;RMD;fecha_rmd"
+    assert segmentacion._parse_servicio_csv(text)[0]["rmd_valor"] == 4.5
+
+
+def test_get_plantilla_servicio_historico_otif(client):
+    res = client.get("/api/segmentacion/plantillas/servicio/otif/historico")
+
+    assert res.status_code == 200
+    assert "plantilla_otif_historico.csv" in res.headers["Content-Disposition"]
+    text = res.data.decode("utf-8-sig")
+    assert text.splitlines()[0] == "cliente;anio;mes;OTIF;fecha_otif"
+    rows = segmentacion._parse_servicio_historico_csv(text)
+    assert rows[0]["periodo_anio"] == 2025
+    assert rows[0]["otif_valor"] == 91.0
+
+
+def test_get_plantilla_inflacion(client):
+    res = client.get("/api/segmentacion/plantillas/inflacion")
+
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["Content-Type"]
+    assert "plantilla_ipc_inflacion_2025_2026.csv" in res.headers["Content-Disposition"]
+    text = res.data.decode("utf-8-sig")
+    assert text.splitlines()[0] == "anio;mes;inflacion_pct"
+    assert "2025;1;2,211048" in text
+    assert "2026;4;2,58218" in text
+
+
+def test_parse_inflacion_csv_acepta_mes_texto_y_coma_decimal():
+    text = "anio;mes;inflacion_pct;indice_ipc\n2025;Enero;2,211048;7864,13\n"
+
+    rows = segmentacion._parse_inflacion_csv(text)
+
+    assert rows == [{
+        "periodo_anio": 2025,
+        "periodo_mes": 1,
+        "inflacion_pct": 2.211048,
+        "indice_ipc": 7864.13,
+    }]
+
+
+def test_parse_servicio_csv_descarta_rmd_fuera_de_escala():
+    text = "cliente;RMD;OTIF\n10001;91;96,5%\n"
+
+    rows = segmentacion._parse_servicio_csv(text)
+
+    assert rows == [{"cliente": "10001", "otif_valor": 96.5}]
+
+
+def test_get_inflacion_mensual_smoke(client, monkeypatch):
+    sample = [
+        {
+            "periodo_anio": 2026,
+            "periodo_mes": 4,
+            "inflacion_pct": 2.582180,
+            "fuente": "Datos Argentina / INDEC IPC nacional hasta abril 2026",
+        }
+    ]
+    monkeypatch.setattr(segmentacion.svc, "get_inflacion_mensual", lambda limit=36: sample)
+
+    res = client.get("/api/segmentacion/inflacion?limit=12")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"] == sample
+    assert payload["total"] == 1
+
+
+def test_post_inflacion_import_csv_actualiza_y_refresca_cache(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows, fuente="ipc_upload"):
+        captured["rows"] = rows
+        captured["fuente"] = fuente
+        return {"importados": len(rows), "periodos": len(rows), "desde": "2026-04", "hasta": "2026-04"}
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_inflacion_mensual", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 2, "usuario": user})
+
+    csv_body = "anio;mes;inflacion_pct\n2026;Abril;2,58218\n".encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "ipc.csv"), "fuente": "pytest_ipc"}
+    res = client.post("/api/segmentacion/inflacion/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["importados"] == 1
+    assert payload["data"]["segmentacion_cache"] == {"filas": 2, "usuario": "upload_ipc"}
+    assert captured["fuente"] == "pytest_ipc"
+    assert captured["rows"] == [{"periodo_anio": 2026, "periodo_mes": 4, "inflacion_pct": 2.58218}]
+
+
+def test_get_plantilla_nps_detallado(client):
+    res = client.get("/api/segmentacion/plantillas/nps-detallado")
+
+    assert res.status_code == 200
+    assert "text/csv" in res.headers["Content-Type"]
+    assert "plantilla_nps_detallado.csv" in res.headers["Content-Disposition"]
+    text = res.data.decode("utf-8-sig")
+    rows = segmentacion._parse_nps_detallado_csv(text)
+    assert rows[0]["cliente"] == "100001"
+    assert rows[0]["driver_primario"] == "Experiencia de entrega"
+
+
+def test_parse_nps_detallado_csv_deduce_id_corto_y_fecha():
+    text = (
+        "COD CLIENTE DIST;FECHA ENC;SCORE;DRIVER PRIMARIO;DRIVER SECUNDARIO;COMENTARIO\n"
+        "13692800001476;2026-05-01 10:00:00;10;Experiencia de entrega;Entrega en la fecha acordada;ok\n"
+    )
+
+    rows = segmentacion._parse_nps_detallado_csv(text)
+
+    assert rows[0]["cliente"] == "1476"
+    assert rows[0]["cod_cliente_distribuidor"] == "13692800001476"
+    assert rows[0]["fecha_encuesta"] == "2026-05-01 10:00:00"
+    assert rows[0]["score"] == 10.0
+    assert rows[0]["driver_primario"] == "Experiencia de entrega"
+    assert rows[0]["driver_secundario"] == "Entrega en la fecha acordada"
+    assert rows[0]["comentario"] == "ok"
+
+
+def test_post_nps_detallado_import_csv(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows, fuente="nps_detallado"):
+        captured["rows"] = rows
+        captured["fuente"] = fuente
+        return {
+            "filas": len(rows),
+            "encuestas_importadas": 1,
+            "drivers_importados": 2,
+            "descartados": 0,
+            "clientes": 1,
+            "periodos": 1,
+            "mensual_actualizado": 1,
+            "historico_actualizado": 1,
+            "vigentes_actualizados": 1,
+        }
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_nps_detallado", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 1, "usuario": user})
+    csv_body = (
+        "id_cliente;FECHA ENC;SCORE;DRIVER PRIMARIO;DRIVER SECUNDARIO\n"
+        "10001;2026-05-01 10:00:00;10;Experiencia de entrega;Entrega en la fecha acordada\n"
+        "10001;2026-05-01 10:00:00;10;Experiencia de entrega;Recibo mis pedidos completos\n"
+    ).encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "nps.csv"), "fuente": "pytest_nps"}
+
+    res = client.post("/api/segmentacion/nps-detallado/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["encuestas_importadas"] == 1
+    assert payload["data"]["drivers_importados"] == 2
+    assert payload["data"]["segmentacion_cache"] == {"filas": 1, "usuario": "upload_nps_detallado"}
+    assert captured["fuente"] == "pytest_nps"
+    assert captured["rows"][0]["cliente"] == "10001"
+    assert captured["rows"][0]["driver_secundario"] == "Entrega en la fecha acordada"
+
+
+def test_get_cliente_nps_smoke(client, monkeypatch):
+    sample = {
+        "resumen": {"respuestas": 2, "nps_indice": 50.0},
+        "mensual": [{"periodo_anio": 2026, "periodo_mes": 5, "respuestas": 2}],
+        "evaluaciones": [{"score": 10, "drivers": []}],
+    }
+    monkeypatch.setattr(segmentacion.svc, "get_cliente_nps_detalle", lambda cliente, limit=200: sample)
+
+    res = client.get("/api/segmentacion/cliente/10001/nps?limit=50")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["resumen"]["respuestas"] == 2
 
 
 def test_post_historico_recalcular_dispara_servicio(client, monkeypatch):
@@ -225,8 +470,8 @@ def test_post_servicio_import_csv_carga_otif_rmd_nps(client, monkeypatch):
 
     csv_body = (
         "cliente;OTIF;RMD;NPS;fecha\n"
-        "10001;96,5%;91;8;31/05/2026\n"
-        "10055;84;72;6;2026-05-31\n"
+        "10001;96,5%;4,5;8;31/05/2026\n"
+        "10055;84;3,2;6;2026-05-31\n"
     ).encode("utf-8")
     data = {"file": (io.BytesIO(csv_body), "servicio.csv")}
 
@@ -242,7 +487,7 @@ def test_post_servicio_import_csv_carga_otif_rmd_nps(client, monkeypatch):
             "cliente": "10001",
             "otif_valor": 96.5,
             "otif_fecha": "2026-05-31",
-            "rmd_valor": 91.0,
+            "rmd_valor": 4.5,
             "rmd_fecha": "2026-05-31",
             "nps_valor": 8.0,
             "nps_fecha": "2026-05-31",
@@ -251,11 +496,84 @@ def test_post_servicio_import_csv_carga_otif_rmd_nps(client, monkeypatch):
             "cliente": "10055",
             "otif_valor": 84.0,
             "otif_fecha": "2026-05-31",
-            "rmd_valor": 72.0,
+            "rmd_valor": 3.2,
             "rmd_fecha": "2026-05-31",
             "nps_valor": 6.0,
             "nps_fecha": "2026-05-31",
         },
+    ]
+
+
+def test_post_servicio_historico_import_csv_formato_ancho(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows, fuente="import"):
+        captured["rows"] = rows
+        captured["fuente"] = fuente
+        return {
+            "importados": len(rows),
+            "clientes": 1,
+            "periodos": 3,
+            "vigentes_actualizados": 1,
+        }
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_servicio_historico", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 2, "usuario": user})
+
+    csv_body = (
+        "cliente;RMD 2025;RMD 2026;OTIF May 2026\n"
+        "10001;4,1;4,5;96,5%\n"
+    ).encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "servicio_historico.csv")}
+
+    res = client.post("/api/segmentacion/servicio/historico/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["importados"] == 3
+    assert payload["data"]["vigentes_actualizados"] == 1
+    assert captured["fuente"] == "csv_historico_upload"
+    assert captured["rows"] == [
+        {"cliente": "10001", "periodo_anio": 2025, "periodo_mes": 0, "rmd_valor": 4.1},
+        {"cliente": "10001", "periodo_anio": 2026, "periodo_mes": 0, "rmd_valor": 4.5},
+        {"cliente": "10001", "periodo_anio": 2026, "periodo_mes": 5, "otif_valor": 96.5},
+    ]
+    assert payload["data"]["segmentacion_cache"] == {
+        "filas": 2,
+        "usuario": "upload_metricas_servicio_historico",
+    }
+
+
+def test_post_servicio_historico_import_csv_formato_largo(client, monkeypatch):
+    captured = {}
+
+    def fake_bulk(rows, fuente="import"):
+        captured["rows"] = rows
+        captured["fuente"] = fuente
+        return {
+            "importados": len(rows),
+            "clientes": 2,
+            "periodos": 1,
+            "vigentes_actualizados": 2,
+        }
+
+    monkeypatch.setattr(segmentacion.svc, "bulk_upsert_servicio_historico", fake_bulk)
+    monkeypatch.setattr(segmentacion.svc, "refresh_segmentacion_cache", lambda user: {"filas": 2, "usuario": user})
+
+    csv_body = (
+        "cliente;anio;mes;RMD;OTIF\n"
+        "10001;2025;5;4,2;94\n"
+        "10055;2025;5;3,8;82\n"
+    ).encode("utf-8")
+    data = {"file": (io.BytesIO(csv_body), "servicio_historico.csv")}
+
+    res = client.post("/api/segmentacion/servicio/historico/import", data=data, content_type="multipart/form-data")
+
+    assert res.status_code == 200
+    assert captured["rows"] == [
+        {"cliente": "10001", "periodo_anio": 2025, "periodo_mes": 5, "otif_valor": 94.0, "rmd_valor": 4.2},
+        {"cliente": "10055", "periodo_anio": 2025, "periodo_mes": 5, "otif_valor": 82.0, "rmd_valor": 3.8},
     ]
 
 
@@ -292,3 +610,65 @@ def test_get_sop_pdf_smoke(client, monkeypatch):
     assert res.status_code == 200
     assert res.mimetype == "application/pdf"
     assert res.data.startswith(b"%PDF")
+
+
+def test_get_cliente_export_pdf_smoke(client, monkeypatch):
+    def fake_export(cliente, formato="xlsx"):
+        assert cliente == "10001"
+        assert formato == "pdf"
+        return io.BytesIO(b"%PDF-1.4\n%Cliente\n"), "reporte_cliente_10001.pdf", "application/pdf"
+
+    monkeypatch.setattr(segmentacion.svc, "export_cliente_reporte", fake_export)
+
+    res = client.get("/api/segmentacion/cliente/10001/export?formato=pdf")
+    assert res.status_code == 200
+    assert res.mimetype == "application/pdf"
+    assert res.data.startswith(b"%PDF")
+
+
+def test_get_cliente_export_xlsx_smoke(client, monkeypatch):
+    def fake_export(cliente, formato="xlsx"):
+        assert cliente == "10001"
+        assert formato == "xlsx"
+        return (
+            io.BytesIO(b"PK\x03\x04xlsx"),
+            "reporte_cliente_10001.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    monkeypatch.setattr(segmentacion.svc, "export_cliente_reporte", fake_export)
+
+    res = client.get("/api/segmentacion/cliente/10001/export?formato=xlsx")
+    assert res.status_code == 200
+    assert res.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert res.data.startswith(b"PK")
+
+
+def test_get_clientes_export_xlsx_smoke(client, monkeypatch):
+    captured = {}
+
+    def fake_export(**kwargs):
+        captured.update(kwargs)
+        return (
+            io.BytesIO(b"PK\x03\x04clientes"),
+            "cartera_clientes.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    monkeypatch.setattr(segmentacion.svc, "export_clientes_excel", fake_export)
+
+    res = client.get(
+        "/api/segmentacion/clientes/export"
+        "?sucursal=1&cluster=Ganador&q=plata&sort=score_total&limit=123"
+    )
+
+    assert res.status_code == 200
+    assert res.mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert res.data.startswith(b"PK")
+    assert captured == {
+        "sucursal": "1",
+        "cluster": "Ganador",
+        "q": "plata",
+        "sort": "score_total",
+        "limit": 123,
+    }

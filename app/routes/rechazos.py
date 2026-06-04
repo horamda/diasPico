@@ -6,6 +6,11 @@ from app.services import cache_svc, rechazos_svc
 bp = Blueprint('rechazos', __name__, url_prefix='/api/rechazos')
 
 
+def _clear_dashboard_caches():
+    cache_svc.clear('picos:')
+    cache_svc.clear('portal:')
+
+
 @bp.get('')
 def listar():
     try:
@@ -18,7 +23,7 @@ def listar():
 def sync():
     try:
         result = rechazos_svc.sync_from_detalle()
-        cache_svc.clear('picos:')
+        _clear_dashboard_caches()
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -31,7 +36,7 @@ def update(motivo_key):
         result = rechazos_svc.update_tomar(motivo_key, bool(data.get('tomar', False)))
         if result.get('updated', 0) == 0:
             return jsonify({'error': 'Motivo no encontrado'}), 404
-        cache_svc.clear('picos:')
+        _clear_dashboard_caches()
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500

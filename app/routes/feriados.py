@@ -7,6 +7,11 @@ from app.utils.coerce import to_date
 bp = Blueprint('feriados', __name__, url_prefix='/api/feriados')
 
 
+def _clear_dashboard_caches():
+    cache_svc.clear('picos:')
+    cache_svc.clear('portal:')
+
+
 @bp.get('', strict_slashes=False)
 def listar():
     anio = request.args.get('anio', date.today().year, type=int)
@@ -27,7 +32,7 @@ def sync():
         return jsonify({'error': 'sheets_url requerida'}), 400
     try:
         result = sheets_svc.sync_feriados(url)
-        cache_svc.clear('picos:')
+        _clear_dashboard_caches()
         return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 503
@@ -51,7 +56,7 @@ def agregar():
                     descripcion = EXCLUDED.descripcion,
                     tipo        = EXCLUDED.tipo
             """, (fd, data.get('descripcion', '')[:200], data.get('tipo', 'nacional')[:50]))
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'ok': True})
 
 
@@ -65,7 +70,7 @@ def limpiar_mes(anio: int, mes: int):
                   AND EXTRACT(MONTH FROM fecha) = %s
             """, (anio, mes))
             deleted = cur.rowcount
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'deleted': deleted})
 
 
@@ -75,7 +80,7 @@ def limpiar_anio(anio: int):
         with conn.cursor() as cur:
             cur.execute("DELETE FROM feriados WHERE EXTRACT(YEAR FROM fecha) = %s", (anio,))
             deleted = cur.rowcount
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'deleted': deleted})
 
 
@@ -87,5 +92,5 @@ def eliminar(fecha_str: str):
     with pg_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM feriados WHERE fecha = %s", (fd,))
-    cache_svc.clear('picos:')
+    _clear_dashboard_caches()
     return jsonify({'ok': True})

@@ -5,6 +5,11 @@ from app.services import cache_svc, kpi_objetivos_svc
 bp = Blueprint('kpi_objetivos', __name__, url_prefix='/api/kpi-objetivos')
 
 
+def _clear_dashboard_caches():
+    cache_svc.clear('picos:')
+    cache_svc.clear('portal:')
+
+
 @bp.get('/indicadores')
 def indicadores():
     return jsonify(kpi_objetivos_svc.list_indicadores())
@@ -24,7 +29,7 @@ def guardar():
     data = request.get_json(force=True) or {}
     try:
         result = kpi_objetivos_svc.save_objetivo(data)
-        cache_svc.clear('picos:')
+        _clear_dashboard_caches()
         return jsonify(result)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
@@ -36,7 +41,7 @@ def guardar():
 def eliminar(objetivo_id):
     try:
         result = kpi_objetivos_svc.delete_objetivo(objetivo_id)
-        cache_svc.clear('picos:')
+        _clear_dashboard_caches()
         return jsonify(result)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400

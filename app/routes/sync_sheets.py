@@ -3,6 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, jsonify, request
 
 from flask import current_app
+from app.services import cache_svc
 from app.services import sync_sheets_service as svc
 from app.services.sheets_svc import _fetch_rows, _split_sheet_urls
 from app.repositories import operacion_camiones_repository as op_repo
@@ -23,7 +24,13 @@ def _json_call(fn, ok_status: int = 200):
 def sync_sheets_operativo():
     data = request.get_json(force=True) or {}
     empresa_id = str(data.get("empresa_id") or "1")
-    return _json_call(lambda: svc.sync_operacion_camiones(empresa_id))
+    def _run():
+        result = svc.sync_operacion_camiones(empresa_id)
+        cache_svc.clear("picos:")
+        cache_svc.clear("portal:")
+        cache_svc.clear("planificacion_picos:")
+        return result
+    return _json_call(_run)
 
 
 @bp.get("/debug-sheets")

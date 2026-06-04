@@ -173,7 +173,11 @@ def configuracion_get():
 @bp.post("/api/planificacion_picos/configuracion")
 def configuracion_post():
     data = request.get_json(force=True) or {}
-    return _json_call(lambda: svc.repo.guardar_configuracion(data))
+    def _run():
+        result = svc.repo.guardar_configuracion(data)
+        cache_svc.clear("planificacion_picos:")
+        return result
+    return _json_call(_run)
 
 
 @bp.get("/api/planificacion_picos/resumen")
@@ -230,7 +234,11 @@ def capacidad():
 @bp.post("/api/planificacion_picos/capacidad")
 def guardar_capacidad():
     data = request.get_json(force=True) or {}
-    return _json_call(lambda: svc.repo.guardar_capacidad(data))
+    def _run():
+        result = svc.repo.guardar_capacidad(data)
+        cache_svc.clear("planificacion_picos:")
+        return result
+    return _json_call(_run)
 
 
 @bp.get("/api/planificacion_picos/simulador")
@@ -279,7 +287,9 @@ def sync_empleados_sheets():
             raise ValueError("anio y mes requeridos")
         if not url:
             raise ValueError("url del sheet requerida")
-        return svc.sync_empleados_sheets(empresa_id, sucursal_id, anio, mes, url, data.get("recargas_url"))
+        result = svc.sync_empleados_sheets(empresa_id, sucursal_id, anio, mes, url, data.get("recargas_url"))
+        cache_svc.clear("planificacion_picos:")
+        return result
     return _json_call(_run)
 
 
