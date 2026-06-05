@@ -1017,7 +1017,9 @@ SELECT c.sucursal, c.cluster_dpo,
        ROUND(SUM(c.pedidos_ytd)::NUMERIC,0) AS pedidos_total,
        ROUND(AVG(c.pct_rechazo_pedidos)::NUMERIC,2) AS pct_rechazo_prom,
        ROUND(AVG(c.dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
-       ROUND(AVG(c.ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
+       CASE WHEN SUM(c.venta_ytd) > 0
+            THEN ROUND((SUM(c.costo_logistico_total) / SUM(c.venta_ytd) * 100)::NUMERIC,2)
+            ELSE 0 END AS ratio_costo_prom,
        ROUND(AVG(COALESCE(c.crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
        ROUND(AVG(c.rmd_valor)::NUMERIC,2) AS rmd_prom,
        ROUND(AVG(c.otif_valor)::NUMERIC,2) AS otif_prom,
@@ -3897,6 +3899,22 @@ _DPO_CACHE_COLUMNS = (
 )
 _DPO_CACHE_SELECT = ', '.join(_DPO_CACHE_COLUMNS)
 
+_PLAN_DASHBOARD_COLUMNS = (
+    'cliente', 'descripcion_cliente', 'sucursal', 'sucursal_nombre', 'localidad',
+    'autoelevador', 'cliente_refrigerado', 'cluster_dpo', 'subcluster_logistico',
+    'ventas_anio_actual', 'ventas_anio_anterior', 'venta_anio_base', 'venta_base_mismo_per',
+    'venta_ytd', 'hl_ytd', 'bultos_ytd', 'pallets_ytd', 'up_ytd', 'pedidos_ytd',
+    'dropsize_bultos_ytd', 'ticket_promedio_ytd',
+    'pedidos_rechazo_ytd', 'hl_rechazado_ytd', 'pct_rechazo_pedidos', 'pct_rechazo_hl',
+    'crecimiento_pct', 'crecimiento_nominal_pct',
+    'crecimiento_real_pct', 'inflacion_factor', 'nps_valor', 'rmd_valor', 'otif_valor',
+    'costo_entrega', 'costo_almacen', 'costo_logistico_total',
+    'margen_logistico_proxy', 'ratio_costo_logistico_pct',
+    'score_total', 'plan_servicio', 'accion_prioritaria', 'alerta_operativa',
+    'prioridad_gestion',
+)
+_PLAN_DASHBOARD_SELECT = ', '.join(_PLAN_DASHBOARD_COLUMNS)
+
 
 def _dpo_cache_has_rows() -> bool:
     def _load() -> bool:
@@ -4401,6 +4419,7 @@ def _aggregate_light_plan(rows: list[dict], keys: tuple[str, ...]) -> list[dict]
             'pct_rechazo_prom': round((item['pedidos_rechazo_total'] / item['pedidos_total'] * 100), 2) if item['pedidos_total'] else avg(item['_pct_rechazo']),
             'pct_rechazo_hl_prom': round((item['hl_rechazado_total'] / item['hl_total_ytd'] * 100), 2) if item['hl_total_ytd'] else avg(item['_pct_rechazo_hl']),
             'dropsize_prom': avg(item['_dropsize']),
+            'ratio_costo_prom': round((item['costo_logistico_total'] / venta_total * 100), 2) if venta_total else 0.0,
             'crecimiento_prom_pct': avg(item['_crecimiento']),
             'rmd_prom': avg(item['_rmd']),
             'otif_prom': avg(item['_otif']),
@@ -4505,8 +4524,10 @@ def get_plan_servicio(
     solo_alertas: bool = False,
     limit: int = 500,
     offset: int = 0,
+    lite: bool = False,
 ) -> list[dict]:
     ensure_tables()
+    select_cols = _PLAN_DASHBOARD_SELECT if lite else _DPO_CACHE_SELECT
     if _dpo_cache_has_rows():
         conds, params = ['1=1'], {'lim': limit, 'off': offset}
         cluster = _normalize_cluster_filter(cluster)
@@ -4520,7 +4541,7 @@ def get_plan_servicio(
             conds.append('alerta_operativa IS NOT NULL')
         with pg_cursor() as cur:
             cur.execute(
-                f"""SELECT {_DPO_CACHE_SELECT}
+                f"""SELECT {select_cols}
                     FROM seg_cliente_dpo_cache
                     WHERE {' AND '.join(conds)}
                     ORDER BY prioridad_gestion, venta_ytd DESC NULLS LAST
@@ -4539,7 +4560,10 @@ def get_plan_servicio(
                 -float(r.get('venta_ytd') or 0),
             ),
         )
-        return rows[offset:offset + limit]
+        rows = rows[offset:offset + limit]
+        if lite:
+            return [{k: row.get(k) for k in _PLAN_DASHBOARD_COLUMNS} for row in rows]
+        return rows
     conds, params = ['1=1'], {}
     cluster = _normalize_cluster_filter(cluster)
     if sucursal and sucursal != 'TODAS':
@@ -4558,7 +4582,7 @@ def get_plan_servicio(
             with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
                 cur.execute("SET LOCAL statement_timeout = '45000ms'")
                 cur.execute(
-                    f"SELECT * FROM {source} WHERE {where} "
+                    f"SELECT {select_cols if lite else '*'} FROM {source} WHERE {where} "
                     "ORDER BY prioridad_gestion, score_total DESC NULLS LAST "
                     "LIMIT %(lim)s OFFSET %(off)s",
                     params,
@@ -4684,7 +4708,7 @@ def get_reporte_costos_atencion(
     min_venta: float | None = None,
 ) -> dict:
     ensure_tables()
-    limit = max(1, min(int(limit or 80), 500))
+    limit = max(1, min(int(limit or 80), 5000))
     cluster = _normalize_cluster_filter(cluster)
     source = 'seg_cliente_dpo_cache' if _dpo_cache_has_rows() else _plan_source()
 
@@ -4707,8 +4731,14 @@ def get_reporte_costos_atencion(
                     COUNT(*)::INT AS clientes_evaluados,
                     ROUND(SUM(costo_logistico_total)::NUMERIC,2) AS costo_total_evaluado,
                     ROUND(SUM(venta_ytd)::NUMERIC,2) AS venta_total_evaluada,
-                    ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_prom_evaluado,
+                    CASE WHEN SUM(venta_ytd) > 0
+                         THEN ROUND((SUM(costo_logistico_total) / SUM(venta_ytd) * 100)::NUMERIC,2)
+                         ELSE 0 END AS ratio_prom_evaluado,
+                    ROUND((AVG(costo_logistico_total / NULLIF(pedidos_ytd,0)) FILTER (WHERE COALESCE(pedidos_ytd,0) > 0))::NUMERIC,2) AS costo_pdv_prom_evaluado,
+                    percentile_cont(0.50) WITHIN GROUP (ORDER BY ratio_costo_logistico_pct) AS p50_ratio,
                     percentile_cont(0.75) WITHIN GROUP (ORDER BY ratio_costo_logistico_pct) AS p75_ratio,
+                    percentile_cont(0.50) WITHIN GROUP (ORDER BY (costo_logistico_total / NULLIF(pedidos_ytd,0))) FILTER (WHERE COALESCE(pedidos_ytd,0) > 0) AS p50_costo_pdv,
+                    percentile_cont(0.75) WITHIN GROUP (ORDER BY (costo_logistico_total / NULLIF(pedidos_ytd,0))) FILTER (WHERE COALESCE(pedidos_ytd,0) > 0) AS p75_costo_pdv,
                     percentile_cont(0.25) WITHIN GROUP (ORDER BY dropsize_bultos_ytd) AS p25_dropsize,
                     percentile_cont(0.50) WITHIN GROUP (ORDER BY dropsize_bultos_ytd) AS p50_dropsize,
                     percentile_cont(0.75) WITHIN GROUP (ORDER BY pedidos_ytd) AS p75_pedidos,
@@ -4741,7 +4771,10 @@ def get_reporte_costos_atencion(
                 **params,
                 'lim': limit,
                 'min_venta': effective_min_venta,
+                'p50_ratio': umbrales.get('p50_ratio') or 0,
                 'p75_ratio': umbrales.get('p75_ratio') or 0,
+                'p50_costo_pdv': umbrales.get('p50_costo_pdv') or 0,
+                'p75_costo_pdv': umbrales.get('p75_costo_pdv') or 0,
                 'p25_dropsize': umbrales.get('p25_dropsize') or 0,
                 'p50_dropsize': umbrales.get('p50_dropsize') or 0,
                 'p75_pedidos': umbrales.get('p75_pedidos') or 0,
@@ -4755,55 +4788,149 @@ def get_reporte_costos_atencion(
 
             cur.execute(
                 f"""
-                WITH evaluado AS (
+                WITH base AS (
+                    SELECT *
+                    FROM {source}
+                    WHERE {data_where}
+                ),
+                params AS (
                     SELECT
-                        cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
-                        cluster_dpo, subcluster_logistico, autoelevador, venta_ytd, hl_ytd, pedidos_ytd,
-                        costo_logistico_total, ratio_costo_logistico_pct, margen_logistico_proxy,
-                        dropsize_bultos_ytd, pct_rechazo_pedidos, pct_rechazo_hl,
-                        hl_rechazado_ytd, score_total,
-                        ROUND((costo_logistico_total / NULLIF(pedidos_ytd,0))::NUMERIC,2) AS costo_por_pedido,
-                        ROUND((venta_ytd / NULLIF(pedidos_ytd,0))::NUMERIC,2) AS venta_por_pedido,
-                        ROUND((costo_logistico_total / NULLIF(hl_ytd,0))::NUMERIC,2) AS costo_por_hl,
+                        COALESCE(pc.fecha_desde, make_date(sp.anio_ytd, 1, 1)) AS fecha_desde,
+                        COALESCE(
+                            pc.fecha_hasta,
+                            (make_date(
+                                sp.anio_ytd,
+                                COALESCE(sp.mes_ytd_hasta, EXTRACT(MONTH FROM CURRENT_DATE)::INT),
+                                1
+                            ) + interval '1 month - 1 day')::date
+                        ) AS fecha_hasta
+                    FROM (
+                        SELECT *
+                        FROM seg_parametros
+                        WHERE activo
+                        ORDER BY (sucursal_id IS NULL) DESC, id DESC
+                        LIMIT 1
+                    ) sp
+                    LEFT JOIN LATERAL (
+                        SELECT *
+                        FROM seg_periodos_calculo
+                        WHERE activo AND empresa_id = sp.empresa_id
+                        ORDER BY id DESC
+                        LIMIT 1
+                    ) pc ON TRUE
+                ),
+                canal_raw AS (
+                    SELECT
+                        NULLIF(TRIM(v.cliente),'') AS cliente,
+                        COALESCE(NULLIF(TRIM(v.sucursal),''),'1') AS sucursal,
+                        COALESCE(
+                            NULLIF(TRIM(v.descripcion_canal),''),
+                            NULLIF(TRIM(v.descripcion_detallada_canal),''),
+                            NULLIF(TRIM(v.canal),''),
+                            'Sin canal'
+                        ) AS canal,
+                        SUM(COALESCE(v.importe_neto,0)) AS venta_canal
+                    FROM ventas_detalle v
+                    CROSS JOIN params p
+                    JOIN base b
+                      ON b.cliente = NULLIF(TRIM(v.cliente),'')
+                     AND b.sucursal = COALESCE(NULLIF(TRIM(v.sucursal),''),'1')
+                    JOIN articulos ar ON ar.id_articulo = v.id_articulo
+                    WHERE v.fecha BETWEEN p.fecha_desde AND p.fecha_hasta
+                      AND LOWER(TRIM(COALESCE(ar.tipo_producto,'')))='mercaderia'
+                      AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'remit%%'
+                      AND LOWER(TRIM(COALESCE(v.documento,''))) NOT LIKE 'comod%%'
+                      AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'remit%%'
+                      AND LOWER(TRIM(COALESCE(v.detalle_documento,''))) NOT LIKE 'comod%%'
+                      AND NULLIF(TRIM(v.cliente),'') IS NOT NULL
+                    GROUP BY 1, 2, 3
+                ),
+                canales AS (
+                    SELECT DISTINCT ON (cliente, sucursal)
+                        cliente, sucursal, canal
+                    FROM canal_raw
+                    ORDER BY cliente, sucursal, venta_canal DESC NULLS LAST, canal
+                ),
+                evaluado AS (
+                    SELECT
+                        b.cliente, b.descripcion_cliente, b.sucursal, b.sucursal_nombre, b.localidad,
+                        COALESCE(ch.canal, NULLIF(TRIM(cli.subcanal),''), 'Sin canal') AS canal,
+                        COALESCE(NULLIF(TRIM(cli.subcanal),''), ch.canal, 'Sin subcanal') AS subcanal,
+                        1::INT AS cantidad,
+                        b.cluster_dpo, b.subcluster_logistico, b.autoelevador, b.venta_ytd, b.hl_ytd, b.bultos_ytd, b.pedidos_ytd,
+                        b.pedidos_ytd AS pedidos_gm,
+                        b.bultos_ytd AS bultos_totales,
+                        ROUND((b.venta_ytd / NULLIF(b.bultos_ytd,0))::NUMERIC,2) AS precio_por_bulto,
+                        ROUND(b.venta_ytd::NUMERIC,2) AS fact_total,
+                        ROUND((b.costo_entrega / NULLIF(b.bultos_ytd,0))::NUMERIC,2) AS costo_distribucion_unitario,
+                        ROUND(b.costo_entrega::NUMERIC,2) AS costo_total_entrega,
+                        ROUND((b.venta_ytd - COALESCE(b.costo_entrega,0))::NUMERIC,2) AS rentabilidad_entrega,
+                        b.costo_entrega, b.costo_almacen, b.costo_logistico_total, b.ratio_costo_logistico_pct, b.margen_logistico_proxy,
+                        b.dropsize_bultos_ytd, b.pct_rechazo_pedidos, b.pct_rechazo_hl,
+                        b.hl_rechazado_ytd, b.score_total,
+                        ROUND((b.costo_logistico_total / NULLIF(b.pedidos_ytd,0))::NUMERIC,2) AS costo_por_pedido,
+                        ROUND((b.venta_ytd / NULLIF(b.pedidos_ytd,0))::NUMERIC,2) AS venta_por_pedido,
+                        ROUND((b.costo_logistico_total / NULLIF(b.hl_ytd,0))::NUMERIC,2) AS costo_por_hl,
                         CASE
-                            WHEN COALESCE(margen_logistico_proxy,0) < 0 THEN 'Margen logistico negativo'
-                            WHEN COALESCE(ratio_costo_logistico_pct,0) >= %(p75_ratio)s THEN 'Costo relativo alto'
-                            WHEN COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s
-                             AND COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s THEN 'Muchas entregas de bajo drop size'
-                            WHEN COALESCE(pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
-                              OR COALESCE(pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazo operativo alto'
-                            WHEN COALESCE(costo_logistico_total,0) >= %(p75_costo)s THEN 'Costo absoluto alto'
+                            WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
+                              OR COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazadores'
+                            WHEN COALESCE(b.margen_logistico_proxy,0) < 0
+                              OR COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s
+                              OR (%(p75_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s)
+                              OR COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 'Alto costo'
+                            WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p50_ratio)s
+                              OR (%(p50_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p50_costo_pdv)s)
+                              OR (COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s) THEN 'Medio costo'
+                            ELSE 'Bajo costo'
+                        END AS segmentacion_costo_pdv,
+                        CASE
+                            WHEN COALESCE(b.margen_logistico_proxy,0) < 0 THEN 'Margen logistico negativo'
+                            WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s THEN 'Costo relativo alto'
+                            WHEN %(p75_costo_pdv)s > 0
+                             AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s THEN 'Costo por PDV alto'
+                            WHEN COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s
+                             AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s THEN 'Muchas entregas de bajo drop size'
+                            WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
+                              OR COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazo operativo alto'
+                            WHEN COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 'Costo absoluto alto'
                             ELSE 'Costo logistico relevante'
                         END AS motivo_principal,
                         ARRAY_REMOVE(ARRAY[
-                            CASE WHEN COALESCE(ratio_costo_logistico_pct,0) >= %(p75_ratio)s
-                                THEN 'Costo sobre venta alto: ' || ROUND(ratio_costo_logistico_pct::NUMERIC,2) || ' %% vs p75 ' || ROUND(%(p75_ratio)s::NUMERIC,2) || ' %%' END,
-                            CASE WHEN COALESCE(costo_logistico_total,0) >= %(p75_costo)s
-                                THEN 'Costo absoluto por encima del p75: $' || ROUND(costo_logistico_total::NUMERIC,0) || ' vs $' || ROUND(%(p75_costo)s::NUMERIC,0) END,
-                            CASE WHEN COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s
-                                THEN 'Drop size bajo: ' || ROUND(dropsize_bultos_ytd::NUMERIC,2) || ' bultos/pedido vs p25 ' || ROUND(%(p25_dropsize)s::NUMERIC,2) END,
-                            CASE WHEN COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(dropsize_bultos_ytd,0) <= %(p50_dropsize)s
-                                THEN 'Frecuencia alta con poco volumen: ' || pedidos_ytd || ' pedidos y drop size ' || ROUND(dropsize_bultos_ytd::NUMERIC,2) END,
-                            CASE WHEN COALESCE(pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
-                                THEN 'Rechazo alto: ' || ROUND(pct_rechazo_pedidos::NUMERIC,2) || ' %% de pedidos' END,
-                            CASE WHEN COALESCE(pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3)
-                                THEN 'Rechazo HL alto: ' || ROUND(pct_rechazo_hl::NUMERIC,2) || ' %% HL (' || ROUND(COALESCE(hl_rechazado_ytd,0)::NUMERIC,2) || ' HL rechazados)' END,
-                            CASE WHEN COALESCE(margen_logistico_proxy,0) < 0
-                                THEN 'Margen logistico proxy negativo: $' || ROUND(margen_logistico_proxy::NUMERIC,0) END
+                            CASE WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s
+                                THEN 'Costo sobre venta alto: ' || ROUND(b.ratio_costo_logistico_pct::NUMERIC,2) || ' %% vs p75 ' || ROUND(%(p75_ratio)s::NUMERIC,2) || ' %%' END,
+                            CASE WHEN COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s
+                                THEN 'Costo absoluto por encima del p75: $' || ROUND(b.costo_logistico_total::NUMERIC,0) || ' vs $' || ROUND(%(p75_costo)s::NUMERIC,0) END,
+                            CASE WHEN %(p75_costo_pdv)s > 0
+                              AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s
+                                THEN 'Costo por PDV alto: $' || ROUND((b.costo_logistico_total / NULLIF(b.pedidos_ytd,0))::NUMERIC,0) || ' vs p75 $' || ROUND(%(p75_costo_pdv)s::NUMERIC,0) END,
+                            CASE WHEN COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s
+                                THEN 'Drop size bajo: ' || ROUND(b.dropsize_bultos_ytd::NUMERIC,2) || ' bultos/pedido vs p25 ' || ROUND(%(p25_dropsize)s::NUMERIC,2) END,
+                            CASE WHEN COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s
+                                THEN 'Frecuencia alta con poco volumen: ' || b.pedidos_ytd || ' pedidos y drop size ' || ROUND(b.dropsize_bultos_ytd::NUMERIC,2) END,
+                            CASE WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
+                                THEN 'Rechazo alto: ' || ROUND(b.pct_rechazo_pedidos::NUMERIC,2) || ' %% de pedidos' END,
+                            CASE WHEN COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3)
+                                THEN 'Rechazo HL alto: ' || ROUND(b.pct_rechazo_hl::NUMERIC,2) || ' %% HL (' || ROUND(COALESCE(b.hl_rechazado_ytd,0)::NUMERIC,2) || ' HL rechazados)' END,
+                            CASE WHEN COALESCE(b.margen_logistico_proxy,0) < 0
+                                THEN 'Margen logistico proxy negativo: $' || ROUND(b.margen_logistico_proxy::NUMERIC,0) END
                         ], NULL) AS motivos,
                         ROUND(LEAST(100,
                             CASE WHEN %(p75_ratio)s > 0
-                                THEN LEAST(35, COALESCE(ratio_costo_logistico_pct,0) / %(p75_ratio)s * 28)
+                                THEN LEAST(35, COALESCE(b.ratio_costo_logistico_pct,0) / %(p75_ratio)s * 28)
                                 ELSE 0 END
-                            + CASE WHEN %(p75_costo)s > 0 AND COALESCE(costo_logistico_total,0) >= %(p75_costo)s THEN 10 ELSE 0 END
-                            + CASE WHEN %(p25_dropsize)s > 0 AND COALESCE(dropsize_bultos_ytd,0) <= %(p25_dropsize)s THEN 20 ELSE 0 END
-                            + CASE WHEN %(p75_pedidos)s > 0 AND COALESCE(pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(dropsize_bultos_ytd,0) <= %(p50_dropsize)s THEN 15 ELSE 0 END
-                            + CASE WHEN COALESCE(pct_rechazo_pedidos,0) >= 20 THEN 15 WHEN COALESCE(pct_rechazo_pedidos,0) >= 10 THEN 8 ELSE 0 END
-                            + CASE WHEN COALESCE(pct_rechazo_hl,0) >= 5 THEN 10 WHEN COALESCE(pct_rechazo_hl,0) >= 3 THEN 5 ELSE 0 END
-                            + CASE WHEN COALESCE(margen_logistico_proxy,0) < 0 THEN 15 ELSE 0 END
+                            + CASE WHEN %(p75_costo)s > 0 AND COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 10 ELSE 0 END
+                            + CASE WHEN %(p75_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s THEN 12 ELSE 0 END
+                            + CASE WHEN %(p25_dropsize)s > 0 AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s THEN 20 ELSE 0 END
+                            + CASE WHEN %(p75_pedidos)s > 0 AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s THEN 15 ELSE 0 END
+                            + CASE WHEN COALESCE(b.pct_rechazo_pedidos,0) >= 20 THEN 15 WHEN COALESCE(b.pct_rechazo_pedidos,0) >= 10 THEN 8 ELSE 0 END
+                            + CASE WHEN COALESCE(b.pct_rechazo_hl,0) >= 5 THEN 10 WHEN COALESCE(b.pct_rechazo_hl,0) >= 3 THEN 5 ELSE 0 END
+                            + CASE WHEN COALESCE(b.margen_logistico_proxy,0) < 0 THEN 15 ELSE 0 END
                         )::NUMERIC,2) AS indice_costo_servicio
-                    FROM {source}
-                    WHERE {data_where}
+                    FROM base b
+                    LEFT JOIN canales ch ON ch.cliente = b.cliente AND ch.sucursal = b.sucursal
+                    LEFT JOIN clientes cli
+                      ON cli.cliente = b.cliente
+                     AND COALESCE(NULLIF(TRIM(cli.sucursal),''), b.sucursal) = b.sucursal
                 )
                 SELECT *,
                        CASE WHEN ARRAY_LENGTH(motivos, 1) > 0
@@ -4819,6 +4946,15 @@ def get_reporte_costos_atencion(
                 data_params,
             )
             rows = _dict_rows(cur)
+            segmentacion_costo = {
+                'Bajo costo': 0,
+                'Medio costo': 0,
+                'Alto costo': 0,
+                'Rechazadores': 0,
+            }
+            for row in rows:
+                label = str(row.get('segmentacion_costo_pdv') or 'Sin clasificar')
+                segmentacion_costo[label] = segmentacion_costo.get(label, 0) + 1
 
             excluidos_margen_negativo: list[dict] = []
             excluidos_resumen = {
@@ -4853,25 +4989,44 @@ def get_reporte_costos_atencion(
                 cur.execute(
                     f"""
                     SELECT
-                        cliente, descripcion_cliente, sucursal, sucursal_nombre, localidad,
-                        cluster_dpo, subcluster_logistico, autoelevador, venta_ytd, hl_ytd, pedidos_ytd,
-                        costo_logistico_total, ratio_costo_logistico_pct,
-                        margen_logistico_proxy, dropsize_bultos_ytd, pct_rechazo_pedidos,
-                        pct_rechazo_hl, hl_rechazado_ytd,
+                        x.cliente, x.descripcion_cliente, x.sucursal, x.sucursal_nombre, x.localidad,
+                        COALESCE(NULLIF(TRIM(cli.subcanal),''), 'Sin canal') AS canal,
+                        COALESCE(NULLIF(TRIM(cli.subcanal),''), 'Sin subcanal') AS subcanal,
+                        1::INT AS cantidad,
+                        x.cluster_dpo, x.subcluster_logistico, x.autoelevador,
+                        x.venta_ytd, x.hl_ytd, x.bultos_ytd, x.pedidos_ytd,
+                        x.pedidos_ytd AS pedidos_gm,
+                        x.bultos_ytd AS bultos_totales,
+                        ROUND((x.venta_ytd / NULLIF(x.bultos_ytd,0))::NUMERIC,2) AS precio_por_bulto,
+                        ROUND(x.venta_ytd::NUMERIC,2) AS fact_total,
+                        ROUND((x.costo_entrega / NULLIF(x.bultos_ytd,0))::NUMERIC,2) AS costo_distribucion_unitario,
+                        ROUND(x.costo_entrega::NUMERIC,2) AS costo_total_entrega,
+                        ROUND((x.venta_ytd - COALESCE(x.costo_entrega,0))::NUMERIC,2) AS rentabilidad_entrega,
+                        x.costo_entrega, x.costo_almacen, x.costo_logistico_total, x.ratio_costo_logistico_pct,
+                        x.margen_logistico_proxy, x.dropsize_bultos_ytd, x.pct_rechazo_pedidos,
+                        x.pct_rechazo_hl, x.hl_rechazado_ytd,
+                        'Alto costo' AS segmentacion_costo_pdv,
+                        ROUND((x.costo_logistico_total / NULLIF(x.pedidos_ytd,0))::NUMERIC,2) AS costo_por_pedido,
                         'Margen logistico proxy negativo' AS motivo_principal,
                         ARRAY[
-                            'Excluido del ranking principal por baja venta: $' || ROUND(venta_ytd::NUMERIC,0)
+                            'Excluido del ranking principal por baja venta: $' || ROUND(x.venta_ytd::NUMERIC,0)
                                 || ' vs minimo $' || ROUND(%(min_venta)s::NUMERIC,0),
-                            'Margen logistico proxy negativo: $' || ROUND(margen_logistico_proxy::NUMERIC,0),
-                            'Costo logistico: $' || ROUND(costo_logistico_total::NUMERIC,0)
-                                || ' (' || ROUND(ratio_costo_logistico_pct::NUMERIC,2) || ' %% sobre venta)'
+                            'Margen logistico proxy negativo: $' || ROUND(x.margen_logistico_proxy::NUMERIC,0),
+                            'Costo logistico: $' || ROUND(x.costo_logistico_total::NUMERIC,0)
+                                || ' (' || ROUND(x.ratio_costo_logistico_pct::NUMERIC,2) || ' %% sobre venta)'
                         ] AS motivos,
                         'Cliente excluido del ranking principal por baja venta, pero con margen logistico proxy negativo.' AS explicacion
-                    FROM {source}
-                    WHERE {excluded_where}
-                    ORDER BY margen_logistico_proxy ASC NULLS LAST,
-                             ratio_costo_logistico_pct DESC NULLS LAST,
-                             costo_logistico_total DESC NULLS LAST
+                    FROM (
+                        SELECT *
+                        FROM {source}
+                        WHERE {excluded_where}
+                    ) x
+                    LEFT JOIN clientes cli
+                      ON cli.cliente = x.cliente
+                     AND COALESCE(NULLIF(TRIM(cli.sucursal),''), x.sucursal) = x.sucursal
+                    ORDER BY x.margen_logistico_proxy ASC NULLS LAST,
+                             x.ratio_costo_logistico_pct DESC NULLS LAST,
+                             x.costo_logistico_total DESC NULLS LAST
                     LIMIT %(lim_excluidos)s
                     """,
                     excluded_params,
@@ -4879,6 +5034,13 @@ def get_reporte_costos_atencion(
                 excluidos_margen_negativo = _dict_rows(cur)
 
     costo_reportado = sum(float(r.get('costo_logistico_total') or 0) for r in rows)
+    costo_entrega_reportado = sum(float(r.get('costo_entrega') or 0) for r in rows)
+    costo_almacen_reportado = sum(float(r.get('costo_almacen') or 0) for r in rows)
+    costo_pdv_values: list[float] = []
+    for row in rows:
+        costo_pdv = float(row.get('costo_por_pedido') or 0)
+        if costo_pdv > 0:
+            costo_pdv_values.append(costo_pdv)
     venta_reportada = sum(float(r.get('venta_ytd') or 0) for r in rows)
     umbrales['min_venta_efectiva'] = effective_min_venta
     return {
@@ -4890,8 +5052,12 @@ def get_reporte_costos_atencion(
             'venta_total_evaluada': umbrales.get('venta_total_evaluada'),
             'ratio_prom_evaluado': umbrales.get('ratio_prom_evaluado'),
             'costo_total_reportado': round(costo_reportado, 2),
+            'costo_entrega_reportado': round(costo_entrega_reportado, 2),
+            'costo_almacen_reportado': round(costo_almacen_reportado, 2),
+            'costo_por_pdv_promedio_reportado': round(sum(costo_pdv_values) / len(costo_pdv_values), 2) if costo_pdv_values else 0,
             'venta_total_reportada': round(venta_reportada, 2),
             'ratio_reportado': round((costo_reportado / venta_reportada * 100), 2) if venta_reportada else 0,
+            'segmentacion_costo': segmentacion_costo,
             'excluidos_margen_negativo': excluidos_resumen,
             'criterio': (
                 'Incluye todos los clientes con venta y costo logistico'
@@ -4902,6 +5068,131 @@ def get_reporte_costos_atencion(
         'umbrales': umbrales,
         'excluidos_margen_negativo': excluidos_margen_negativo,
     }
+
+
+_COST_REPORT_EXPORT_FIELDS = (
+    'cliente', 'descripcion_cliente', 'sucursal', 'sucursal_nombre', 'localidad',
+    'canal', 'subcanal', 'cluster_dpo', 'subcluster_logistico', 'autoelevador',
+    'segmentacion_costo_pdv', 'cantidad', 'indice_costo_servicio', 'motivo_principal',
+    'pedidos_gm', 'bultos_totales', 'precio_por_bulto', 'fact_total',
+    'costo_distribucion_unitario', 'costo_total_entrega', 'rentabilidad_entrega',
+    'costo_por_pedido', 'costo_entrega', 'costo_almacen', 'costo_logistico_total',
+    'ratio_costo_logistico_pct', 'venta_ytd', 'margen_logistico_proxy',
+    'hl_ytd', 'pedidos_ytd', 'dropsize_bultos_ytd',
+    'pct_rechazo_pedidos', 'pct_rechazo_hl', 'hl_rechazado_ytd',
+    'motivos_texto', 'explicacion',
+)
+
+
+def _cost_export_rows(rows: list[dict], query: str = '') -> list[list[Any]]:
+    query = str(query or '').strip().lower()
+    filtered = [row for row in rows if _matches_client_query(row, query)]
+    data: list[list[Any]] = []
+    for row in filtered:
+        enriched = dict(row)
+        motivos = enriched.get('motivos')
+        enriched['motivos_texto'] = '; '.join(str(item) for item in motivos) if isinstance(motivos, list) else motivos
+        data.append([enriched.get(field) for field in _COST_REPORT_EXPORT_FIELDS])
+    return data
+
+
+def export_costos_atencion_excel(
+    sucursal: str | None = None,
+    cluster: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+    incluir_outliers: bool = False,
+    min_venta: float | None = None,
+) -> tuple[BytesIO, str, str]:
+    limit = max(1, min(int(limit or 5000), 5000))
+    report = get_reporte_costos_atencion(
+        sucursal=sucursal,
+        cluster=cluster,
+        limit=limit,
+        incluir_outliers=incluir_outliers,
+        min_venta=min_venta,
+    )
+    resumen = report.get('resumen') or {}
+    umbrales = report.get('umbrales') or {}
+    periodo = get_periodo_activo()
+    rows = _cost_export_rows(report.get('items') or [], q or '')
+    excluded = _cost_export_rows(report.get('excluidos_margen_negativo') or [], q or '')
+
+    wb = Workbook()
+    ws_meta = wb.active
+    ws_meta.title = 'Resumen'
+    _append_key_values(ws_meta, 'Analisis de costo por PDV', [
+        ('generado_at', datetime.now().replace(microsecond=0)),
+        ('sucursal', sucursal if sucursal and sucursal != 'TODAS' else 'Todas'),
+        ('cluster_dpo', _normalize_cluster_filter(cluster) or 'Todos'),
+        ('busqueda', q or ''),
+        ('periodo_anio', periodo.get('periodo_anio')),
+        ('periodo_mes', periodo.get('periodo_mes')),
+        ('fecha_desde', periodo.get('fecha_desde')),
+        ('fecha_hasta', periodo.get('fecha_hasta')),
+        ('fecha_base_desde', periodo.get('fecha_base_desde')),
+        ('fecha_base_hasta', periodo.get('fecha_base_hasta')),
+        ('criterio', resumen.get('criterio')),
+        ('clientes_evaluados', resumen.get('clientes_evaluados')),
+        ('clientes_en_reporte', len(rows)),
+        ('costo_entrega_reportado', resumen.get('costo_entrega_reportado')),
+        ('costo_almacen_reportado', resumen.get('costo_almacen_reportado')),
+        ('costo_total_reportado', resumen.get('costo_total_reportado')),
+        ('costo_por_pdv_promedio_reportado', resumen.get('costo_por_pdv_promedio_reportado')),
+        ('ratio_reportado', resumen.get('ratio_reportado')),
+        ('p75_costo_pdv', umbrales.get('p75_costo_pdv')),
+        ('p75_ratio', umbrales.get('p75_ratio')),
+        ('p25_dropsize', umbrales.get('p25_dropsize')),
+        ('p25_venta', umbrales.get('p25_venta')),
+        ('excluidos_clientes_detectados', (resumen.get('excluidos_margen_negativo') or {}).get('clientes')),
+        ('excluidos_venta_total', (resumen.get('excluidos_margen_negativo') or {}).get('venta_total')),
+        ('excluidos_costo_total', (resumen.get('excluidos_margen_negativo') or {}).get('costo_total')),
+        ('excluidos_margen_proxy_total', (resumen.get('excluidos_margen_negativo') or {}).get('margen_logistico_proxy_total')),
+    ])
+
+    headers = [_label(field) for field in _COST_REPORT_EXPORT_FIELDS]
+    ws_rank = wb.create_sheet('PDV costosos')
+    _append_table(ws_rank, 'Ranking de PDV costosos de entregar', headers, rows)
+    ws_rank.freeze_panes = 'A4'
+    ws_rank.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{max(3, len(rows) + 3)}'
+    for idx, field in enumerate(_COST_REPORT_EXPORT_FIELDS, start=1):
+        ws_rank.column_dimensions[get_column_letter(idx)].width = 46 if field in {'descripcion_cliente', 'motivos_texto', 'explicacion'} else 18
+
+    excluded_summary = resumen.get('excluidos_margen_negativo') or {}
+    excluded_detected = int(excluded_summary.get('clientes') or 0)
+    excluded_title = (
+        'PDV excluidos del ranking principal con margen logistico proxy negativo'
+        f' | detectados: {excluded_detected} | exportados: {len(excluded)}'
+    )
+    if q:
+        excluded_title += f' | busqueda: {q}'
+    if excluded:
+        excluded_rows = excluded
+    else:
+        note = (
+            f"Hay {excluded_detected} PDV excluidos detectados, pero no coinciden con la busqueda aplicada: {q}."
+            if excluded_detected and q
+            else "No hay PDV excluidos por baja venta con margen logistico proxy negativo para los filtros actuales."
+        )
+        excluded_rows = [[note] + [''] * (len(headers) - 1)]
+
+    ws_excluded = wb.create_sheet('Margen proxy negativo')
+    _append_table(
+        ws_excluded,
+        excluded_title,
+        headers,
+        excluded_rows,
+    )
+    ws_excluded.freeze_panes = 'A4'
+    ws_excluded.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{max(3, len(excluded_rows) + 3)}'
+    for idx, field in enumerate(_COST_REPORT_EXPORT_FIELDS, start=1):
+        ws_excluded.column_dimensions[get_column_letter(idx)].width = 46 if field in {'descripcion_cliente', 'motivos_texto', 'explicacion'} else 18
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    filename = _safe_export_filename('costo_pdv', 'xlsx', sucursal, cluster, q, periodo.get('periodo_anio'), periodo.get('periodo_mes'))
+    return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 
 def get_resumen_sucursal() -> list[dict]:
@@ -4925,7 +5216,9 @@ def get_resumen_sucursal() -> list[dict]:
                            ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
                            ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                            ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
-                           ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
+                           CASE WHEN SUM(venta_ytd) > 0
+                                THEN ROUND((SUM(costo_logistico_total) / SUM(venta_ytd) * 100)::NUMERIC,2)
+                                ELSE 0 END AS ratio_costo_prom,
                            ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                            ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
                            ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
@@ -4967,7 +5260,9 @@ def get_resumen_sucursal() -> list[dict]:
                                    ROUND((SUM(COALESCE(pedidos_rechazo_ytd,rechazos_ytd)) / NULLIF(SUM(pedidos_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_prom,
                                    ROUND((SUM(COALESCE(hl_rechazado_ytd,0)) / NULLIF(SUM(hl_ytd),0) * 100)::NUMERIC,2) AS pct_rechazo_hl_prom,
                                    ROUND(AVG(dropsize_bultos_ytd)::NUMERIC,2) AS dropsize_prom,
-                                   ROUND(AVG(ratio_costo_logistico_pct)::NUMERIC,2) AS ratio_costo_prom,
+                                   CASE WHEN SUM(venta_ytd) > 0
+                                        THEN ROUND((SUM(costo_logistico_total) / SUM(venta_ytd) * 100)::NUMERIC,2)
+                                        ELSE 0 END AS ratio_costo_prom,
                                    ROUND(AVG(COALESCE(crecimiento_pct,0))::NUMERIC,2) AS crecimiento_prom_pct,
                                    ROUND(AVG(rmd_valor)::NUMERIC,2) AS rmd_prom,
                                    ROUND(AVG(otif_valor)::NUMERIC,2) AS otif_prom,
@@ -5601,6 +5896,8 @@ _CLIENT_REPORT_LABELS = {
     'sucursal': 'Sucursal',
     'sucursal_nombre': 'Nombre sucursal',
     'localidad': 'Localidad',
+    'canal': 'Canal',
+    'subcanal': 'Subcanal',
     'cluster_dpo': 'Cluster',
     'subcluster_logistico': 'Subcluster logistico',
     'autoelevador': 'Autoelevador',
@@ -5617,6 +5914,24 @@ _CLIENT_REPORT_LABELS = {
     'pallets_ytd': 'Pallets',
     'up_ytd': 'UP',
     'pedidos_ytd': 'Pedidos',
+    'pedidos_gm': 'Pedidos GM',
+    'bultos_totales': 'Bultos totales',
+    'precio_por_bulto': 'Precio por bulto',
+    'fact_total': 'Facturacion total',
+    'costo_distribucion_unitario': 'Costo distribucion por bulto',
+    'costo_total_entrega': 'Costo total entrega',
+    'rentabilidad_entrega': 'Rentabilidad entrega',
+    'segmentacion_costo_pdv': 'Segmentacion costo PDV',
+    'cantidad': 'Cantidad',
+    'indice_costo_servicio': 'Indice costo servicio',
+    'motivo_principal': 'Motivo principal',
+    'costo_por_pedido': 'Costo por PDV',
+    'motivos_texto': 'Motivos',
+    'explicacion': 'Explicacion',
+    'excluidos_clientes_detectados': 'PDV excluidos detectados',
+    'excluidos_venta_total': 'Venta total excluidos',
+    'excluidos_costo_total': 'Costo total excluidos',
+    'excluidos_margen_proxy_total': 'Margen proxy total excluidos',
     'dropsize_bultos_ytd': 'Drop size bultos',
     'ticket_promedio_ytd': 'Ticket promedio',
     'rechazos_ytd': 'Pedidos rechazados',

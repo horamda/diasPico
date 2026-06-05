@@ -1262,6 +1262,7 @@ def plan_servicio():
             solo_alertas=request.args.get('solo_alertas', '').lower() in ('1', 'true'),
             limit=int(request.args.get('limit', 500)),
             offset=int(request.args.get('offset', 0)),
+            lite=(request.args.get('lite') or request.args.get('modo') or '').lower() in ('1', 'true', 'lite'),
         )
         return _ok(rows, total=len(rows))
     except Exception as e:
@@ -1298,6 +1299,25 @@ def reporte_costos_atencion():
             min_venta=min_venta,
         )
         return _ok(report)
+    except Exception as e:
+        return _err(e, 500)
+
+
+@bp.get('/reporte/costos-atencion/export')
+def reporte_costos_atencion_export():
+    """Exporta el analisis de costo por PDV en Excel, respetando filtros principales."""
+    try:
+        min_venta_raw = request.args.get('min_venta')
+        min_venta = float(min_venta_raw) if min_venta_raw not in (None, '') else None
+        stream, filename, mimetype = svc.export_costos_atencion_excel(
+            sucursal=request.args.get('sucursal'),
+            cluster=request.args.get('cluster'),
+            q=request.args.get('q') or request.args.get('busqueda'),
+            limit=int(request.args.get('limit', 500)),
+            incluir_outliers=request.args.get('incluir_outliers', '').lower() in ('1', 'true', 'si', 's'),
+            min_venta=min_venta,
+        )
+        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
     except Exception as e:
         return _err(e, 500)
 

@@ -211,8 +211,9 @@
     .tabs {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 4px;
-      overflow-x: auto;
+      overflow-x: visible;
       padding: 4px;
       border: 1px solid var(--line);
       border-radius: var(--radius);
@@ -228,15 +229,25 @@
       color: var(--muted);
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 7px;
       font-size: 13px;
       font-weight: 700;
       cursor: pointer;
       white-space: nowrap;
+      flex: 0 1 auto;
     }
 
     .tab svg { width: 16px; height: 16px; }
     .tab.active { color: var(--text); background: var(--panel-2); }
+
+    .period-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
 
     .view { display: none; gap: 16px; }
     .view.active { display: grid; }
@@ -287,6 +298,7 @@
 
     .panel {
       min-width: 0;
+      overflow: hidden;
       border: 1px solid var(--line);
       border-radius: var(--radius);
       background: var(--panel);
@@ -402,19 +414,22 @@
 
     .table-wrap {
       width: 100%;
+      max-width: 100%;
       overflow: auto;
+      overscroll-behavior-x: contain;
+      scrollbar-gutter: stable;
       border-radius: 0 0 var(--radius) var(--radius);
     }
 
     table {
-      width: 100%;
+      width: max-content;
+      min-width: 100%;
       border-collapse: collapse;
-      min-width: 900px;
     }
 
     th {
       height: 38px;
-      padding: 8px 12px;
+      padding: 8px 10px;
       background: var(--panel-2);
       border-bottom: 1px solid var(--line);
       color: var(--muted);
@@ -427,19 +442,44 @@
 
     td {
       height: 44px;
-      padding: 8px 12px;
+      padding: 8px 10px;
       border-bottom: 1px solid var(--line-soft);
       font-size: 13px;
-      vertical-align: middle;
+      vertical-align: top;
       white-space: nowrap;
+      max-width: 280px;
+    }
+
+    .table-wrap th:first-child,
+    .table-wrap td:first-child {
+      position: sticky;
+      left: 0;
+      z-index: 2;
+      background: var(--panel);
+      box-shadow: 1px 0 0 var(--line-soft);
+    }
+
+    .table-wrap th:first-child {
+      z-index: 3;
+      background: var(--panel-2);
     }
 
     tr.clickable { cursor: pointer; }
     tr.clickable:hover td { background: #f9fbfd; }
+    tr.clickable:hover td:first-child { background: #f9fbfd; }
     .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
     .muted { color: var(--muted); }
     .client-main { font-weight: 750; }
-    .client-sub { margin-top: 2px; font-size: 12px; color: var(--muted); max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+    .client-sub {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      color: var(--muted);
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .client-flags {
       display: flex;
       align-items: center;
@@ -646,7 +686,11 @@
       line-height: 1.35;
       font-family: var(--mono);
       font-weight: 600;
+      max-width: 220px;
+      white-space: normal;
+      overflow-wrap: anywhere;
     }
+    .num .cell-sub { margin-left: auto; max-width: 190px; }
     .metric-detail b,
     .kpi-detail b,
     .cell-sub b { color: var(--text); font-weight: 750; }
@@ -694,7 +738,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
-      max-width: 420px;
+      max-width: 360px;
     }
 
     .reason-pill {
@@ -710,6 +754,20 @@
       font-weight: 700;
       white-space: normal;
     }
+
+    .text-cell,
+    .reason-cell,
+    .action-cell,
+    .comment-cell {
+      white-space: normal;
+      overflow-wrap: anywhere;
+      line-height: 1.35;
+    }
+
+    .text-cell { min-width: 200px; max-width: 280px; }
+    .reason-cell { min-width: 250px; max-width: 360px; }
+    .action-cell { min-width: 220px; max-width: 300px; }
+    .comment-cell { min-width: 210px; max-width: 300px; }
 
     .config-grid {
       display: grid;
@@ -830,6 +888,13 @@
       .filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
       .config-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
       .upload-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .tabs { gap: 3px; }
+      .tab { min-height: 34px; padding: 7px 9px; gap: 5px; font-size: 12px; }
+      .tab svg { width: 15px; height: 15px; }
+      th, td { padding: 7px 8px; }
+      td { font-size: 12px; max-width: 240px; }
+      .reason-cell { min-width: 230px; max-width: 310px; }
+      .action-cell { min-width: 210px; max-width: 280px; }
     }
 
     @media (max-width: 720px) {
@@ -838,6 +903,7 @@
       .top-actions .btn { flex: 0 0 44px; width: 44px; min-width: 0; padding: 0; }
       .top-actions .btn span { display: none; }
       .content { padding: 12px; }
+      .panel-body { padding: 12px; }
       .panel-head { align-items: flex-start; }
       .panel-head .inline-filters { width: 100%; justify-content: space-between; }
       .panel-meta { white-space: normal; }
@@ -848,6 +914,23 @@
       .search { min-width: 100%; }
       .search-wrap { width: 100%; }
       .inline-filters .control { width: 100%; }
+      .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; }
+      .tab { flex: 0 0 auto; }
+      .period-actions { justify-content: flex-start; width: 100%; }
+      .table-wrap { border-radius: 0 0 8px 8px; }
+      table { min-width: 760px; }
+      th { font-size: 10px; }
+      td { font-size: 12px; max-width: 200px; }
+      .client-sub { max-width: 160px; }
+      .cell-sub { max-width: 155px; font-size: 10px; }
+      .num .cell-sub { max-width: 140px; }
+      .reason-list { max-width: 250px; }
+      .reason-cell { min-width: 220px; max-width: 260px; }
+      .action-cell,
+      .text-cell,
+      .comment-cell { min-width: 190px; max-width: 240px; }
+      .chart-box { height: 235px; }
+      .chart-box.tall { height: 260px; }
       .dimension-row { grid-template-columns: 1fr; }
       .drawer { right: -100%; width: 100%; }
       .drawer-head { grid-template-columns: 1fr; padding: 14px; }
@@ -937,6 +1020,7 @@
         <button class="tab" data-tab="territory"><i data-lucide="map"></i>Territorio</button>
         <button class="tab" data-tab="service"><i data-lucide="clipboard-list"></i>Plan</button>
         <button class="tab" data-tab="costs"><i data-lucide="truck"></i>Costos</button>
+        <button class="tab" data-tab="cost-pdv"><i data-lucide="route"></i>Costo PDV</button>
         <button class="tab" data-tab="evolution"><i data-lucide="activity"></i>Evolucion</button>
         <button class="tab" data-tab="quality"><i data-lucide="shield-check"></i>Calidad</button>
         <button class="tab" data-tab="data"><i data-lucide="upload"></i>Carga</button>
@@ -983,6 +1067,9 @@
             <div class="panel-title"><i data-lucide="users"></i>Cartera de clientes</div>
             <div class="inline-filters">
               <div class="panel-meta" id="clientsMeta"></div>
+              <button class="btn icon" id="clientsPrevPage" title="Pagina anterior"><i data-lucide="chevron-left"></i></button>
+              <div class="panel-meta" id="clientsPageMeta"></div>
+              <button class="btn icon" id="clientsNextPage" title="Pagina siguiente"><i data-lucide="chevron-right"></i></button>
               <a class="btn" id="clientsExportXlsx" href="/api/segmentacion/clientes/export" title="Exportar cartera en Excel">
                 <i data-lucide="file-spreadsheet"></i><span>Excel</span>
               </a>
@@ -1076,6 +1163,41 @@
           <div class="table-wrap" id="costReportTable"></div>
           <div class="panel-body" id="costExcludedNote"></div>
           <div class="table-wrap" id="costExcludedTable"></div>
+        </article>
+      </section>
+
+      <section class="view" id="view-cost-pdv">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title"><i data-lucide="route"></i>Analisis de costo por PDV</div>
+              <div class="panel-meta">Auditoria DPO 4.2 - ejecutar al menos 2 veces al ano</div>
+            </div>
+            <div class="period-actions">
+              <button class="btn" id="costPdvPeriodBtn" title="Ir a parametros del periodo"><i data-lucide="calendar-range"></i><span>Periodo</span></button>
+              <button class="btn" id="costPdvHistoryBtn" title="Ver evolucion y auditoria mensual"><i data-lucide="activity"></i><span>Historico</span></button>
+              <a class="btn" id="costPdvExportXlsx" href="/api/segmentacion/reporte/costos-atencion/export" title="Exportar costo por PDV en Excel"><i data-lucide="file-spreadsheet"></i><span>Excel</span></a>
+              <div class="panel-meta" id="costPdvMeta"></div>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="note">
+              <strong>Criterio del analisis</strong><br>
+              El sistema identifica que PDV es mas costoso de entregar cruzando costo logistico, costo de entrega,
+              rentabilidad proxy, frecuencia de pedidos, drop size, rechazos y autoelevador. Sirve como evidencia
+              para ajustar prioridades de ruteo y plan de servicio junto con la clusterizacion.
+            </div>
+            <div class="note" style="margin-top:12px">
+              <strong>Evidencia por periodo</strong><br>
+              Para sacar dos periodos: entrar en Parametros, cargar Desde/Hasta actual y Desde/Hasta base,
+              usar Guardar y recalcular, exportar la evidencia, y repetir con el segundo periodo. La solapa
+              Evolucion conserva la auditoria mensual de las corridas.
+            </div>
+            <div class="metric-grid" id="costPdvSummary" style="margin-top:12px"></div>
+          </div>
+          <div class="table-wrap" id="costPdvTable"></div>
+          <div class="panel-body" id="costPdvExcludedNote"></div>
+          <div class="table-wrap" id="costPdvExcludedTable"></div>
         </article>
       </section>
 
@@ -1393,6 +1515,9 @@
     const $ = (id) => document.getElementById(id);
     const CLUSTERS = ["Ganador", "En crecimiento", "Basico", "Ventas bajas"];
     const CLUSTER_COLORS = ["#198754", "#2563eb", "#d99106", "#d04444"];
+    const INITIAL_PLAN_LIMIT = 500;
+    const FULL_PLAN_LIMIT = 50000;
+    const CLIENT_PAGE_SIZE = 500;
     const HELP_TEXT = {
       "Cliente": "Codigo y razon social del cliente. Se usa como llave para unir ventas, servicio, NPS, RMD, OTIF y atributos.",
       "Clientes": "Cantidad de clientes activos dentro de los filtros actuales. Excluye anulados y rutas temporales.",
@@ -1415,23 +1540,45 @@
       "Factor IPC": "Factor acumulado de inflacion. Formula: producto mensual de (1 + inflacion_pct / 100).",
       "HL": "Hectolitros vendidos en el periodo actual.",
       "Bultos": "Bultos vendidos en el periodo actual.",
+      "Bultos totales": "Bultos totales vendidos/entregados al PDV en el periodo actual.",
       "Pallets": "Pallets estimados/vendidos segun conversion de articulos.",
       "Pedidos": "Cantidad de pedidos del periodo actual.",
+      "Pedidos GM": "Cantidad de pedidos del periodo actual usados como visitas/entregas al PDV.",
       "Drop": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
       "Drop size": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
       "P25 drop size": "Percentil 25 del drop size. Los clientes por debajo tienen entregas pequenas y suelen ser mas caros de atender.",
+      "Canal": "Canal principal del cliente tomado de ventas del periodo; si no existe, usa subcanal del maestro de clientes.",
+      "Subcanal": "Subcanal del maestro de clientes. Sirve para comparar costo por tipo de negocio.",
       "Auto": "Indica si el cliente tiene autoelevador. Reduce complejidad operativa de descarga.",
       "Autoelevador": "Porcentaje o marca de clientes con autoelevador. Ayuda a estimar dificultad de descarga y costo operativo.",
       "Costo": "Costo logistico calculado para el periodo. Formula: costo_entrega + costo_almacen.",
+      "Costo entrega": "Costo directo de entrega del periodo. Formula: HL YTD * costo_entrega_hl parametrizado.",
+      "Costo dist.": "Costo de distribucion por bulto. Formula: costo_entrega / bultos_totales.",
+      "Costo dist./bulto": "Costo de distribucion por bulto. Formula: costo_entrega / bultos_totales.",
+      "Costo almacen": "Costo de almacen asociado al volumen del periodo. Formula: HL YTD * costo_almacen_hl parametrizado.",
       "Costo logistico": "Costo total logistico. Formula: (HL * costo_entrega_hl) + (HL * costo_almacen_hl).",
+      "Costo total": "Costo logistico total del PDV. Formula: costo_entrega + costo_almacen.",
+      "Costo total entrega": "Costo directo de entrega del PDV. Formula: HL YTD * costo_entrega_hl parametrizado.",
+      "Costo / PDV": "Costo logistico promedio por entrega/pedido al PDV. Formula: costo_logistico_total / pedidos_ytd.",
+      "Costo / pedido": "Costo logistico promedio por entrega/pedido. Formula: costo_logistico_total / pedidos_ytd.",
+      "Costo / HL": "Costo logistico por hectolitro entregado. Formula: costo_logistico_total / hl_ytd.",
       "Costo %": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
       "Costo / venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
       "Costo/venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
       "Ratio reportado": "Promedio costo/venta de los clientes incluidos en el reporte de costos.",
       "Costo reportado": "Suma del costo logistico de los clientes incluidos en el reporte de costos.",
+      "Costo entrega reportado": "Suma del costo de entrega de los PDV incluidos en el ranking.",
+      "Costo PDV prom.": "Promedio del costo logistico por entrega/pedido de los PDV incluidos en el ranking.",
       "P75 costo/venta": "Percentil 75 del ratio costo/venta. Por encima de este umbral se considera costo alto.",
+      "P75 costo/PDV": "Percentil 75 del costo por entrega/pedido al PDV. Por encima de este umbral se considera caro de entregar.",
       "Margen": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total.",
       "Margen proxy": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total. Es una aproximacion operativa, no rentabilidad contable.",
+      "Rentabilidad proxy": "Margen logistico proxy usado como aproximacion operativa de rentabilidad. Formula: venta_ytd - costo_logistico_total.",
+      "Rent. entrega": "Rentabilidad contra costo directo de entrega. Formula: facturacion_total - costo_total_entrega.",
+      "Segmentacion costo": "Clasificacion auditora del costo por PDV: Rechazadores, Alto costo, Medio costo o Bajo costo segun rechazo, margen y umbrales de costo.",
+      "Fact. total": "Facturacion total del PDV en el periodo actual. Formula: suma importe neto.",
+      "Precio/bulto": "Precio promedio por bulto. Formula: facturacion_total / bultos_totales.",
+      "Cantidad": "Cantidad de PDV en la fila. En el detalle por cliente siempre vale 1.",
       "Rechazo": "Muestra rechazo por pedidos y, en la segunda linea, rechazo por HL.",
       "Rechazo pedidos": "Pedidos con rechazo / pedidos totales * 100. Usa criterios de rechazo activos.",
       "Rechazo HL": "HL rechazados / HL pedidos * 100. Es el indicador principal de rechazo para score operativo.",
@@ -1459,6 +1606,8 @@
       "Accion prioritaria": "Proxima accion recomendada para ventas/operaciones.",
       "Alerta": "Condicion critica detectada: OTIF bajo, rechazo alto, caida fuerte, refrigerado con riesgo u otra alerta.",
       "Periodo": "Rango actual de calculo y comparacion del modulo.",
+      "Periodo actual": "Rango actual usado para ventas, volumen, costo logistico y score. Se modifica en Parametros y requiere Guardar y recalcular.",
+      "Periodo base": "Rango contra el que se compara el periodo actual. Normalmente es el mismo tramo del anio anterior.",
       "Estado general": "Resultado consolidado del diagnostico de calidad de datos.",
       "Cache": "Cobertura de cache de segmentacion respecto de clientes con venta.",
       "Servicio historico": "Cobertura de RMD, OTIF o NPS historico sobre clientes con venta.",
@@ -1517,6 +1666,9 @@
       activeLocalitySummary: [],
       mapRows: [],
       costReport: { items: [], resumen: {}, umbrales: {} },
+      costReportSignature: "",
+      fullPlanSignature: "",
+      fullPlanTimer: null,
       autoResumen: {},
       params: {},
       weights: [],
@@ -1530,6 +1682,7 @@
       mapLayerGroup: null,
       activeTab: "overview",
       loading: false,
+      clientPage: 1,
       loadSeq: 0,
       evolutionSeq: 0,
       loadTimer: null
@@ -1670,6 +1823,10 @@
       if (s.includes("refriger")) return "b-refrigerado";
       if (s.includes("rentable")) return "b-rentable";
       if (s.includes("potencial")) return "b-potencial";
+      if (s.includes("bajo costo")) return "b-eficiente";
+      if (s.includes("medio costo")) return "b-basico";
+      if (s.includes("alto costo")) return "b-caro";
+      if (s.includes("rechazador")) return "b-complejo";
       if (s.includes("costo") || s.includes("margen") || s.includes("drop")) return "b-caro";
       if (s.includes("caro")) return "b-caro";
       if (s.includes("complejo")) return "b-complejo";
@@ -1777,21 +1934,59 @@
       setGlobalLoading(on, message);
     }
 
-    function queryString() {
+    function queryString(limit = INITIAL_PLAN_LIMIT) {
       const branch = selectedBranch();
       const params = new URLSearchParams();
-      params.set("limit", "5000");
+      params.set("limit", String(limit));
+      params.set("modo", "lite");
       if (branch !== "TODAS") params.set("sucursal", branch);
       return "?" + params.toString();
     }
 
+    function scheduleFullPlanLoad(seq) {
+      if (state.plan.length < INITIAL_PLAN_LIMIT) return;
+      if (state.fullPlanTimer) clearTimeout(state.fullPlanTimer);
+      state.fullPlanTimer = setTimeout(() => {
+        state.fullPlanTimer = null;
+        loadFullPlanData(seq);
+      }, 250);
+    }
+
+    async function loadFullPlanData(seq) {
+      const qs = queryString(FULL_PLAN_LIMIT);
+      if (seq !== state.loadSeq || state.fullPlanSignature === qs) return;
+      state.fullPlanSignature = qs;
+      setGlobalLoading(true, "Completando cartera de clientes...");
+      try {
+        const rows = normalizeRows(await api(`/api/segmentacion/plan-servicio${qs}`, undefined, 90000));
+        if (seq !== state.loadSeq) return;
+        if (rows.length > state.plan.length) {
+          state.plan = rows;
+          state.clusters = [...state.plan];
+          renderFilterDependentViews();
+        }
+      } catch (error) {
+        state.fullPlanSignature = "";
+        console.warn("No se pudo completar la cartera de clientes", error);
+      } finally {
+        if (seq === state.loadSeq && !state.loading) setGlobalLoading(false);
+      }
+    }
+
     async function loadData() {
       const seq = ++state.loadSeq;
+      invalidateSectionCache();
+      state.costReportSignature = "";
+      state.fullPlanSignature = "";
+      if (state.fullPlanTimer) {
+        clearTimeout(state.fullPlanTimer);
+        state.fullPlanTimer = null;
+      }
       setLoading(true, "Trayendo datos del tablero...");
       try {
-        const qs = queryString();
+        const qs = queryString(INITIAL_PLAN_LIMIT);
         const results = await Promise.allSettled([
-          api(`/api/segmentacion/plan-servicio${qs}`, undefined, 45000),
+          api(`/api/segmentacion/plan-servicio${qs}`, undefined, 75000),
           api("/api/segmentacion/resumen/sucursal", undefined, 25000),
           api("/api/segmentacion/periodo", undefined, 12000)
         ]);
@@ -1820,6 +2015,7 @@
           if (window.lucide) lucide.createIcons();
         }
         await loadSecondaryData(seq, state.activeTab, true);
+        scheduleFullPlanLoad(seq);
       } catch (error) {
         if (seq !== state.loadSeq) return;
         showGlobalError(error.message);
@@ -1829,8 +2025,14 @@
     }
 
     async function loadSecondaryData(seq, tab = state.activeTab, force = false) {
-      if (!["territory", "data", "costs", "quality", "settings", "evolution"].includes(tab)) return;
+      if (!["territory", "data", "costs", "cost-pdv", "quality", "settings", "evolution"].includes(tab)) return;
       const signature = tabCacheSignature(tab);
+      const isCostTab = tab === "costs" || tab === "cost-pdv";
+      if (isCostTab && !force && state.costReportSignature === signature) {
+        state.sectionSignatures[tab] = signature;
+        if (seq === state.loadSeq && state.activeTab === tab) renderTabContent(tab);
+        return;
+      }
       if (tab !== "evolution" && !force && state.sectionSignatures[tab] === signature) {
         if (seq === state.loadSeq && state.activeTab === tab) renderTabContent(tab);
         return;
@@ -1900,9 +2102,8 @@
             apply: (data) => { state.inflation = data || []; }
           }
         );
-      } else if (tab === "costs") {
-        const costParams = new URLSearchParams({ limit: "80" });
-        if (branch !== "TODAS") costParams.set("sucursal", branch);
+      } else if (tab === "costs" || tab === "cost-pdv") {
+        const costParams = costReportParams(80, false);
         tasks.push({
           label: "costos",
           run: () => api(`/api/segmentacion/reporte/costos-atencion?${costParams.toString()}`, undefined, 45000),
@@ -1937,6 +2138,7 @@
         territory: "Actualizando territorio...",
         data: "Actualizando carga complementaria...",
         costs: "Actualizando costos...",
+        "cost-pdv": "Actualizando costo por PDV...",
         quality: "Actualizando calidad...",
         settings: "Actualizando parametros..."
       }[tab] || "Actualizando datos complementarios...");
@@ -1952,7 +2154,15 @@
             console.warn(`No se pudo cargar ${task.label}`, result.reason);
           }
         });
-        if (!failed.length) state.sectionSignatures[tab] = signature;
+        if (!failed.length) {
+          if (isCostTab) {
+            state.costReportSignature = signature;
+            state.sectionSignatures.costs = signature;
+            state.sectionSignatures["cost-pdv"] = signature;
+          } else {
+            state.sectionSignatures[tab] = signature;
+          }
+        }
         if (state.activeTab === tab) renderTabContent(tab);
         if (failed.length) console.warn(`Carga complementaria parcial: ${failed.join(", ")}`);
       } finally {
@@ -1965,7 +2175,7 @@
     }
 
     function showGlobalError(message) {
-      ["branchSummary", "clientsTable", "clientServiceCard", "serviceTable", "costReportTable", "costExcludedTable", "localityTable", "territoryMap", "qualityTable", "qualityVersions", "inflationTable"].forEach((id) => {
+      ["branchSummary", "clientsTable", "clientServiceCard", "serviceTable", "costReportTable", "costExcludedTable", "costPdvTable", "costPdvExcludedTable", "localityTable", "territoryMap", "qualityTable", "qualityVersions", "inflationTable"].forEach((id) => {
         const el = $(id);
         if (el) el.innerHTML = `<div class="error">${esc(message)}</div>`;
       });
@@ -2023,6 +2233,10 @@
       return rows;
     }
 
+    function resetClientPage() {
+      state.clientPage = 1;
+    }
+
     function updateClientsExportLink() {
       const link = $("clientsExportXlsx");
       if (!link) return;
@@ -2037,6 +2251,23 @@
       if (sort) params.set("sort", sort);
       params.set("limit", "50000");
       link.href = `/api/segmentacion/clientes/export?${params.toString()}`;
+    }
+
+    function costReportParams(limit = 80, includeSearch = false) {
+      const params = new URLSearchParams({ limit: String(limit) });
+      const branch = selectedBranch();
+      const cluster = selectedCluster();
+      const q = $("searchInput")?.value.trim() || "";
+      if (branch !== "TODAS") params.set("sucursal", branch);
+      if (cluster) params.set("cluster", cluster);
+      if (includeSearch && q) params.set("q", q);
+      return params;
+    }
+
+    function updateCostPdvExportLink() {
+      const link = $("costPdvExportXlsx");
+      if (!link) return;
+      link.href = `/api/segmentacion/reporte/costos-atencion/export?${costReportParams(5000, true).toString()}`;
     }
 
     function renderClientCardOptions() {
@@ -2171,6 +2402,7 @@
 
     function tabCacheSignature(tab) {
       const branch = selectedBranch();
+      const cluster = selectedCluster();
       const mapWeight = $("mapWeight") ? $("mapWeight").value : "hl";
       const mapLimit = $("mapLimit") ? Number($("mapLimit").value || 1000) : 1000;
       const year = $("yearFilter") ? $("yearFilter").value : "";
@@ -2178,8 +2410,10 @@
         case "territory":
           return `${branch}|${mapWeight}|${mapLimit}`;
         case "data":
-        case "costs":
           return branch;
+        case "costs":
+        case "cost-pdv":
+          return `${branch}|${cluster}`;
         case "quality":
         case "settings":
           return "global";
@@ -2210,6 +2444,8 @@
         safeRender("carga", renderData);
       } else if (tab === "costs") {
         safeRender("costos", renderCosts);
+      } else if (tab === "cost-pdv") {
+        safeRender("costo PDV", renderCostPdv);
       } else if (tab === "quality") {
         safeRender("calidad", renderQuality);
       } else if (tab === "evolution") {
@@ -2229,6 +2465,7 @@
       safeRender("territorio", renderTerritory);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
+      safeRender("costo PDV", renderCostPdv);
       if (window.lucide) lucide.createIcons();
     }
 
@@ -2252,6 +2489,7 @@
       safeRender("territorio", renderTerritory);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
+      safeRender("costo PDV", renderCostPdv);
       safeRender("calidad", renderQuality);
       safeRender("carga", renderData);
       if (window.lucide) lucide.createIcons();
@@ -2542,7 +2780,15 @@
       const rows = filteredClients();
       updateClientsExportLink();
       const total = aggregateClusters().reduce((sum, row) => sum + row.clientes, 0);
-      $("clientsMeta").textContent = total ? `${num(rows.length)} cargados de ${num(total)}` : `${num(rows.length)} clientes`;
+      const pageCount = Math.max(1, Math.ceil(rows.length / CLIENT_PAGE_SIZE));
+      state.clientPage = Math.min(Math.max(Number(state.clientPage || 1), 1), pageCount);
+      const start = (state.clientPage - 1) * CLIENT_PAGE_SIZE;
+      const end = Math.min(start + CLIENT_PAGE_SIZE, rows.length);
+      const pageRows = rows.slice(start, end);
+      $("clientsMeta").textContent = total ? `${num(rows.length)} filtrados de ${num(total)} cargados` : `${num(rows.length)} clientes`;
+      if ($("clientsPageMeta")) $("clientsPageMeta").textContent = rows.length ? `${num(start + 1)}-${num(end)} de ${num(rows.length)}` : "-";
+      if ($("clientsPrevPage")) $("clientsPrevPage").disabled = state.clientPage <= 1;
+      if ($("clientsNextPage")) $("clientsNextPage").disabled = state.clientPage >= pageCount;
       if (!rows.length) {
         $("clientsTable").innerHTML = `<div class="empty">Sin clientes para los filtros actuales</div>`;
         return;
@@ -2552,26 +2798,30 @@
           <thead><tr>
             ${thHelp("Cliente")}${thHelp("Sucursal")}${thHelp("Cluster")}${thHelp("Subcluster")}${thHelp("Auto")}${thHelp("RMD", "num")}${thHelp("NPS", "num")}${thHelp("Score")}${thHelp("Venta", "num")}${thHelp("Crec. real", "num")}${thHelp("Crec. nom.", "num")}${thHelp("HL", "num")}${thHelp("Drop size", "num")}${thHelp("Costo %", "num")}${thHelp("Rechazo", "num")}${thHelp("OTIF", "num")}
           </tr></thead>
-          <tbody>${rows.slice(0, 500).map((row) => `
+          <tbody>${pageRows.map((row) => {
+            const sales = salesComparison(row);
+            const adjusted = sales.previousAdjusted !== null ? ` | Ant. IPC ${money(sales.previousAdjusted)}` : "";
+            return `
             <tr class="clickable" data-client="${esc(row.cliente)}">
               <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div>${clientServiceBadges(row)}</td>
-              <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+              <td>${esc(branchLabel(row.sucursal) || "-")}<span class="cell-sub">${esc(row.localidad || "-")}</span></td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
               <td><span class="badge ${badgeClass(row.subcluster_logistico)}">${esc(row.subcluster_logistico || "Estandar")}</span></td>
               <td>${autoBadge(row)}</td>
               <td class="num">${rmdText(row.rmd_valor)}</td>
               <td class="num" style="color:${npsColor(row.nps_valor)}">${npsText(row.nps_valor)}</td>
               <td>${scoreBar(row.score_total)}</td>
-              <td class="num">${money(row.venta_ytd)}<span class="cell-sub">Ant. ${money(salesComparison(row).previous)}</span></td>
+              <td class="num">${money(row.venta_ytd)}<span class="cell-sub">Ant. ${money(sales.previous)}${adjusted}</span></td>
               <td class="num" style="color:${Number(row.crecimiento_pct || 0) >= 0 ? "var(--green)" : "var(--red)"}">${pct(row.crecimiento_pct)}</td>
               <td class="num">${pct(row.crecimiento_nominal_pct)}</td>
-              <td class="num">${num(row.hl_ytd, 2)}</td>
-              <td class="num">${num(row.dropsize_bultos_ytd, 2)}</td>
-              <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
-              <td class="num">${pct(row.pct_rechazo_pedidos)}<span class="cell-sub">HL ${pct(row.pct_rechazo_hl)}</span></td>
+              <td class="num">${num(row.hl_ytd, 2)}<span class="cell-sub">Bultos ${num(row.bultos_ytd, 2)} | Pallets ${num(row.pallets_ytd, 2)}</span></td>
+              <td class="num">${num(row.dropsize_bultos_ytd, 2)}<span class="cell-sub">Pedidos ${num(row.pedidos_ytd)} | Ticket ${money(row.ticket_promedio_ytd)}</span></td>
+              <td class="num">${pct(row.ratio_costo_logistico_pct)}<span class="cell-sub">Costo ${money(row.costo_logistico_total)} | Margen ${money(row.margen_logistico_proxy)}</span></td>
+              <td class="num">${pct(row.pct_rechazo_pedidos)}<span class="cell-sub">Ped. ${num(row.pedidos_rechazo_ytd)} | HL ${pct(row.pct_rechazo_hl)} (${num(row.hl_rechazado_ytd, 2)})</span></td>
               <td class="num">${pct(row.otif_valor)}</td>
             </tr>
-          `).join("")}</tbody>
+          `;
+          }).join("")}</tbody>
         </table>
       `;
       $("clientsTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
@@ -2774,9 +3024,9 @@
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
               <td>${autoBadge(row)}</td>
               <td class="num">${num(row.prioridad_gestion)}</td>
-              <td style="white-space:normal;min-width:260px;">${esc(row.plan_servicio || "-")}</td>
-              <td style="white-space:normal;min-width:260px;">${esc(row.accion_prioritaria || "-")}</td>
-              <td style="white-space:normal;min-width:180px;">${esc(row.alerta_operativa || "-")}</td>
+              <td class="action-cell">${esc(row.plan_servicio || "-")}</td>
+              <td class="action-cell">${esc(row.accion_prioritaria || "-")}</td>
+              <td class="text-cell">${esc(row.alerta_operativa || "-")}</td>
               <td class="num">${rmdText(row.rmd_valor)}</td>
               <td class="num" style="color:${npsColor(row.nps_valor)}">${num(row.nps_valor, 2)}</td>
               <td>${scoreBar(row.score_total)}</td>
@@ -2789,6 +3039,7 @@
     }
 
     function renderCosts() {
+      if (state.activeTab !== "costs") return;
       const report = state.costReport || { items: [], resumen: {}, umbrales: {} };
       const resumen = report.resumen || {};
       const umbrales = report.umbrales || {};
@@ -2814,7 +3065,7 @@
         $("costReportTable").innerHTML = `
           <table>
             <thead><tr>
-              ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Auto")}${thHelp("Indice", "num")}${thHelp("Motivo principal")}${thHelp("Explicacion")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}${thHelp("Rechazo", "num")}${thHelp("Margen", "num")}
+              ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Indice", "num")}${thHelp("Motivo principal")}${thHelp("Explicacion")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}${thHelp("Rechazo", "num")}${thHelp("Margen", "num")}
             </tr></thead>
             <tbody>${rows.map((row) => {
               const reasons = Array.isArray(row.motivos) ? row.motivos : [];
@@ -2825,10 +3076,11 @@
                 <tr class="clickable" data-client="${esc(row.cliente)}">
                   <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
                   <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "-")}</span></td>
                   <td>${autoBadge(row)}</td>
                   <td class="num">${num(row.indice_costo_servicio, 2)}</td>
                   <td><span class="badge ${badgeClass(row.motivo_principal)}">${esc(row.motivo_principal || "-")}</span></td>
-                  <td style="white-space:normal;min-width:340px;">${explanation}</td>
+                  <td class="reason-cell">${explanation}</td>
                   <td class="num">${money(row.costo_logistico_total)}</td>
                   <td class="num" style="color:${Number(row.ratio_costo_logistico_pct || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--text)"}">${pct(row.ratio_costo_logistico_pct)}</td>
                   <td class="num">${money(row.venta_ytd)}</td>
@@ -2871,14 +3123,15 @@
       $("costExcludedTable").innerHTML = `
         <table>
           <thead><tr>
-            ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Auto")}${thHelp("Motivo principal")}${thHelp("Margen proxy", "num")}${thHelp("Venta", "num")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}
+            ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Motivo principal")}${thHelp("Margen proxy", "num")}${thHelp("Venta", "num")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}
           </tr></thead>
           <tbody>${filtered.map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
               <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "Alto costo")}</span></td>
               <td>${autoBadge(row)}</td>
-              <td style="white-space:normal;min-width:340px;">
+              <td class="reason-cell">
                 <div class="reason-list">${(Array.isArray(row.motivos) ? row.motivos : [row.explicacion || "-"]).slice(0, 3).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div>
               </td>
               <td class="num" style="color:var(--red)">${money(row.margen_logistico_proxy)}</td>
@@ -2892,6 +3145,152 @@
         </table>
       `;
       $("costExcludedTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function pdvCostAction(row, umbrales = {}) {
+      const ratio = Number(row.ratio_costo_logistico_pct || 0);
+      const p75Ratio = Number(umbrales.p75_ratio || 0);
+      const costPdv = Number(row.costo_por_pedido || 0);
+      const p75CostPdv = Number(umbrales.p75_costo_pdv || 0);
+      const drop = Number(row.dropsize_bultos_ytd || 0);
+      const p25Drop = Number(umbrales.p25_dropsize || 0);
+      const rechazoHl = Number(row.pct_rechazo_hl || 0);
+      const margen = Number(row.margen_logistico_proxy || 0);
+      if (margen < 0) return "Revisar rentabilidad, precio o frecuencia antes de priorizar entregas especiales.";
+      if (rechazoHl >= 3) return "Atacar causas de rechazo y ventanas de entrega antes de aumentar frecuencia.";
+      if (p75CostPdv > 0 && costPdv >= p75CostPdv) return "Revisar ruteo, consolidacion y frecuencia: costo por visita por encima del p75.";
+      if (p25Drop > 0 && drop <= p25Drop) return "Consolidar pedidos o ajustar frecuencia para subir drop size.";
+      if (p75Ratio > 0 && ratio >= p75Ratio) return "Validar mix de costo/venta y mantener seguimiento semestral.";
+      return "Mantener en monitoreo y usar cluster para prioridad de ruteo.";
+    }
+
+    function renderCostPdv() {
+      if (state.activeTab !== "cost-pdv") return;
+      const report = state.costReport || { items: [], resumen: {}, umbrales: {} };
+      const resumen = report.resumen || {};
+      const umbrales = report.umbrales || {};
+      const excluded = Array.isArray(report.excluidos_margen_negativo) ? report.excluidos_margen_negativo : [];
+      const excludedSummary = resumen.excluidos_margen_negativo || {};
+      const q = $("searchInput").value.trim().toLowerCase();
+      let rows = Array.isArray(report.items) ? [...report.items] : [];
+      if (q) {
+        rows = rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q));
+      }
+      const p75CostPdv = Number(umbrales.p75_costo_pdv || 0);
+      const highCostPdv = p75CostPdv > 0 ? rows.filter((row) => Number(row.costo_por_pedido || 0) >= p75CostPdv).length : 0;
+      const negativeMargin = rows.filter((row) => Number(row.margen_logistico_proxy || 0) < 0).length;
+      const segmentCounts = resumen.segmentacion_costo || {};
+      const period = state.params.periodo || {};
+      const periodText = `${dateInputValue(period.fecha_desde) || "-"} / ${dateInputValue(period.fecha_hasta) || "-"}`;
+      const baseText = `${dateInputValue(period.fecha_base_desde) || "-"} / ${dateInputValue(period.fecha_base_hasta) || "-"}`;
+      $("costPdvMeta").textContent = `${num(rows.length)} PDV | ${periodText}`;
+      updateCostPdvExportLink();
+      $("costPdvSummary").innerHTML = `
+        ${metric("Periodo actual", esc(periodText), "var(--text)", `<span class="metric-detail">Base: <b>${esc(baseText)}</b></span>`)}
+        ${metric("Clientes evaluados", num(resumen.clientes_evaluados || 0))}
+        ${metric("Costo entrega reportado", moneyCard(resumen.costo_entrega_reportado || 0), "var(--amber)")}
+        ${metric("Costo reportado", moneyCard(resumen.costo_total_reportado || 0))}
+        ${metric("Costo PDV prom.", moneyCard(resumen.costo_por_pdv_promedio_reportado || 0))}
+        ${metric("P75 costo/PDV", moneyCard(umbrales.p75_costo_pdv || 0))}
+        ${metric("P75 costo/venta", pctCard(umbrales.p75_ratio || 0))}
+        ${metric("PDV sobre p75", num(highCostPdv), highCostPdv ? "var(--red)" : "var(--green)")}
+        ${metric("Margen proxy negativo", num(negativeMargin), negativeMargin ? "var(--red)" : "var(--green)")}
+        ${metric("Alto costo", num(segmentCounts["Alto costo"] || 0), (segmentCounts["Alto costo"] || 0) ? "var(--red)" : "var(--green)")}
+        ${metric("Rechazadores", num(segmentCounts["Rechazadores"] || 0), (segmentCounts["Rechazadores"] || 0) ? "var(--red)" : "var(--green)")}
+        ${metric("Bajo / Medio", `${num(segmentCounts["Bajo costo"] || 0)} / ${num(segmentCounts["Medio costo"] || 0)}`)}
+      `;
+      if (!rows.length) {
+        $("costPdvTable").innerHTML = `<div class="empty">Sin PDV costosos para los filtros actuales</div>`;
+      } else {
+        $("costPdvTable").innerHTML = `
+          <table>
+            <thead><tr>
+              ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Indice", "num")}
+              ${thHelp("Pedidos GM", "num")}${thHelp("Bultos totales", "num")}${thHelp("Precio/bulto", "num")}${thHelp("Fact. total", "num")}
+              ${thHelp("Costo dist./bulto", "num")}${thHelp("Costo total entrega", "num")}${thHelp("Costo total", "num")}
+              ${thHelp("Costo / venta", "num")}${thHelp("Rent. entrega", "num")}${thHelp("Rentabilidad proxy", "num")}${thHelp("Rechazo HL", "num")}
+              ${thHelp("Explicacion")}${thHelp("Accion prioritaria")}
+            </tr></thead>
+            <tbody>${rows.map((row) => {
+              const reasons = Array.isArray(row.motivos) && row.motivos.length ? row.motivos : [row.explicacion || "-"];
+              const costPdvHigh = p75CostPdv > 0 && Number(row.costo_por_pedido || 0) >= p75CostPdv;
+              return `
+                <tr class="clickable" data-client="${esc(row.cliente)}">
+                  <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div><div class="client-sub">${esc(row.localidad || "")}</div></td>
+                  <td><strong>${esc(row.canal || "-")}</strong><span class="cell-sub">${esc(row.subcanal || "")}</span></td>
+                  <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span><span class="cell-sub">${esc(row.subcluster_logistico || "-")}</span></td>
+                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "-")}</span></td>
+                  <td>${autoBadge(row)}</td>
+                  <td class="num">${num(row.indice_costo_servicio, 2)}</td>
+                  <td class="num">${num(row.pedidos_gm ?? row.pedidos_ytd)}</td>
+                  <td class="num">${num(row.bultos_totales ?? row.bultos_ytd, 2)}</td>
+                  <td class="num">${money(row.precio_por_bulto)}</td>
+                  <td class="num">${money(row.fact_total ?? row.venta_ytd)}</td>
+                  <td class="num">${money(row.costo_distribucion_unitario)}</td>
+                  <td class="num">${money(row.costo_total_entrega ?? row.costo_entrega)}</td>
+                  <td class="num">${money(row.costo_logistico_total)}</td>
+                  <td class="num" style="color:${Number(row.ratio_costo_logistico_pct || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--text)"}">${pct(row.ratio_costo_logistico_pct)}</td>
+                  <td class="num" style="color:${Number(row.rentabilidad_entrega || 0) < 0 ? "var(--red)" : "var(--green)"}">${money(row.rentabilidad_entrega)}</td>
+                  <td class="num" style="color:${Number(row.margen_logistico_proxy || 0) < 0 ? "var(--red)" : "var(--green)"}">${money(row.margen_logistico_proxy)}</td>
+                  <td class="num">${pct(row.pct_rechazo_hl)}</td>
+                  <td class="reason-cell"><div class="reason-list">${reasons.slice(0, 4).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div></td>
+                  <td class="action-cell">${esc(pdvCostAction(row, umbrales))}</td>
+                </tr>
+              `;
+            }).join("")}</tbody>
+          </table>
+        `;
+        $("costPdvTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
+      }
+      renderCostPdvExcluded(excluded, excludedSummary, q);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderCostPdvExcluded(rows, summary, q) {
+      const filtered = q
+        ? rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q))
+        : rows;
+      const total = Number(summary.clientes || 0);
+      if (!total) {
+        $("costPdvExcludedNote").innerHTML = "";
+        $("costPdvExcludedTable").innerHTML = "";
+        return;
+      }
+      $("costPdvExcludedNote").innerHTML = `
+        <div class="note" style="border-color:#ffc9c2;background:#fff4f2;color:var(--red);">
+          <strong>PDV fuera del ranking principal con margen logistico proxy negativo</strong><br>
+          ${num(total)} clientes tienen baja venta frente al umbral, pero destruyen margen logistico proxy.
+          Deben revisarse abajo del ranking para no perderlos como accion de ruteo o rentabilidad.
+        </div>
+      `;
+      if (!filtered.length) {
+        $("costPdvExcludedTable").innerHTML = `<div class="empty">La busqueda no coincide con los PDV excluidos</div>`;
+        return;
+      }
+      $("costPdvExcludedTable").innerHTML = `
+        <table>
+          <thead><tr>
+            ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Margen proxy", "num")}${thHelp("Costo / PDV", "num")}${thHelp("Costo total", "num")}${thHelp("Costo / venta", "num")}${thHelp("Venta", "num")}${thHelp("Explicacion")}
+          </tr></thead>
+          <tbody>${filtered.map((row) => `
+            <tr class="clickable" data-client="${esc(row.cliente)}">
+              <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
+              <td><strong>${esc(row.canal || "-")}</strong><span class="cell-sub">${esc(row.subcanal || "")}</span></td>
+              <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
+              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "Alto costo")}</span></td>
+              <td>${autoBadge(row)}</td>
+              <td class="num" style="color:var(--red)">${money(row.margen_logistico_proxy)}</td>
+              <td class="num">${money(row.costo_por_pedido)}</td>
+              <td class="num">${money(row.costo_logistico_total)}</td>
+              <td class="num">${pct(row.ratio_costo_logistico_pct)}</td>
+              <td class="num">${money(row.venta_ytd)}</td>
+              <td class="reason-cell"><div class="reason-list">${(Array.isArray(row.motivos) ? row.motivos : [row.explicacion || "-"]).slice(0, 3).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div></td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+      $("costPdvExcludedTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
       if (window.lucide) lucide.createIcons();
     }
 
@@ -2965,7 +3364,7 @@
                   <td>${qualityBadge(row.estado)}</td>
                   <td class="num">${num(row.valor)}</td>
                   <td class="num">${pct(row.cobertura_pct)}</td>
-                  <td style="white-space:normal;min-width:320px">${esc(row.detalle || "-")}</td>
+                  <td class="comment-cell">${esc(row.detalle || "-")}</td>
                   <td>${shortDateTime(row.updated_at)}</td>
                 </tr>
               `).join("")}</tbody>
@@ -3644,8 +4043,8 @@
                   <td>${esc(String(row.fecha_encuesta || "").slice(0, 16))}</td>
                   <td class="num">${num(row.score, 0)}</td>
                   <td><span class="badge ${row.categoria_nps === "Promoter" ? "b-ganador" : row.categoria_nps === "Passive" ? "b-basico" : "b-bajas"}">${esc(row.categoria_nps || "-")}</span></td>
-                  <td style="white-space:normal;min-width:260px;">${renderDriverList(row.drivers)}</td>
-                  <td style="white-space:normal;min-width:220px;">${esc(row.comentario || "-")}</td>
+                  <td class="action-cell">${renderDriverList(row.drivers)}</td>
+                  <td class="comment-cell">${esc(row.comentario || "-")}</td>
                 </tr>
               `).join("")}</tbody>
             </table>
@@ -3746,23 +4145,40 @@
     function bindEvents() {
       document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
       on("branchFilter", "change", () => {
+        resetClientPage();
         renderFilterDependentViews();
         scheduleLoadData();
       });
       on("clusterFilter", "change", () => {
+        resetClientPage();
         renderFilterDependentViews();
+        if (state.activeTab === "costs" || state.activeTab === "cost-pdv") {
+          loadSecondaryData(state.loadSeq, state.activeTab);
+        }
       });
       on("sortFilter", "change", () => {
+        resetClientPage();
         safeRender("opciones cliente", renderClientCardOptions);
         safeRender("clientes", renderClients);
         safeRender("plan", renderService);
         safeRender("costos", renderCosts);
+        safeRender("costo PDV", renderCostPdv);
       });
       on("searchInput", "input", () => {
+        resetClientPage();
         safeRender("opciones cliente", renderClientCardOptions);
         safeRender("clientes", renderClients);
         safeRender("plan", renderService);
         safeRender("costos", renderCosts);
+        safeRender("costo PDV", renderCostPdv);
+      });
+      on("clientsPrevPage", "click", () => {
+        state.clientPage = Math.max(1, Number(state.clientPage || 1) - 1);
+        safeRender("clientes", renderClients);
+      });
+      on("clientsNextPage", "click", () => {
+        state.clientPage = Number(state.clientPage || 1) + 1;
+        safeRender("clientes", renderClients);
       });
       ["mapWeight", "mapLimit"].forEach((id) => on(id, "change", () => {
         safeRender("territorio", renderTerritory);
@@ -3775,6 +4191,11 @@
       on("reloadBtn", "click", loadData);
       on("recalcBtn", "click", handleRecalculate);
       on("clientCardBtn", "click", buildClientServiceCard);
+      on("costPdvPeriodBtn", "click", () => {
+        setTab("settings");
+        setTimeout(() => $("periodYear")?.focus(), 80);
+      });
+      on("costPdvHistoryBtn", "click", () => setTab("evolution"));
       if ($("clientCardInput")) $("clientCardInput").addEventListener("keydown", (event) => {
         if (event.key === "Enter") buildClientServiceCard();
       });

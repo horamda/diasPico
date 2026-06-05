@@ -102,6 +102,79 @@ def test_export_clientes_excel_filtra_ordena_y_genera_xlsx(monkeypatch):
     assert ws.max_row == 4
 
 
+def test_export_costos_atencion_excel_genera_resumen_y_ranking(monkeypatch):
+    report = {
+        "items": [
+            {
+                "cliente": "10001",
+                "descripcion_cliente": "Kiosco La Plata",
+                "sucursal": "1",
+                "canal": "KIOSCOS",
+                "cluster_dpo": "Ganador",
+                "autoelevador": True,
+                "segmentacion_costo_pdv": "Alto costo",
+                "pedidos_gm": 6,
+                "bultos_totales": 120,
+                "precio_por_bulto": 66.67,
+                "fact_total": 8000,
+                "costo_distribucion_unitario": 5.83,
+                "costo_total_entrega": 700,
+                "rentabilidad_entrega": 7300,
+                "indice_costo_servicio": 88.5,
+                "costo_por_pedido": 1200,
+                "costo_entrega": 700,
+                "costo_almacen": 300,
+                "costo_logistico_total": 1000,
+                "ratio_costo_logistico_pct": 12.5,
+                "venta_ytd": 8000,
+                "margen_logistico_proxy": 7000,
+                "motivos": ["Costo por PDV alto"],
+                "explicacion": "Costo por visita por encima del p75",
+            }
+        ],
+        "excluidos_margen_negativo": [],
+        "resumen": {
+            "criterio": "Excluye baja venta por debajo del p25 para evitar outliers",
+            "clientes_evaluados": 1,
+            "costo_entrega_reportado": 700,
+            "costo_almacen_reportado": 300,
+            "costo_total_reportado": 1000,
+            "costo_por_pdv_promedio_reportado": 1200,
+            "ratio_reportado": 12.5,
+        },
+        "umbrales": {"p75_costo_pdv": 900, "p75_ratio": 10, "p25_dropsize": 3, "p25_venta": 500},
+    }
+    monkeypatch.setattr(svc, "get_reporte_costos_atencion", lambda **_: report)
+    monkeypatch.setattr(svc, "get_periodo_activo", lambda: {
+        "periodo_anio": 2026,
+        "periodo_mes": 5,
+        "fecha_desde": "2026-01-01",
+        "fecha_hasta": "2026-05-31",
+        "fecha_base_desde": "2025-01-01",
+        "fecha_base_hasta": "2025-05-31",
+    })
+
+    stream, filename, mimetype = svc.export_costos_atencion_excel(sucursal="1", cluster="Ganador", q="plata")
+
+    assert filename.startswith("costo_pdv_")
+    assert mimetype == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert stream.getvalue().startswith(b"PK")
+
+    wb = load_workbook(stream)
+    assert wb.sheetnames == ["Resumen", "PDV costosos", "Margen proxy negativo"]
+    assert wb["Resumen"]["B10"].value == "2026-01-01"
+    ws = wb["PDV costosos"]
+    assert ws["A3"].value == "Cliente"
+    assert ws["A4"].value == "10001"
+    headers = {cell.value: idx for idx, cell in enumerate(ws[3], start=1)}
+    assert ws.cell(row=4, column=headers["Canal"]).value == "KIOSCOS"
+    assert ws.cell(row=4, column=headers["Segmentacion costo PDV"]).value == "Alto costo"
+    assert "Costo por PDV alto" in ws.cell(row=4, column=headers["Motivos"]).value
+    ws_excluded = wb["Margen proxy negativo"]
+    assert "detectados: 0" in ws_excluded["A1"].value
+    assert "No hay PDV excluidos" in ws_excluded["A4"].value
+
+
 def test_recalcular_clusters_lee_snapshot_desde_cache_dpo():
     source = inspect.getsource(svc.recalcular_clusters)
 
@@ -190,12 +263,83 @@ def test_reporte_costos_atencion_explica_motivos_operativos():
     assert "motivo_principal" in source
     assert "ARRAY_REMOVE" in source
     assert "ratio_costo_logistico_pct" in source
+    assert "p75_costo_pdv" in source
+    assert "p50_costo_pdv" in source
+    assert "costo_por_pedido" in source
+    assert "segmentacion_costo_pdv" in source
+    assert "Bajo costo" in source
+    assert "Medio costo" in source
+    assert "Alto costo" in source
+    assert "Rechazadores" in source
+    assert "precio_por_bulto" in source
+    assert "costo_distribucion_unitario" in source
+    assert "rentabilidad_entrega" in source
+    assert "canal_raw" in source
+    assert "costo_entrega" in source
+    assert "costo_almacen" in source
     assert "dropsize_bultos_ytd" in source
     assert "pct_rechazo_pedidos" in source
     assert "pct_rechazo_hl" in source
     assert "margen_logistico_proxy" in source
     assert "excluidos_margen_negativo" in source
     assert "margen logistico proxy negativo" in source.lower()
+
+
+def test_ratio_costo_resumen_usa_ratio_ponderado_y_no_promedio_simple():
+    view_sql = svc._VIEWS_SQL
+    resumen_source = inspect.getsource(svc.get_resumen_sucursal)
+    reporte_source = inspect.getsource(svc.get_reporte_costos_atencion)
+
+    assert "SUM(c.costo_logistico_total) / SUM(c.venta_ytd) * 100" in view_sql
+    assert "SUM(costo_logistico_total) / SUM(venta_ytd) * 100" in resumen_source
+    assert "SUM(costo_logistico_total) / SUM(venta_ytd) * 100" in reporte_source
+    assert "AVG(c.ratio_costo_logistico_pct)" not in view_sql
+    assert "AVG(ratio_costo_logistico_pct)" not in resumen_source
+    assert "AVG(ratio_costo_logistico_pct)" not in reporte_source
+
+
+def test_plan_dashboard_lite_incluye_datos_completos_para_cartera():
+    cols = set(svc._PLAN_DASHBOARD_COLUMNS)
+
+    assert {
+        "pallets_ytd",
+        "up_ytd",
+        "ticket_promedio_ytd",
+        "pedidos_rechazo_ytd",
+        "hl_rechazado_ytd",
+        "costo_entrega",
+        "costo_almacen",
+        "costo_logistico_total",
+        "margen_logistico_proxy",
+        "ratio_costo_logistico_pct",
+    }.issubset(cols)
+
+
+def test_aggregate_light_plan_calcula_ratio_costo_ponderado():
+    rows = [
+        {
+            "sucursal": "1",
+            "cluster_dpo": "Ganador",
+            "venta_ytd": 100,
+            "costo_logistico_total": 100,
+            "hl_ytd": 1,
+            "pedidos_ytd": 1,
+            "score_total": 80,
+        },
+        {
+            "sucursal": "1",
+            "cluster_dpo": "Ganador",
+            "venta_ytd": 1000,
+            "costo_logistico_total": 100,
+            "hl_ytd": 10,
+            "pedidos_ytd": 2,
+            "score_total": 90,
+        },
+    ]
+
+    result = svc._aggregate_light_plan(rows, ("sucursal", "cluster_dpo"))
+
+    assert result[0]["ratio_costo_prom"] == 18.18
 
 
 def test_servicio_historico_prioriza_periodo_en_cache():
