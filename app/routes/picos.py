@@ -49,6 +49,108 @@ def historico():
         return jsonify({'error': str(e)}), 500
 
 
+@bp.get('/venta-dia')
+def venta_dia():
+    sucursal = request.args.get('sucursal', 'TODAS')
+    desde    = request.args.get('desde') or None
+    hasta    = request.args.get('hasta') or None
+    umbral   = request.args.get('umbral', type=float)
+    metrica  = request.args.get('metrica')
+    heatmap_metrica = request.args.get('heatmap_metrica') or None
+    periodo_tipo = request.args.get('periodo_tipo') or None
+    anio = request.args.get('anio', type=int)
+    mes = request.args.get('mes') or None
+    semana = request.args.get('semana', type=int)
+    anio_comparativo = request.args.get('anio_comparativo', type=int)
+    try:
+        return jsonify(_cached(
+            'venta-dia',
+            lambda: pico_svc.get_venta_por_dia(
+                sucursal=sucursal,
+                desde=desde,
+                hasta=hasta,
+                umbral_override=umbral,
+                metrica_override=metrica,
+                heatmap_metrica=heatmap_metrica,
+                periodo_tipo=periodo_tipo,
+                anio=anio,
+                mes=mes,
+                semana=semana,
+                anio_comparativo=anio_comparativo,
+            ),
+        ))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/venta-dia/export')
+def export_venta_dia():
+    sucursal = request.args.get('sucursal', 'TODAS')
+    desde    = request.args.get('desde') or None
+    hasta    = request.args.get('hasta') or None
+    umbral   = request.args.get('umbral', type=float)
+    metrica  = request.args.get('metrica')
+    heatmap_metrica = request.args.get('heatmap_metrica') or None
+    periodo_tipo = request.args.get('periodo_tipo') or None
+    anio = request.args.get('anio', type=int)
+    mes = request.args.get('mes') or None
+    semana = request.args.get('semana', type=int)
+    anio_comparativo = request.args.get('anio_comparativo', type=int)
+    formato  = request.args.get('formato', 'xlsx')
+    try:
+        stream, filename, mimetype = pico_svc.export_venta_por_dia(
+            sucursal=sucursal,
+            desde=desde,
+            hasta=hasta,
+            umbral_override=umbral,
+            metrica_override=metrica,
+            heatmap_metrica=heatmap_metrica,
+            periodo_tipo=periodo_tipo,
+            anio=anio,
+            mes=mes,
+            semana=semana,
+            anio_comparativo=anio_comparativo,
+            formato=formato,
+        )
+        return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/experiencia-clientes')
+def experiencia_clientes():
+    sucursal = request.args.get('sucursal', 'TODAS')
+    periodo = request.args.get('periodo') or None
+    anio = request.args.get('anio', type=int)
+    mes = request.args.get('mes', type=int)
+    localidad = request.args.get('localidad') or None
+    tipo_negocio = request.args.get('tipo_negocio') or None
+    estado = request.args.get('estado') or None
+    metrica = request.args.get('metrica') or None
+    try:
+        return jsonify(_cached(
+            'experiencia-clientes',
+            lambda: pico_svc.get_experiencia_clientes(
+                sucursal=sucursal,
+                periodo=periodo,
+                anio=anio,
+                mes=mes,
+                localidad=localidad,
+                tipo_negocio=tipo_negocio,
+                estado=estado,
+                metrica=metrica,
+            ),
+        ))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.get('/analisis-hl')
 @bp.get('/analisis-rechazos')
 def analisis_hl():

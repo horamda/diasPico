@@ -11,6 +11,7 @@ Tablas propias: seg_parametros, seg_clientes_atributos,
 from __future__ import annotations
 
 import json
+import re
 import unicodedata
 import time
 from calendar import monthrange
@@ -5740,6 +5741,495 @@ def get_cliente_cluster_logistico(
                 return _dict_rows(cur)
     except Exception:
         return []
+
+
+def _seg_exp_num(value: Any) -> float | None:
+    if value is None or value == '':
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _seg_exp_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _seg_exp_clean_label(value: Any, default: str = 'Sin dato') -> str:
+    text = re.sub(r'\s+', ' ', str(value or '').strip())
+    if not text or text.lower() in {'none', 'nan', 'null', 's/d', 'sin dato'}:
+        return default
+    parts = [p.strip() for p in re.split(r'\s*(?:\||/| - |–|—)\s*', text) if p.strip()]
+    if len(parts) > 1:
+        while len(parts) > 1 and re.fullmatch(r'\d+', parts[0]):
+            parts = parts[1:]
+        seen: set[str] = set()
+        unique: list[str] = []
+        for part in parts:
+            key = unicodedata.normalize('NFD', part).encode('ascii', 'ignore').decode('ascii').lower()
+            key = re.sub(r'\W+', '', key)
+            if key and key not in seen:
+                seen.add(key)
+                unique.append(part)
+        if unique and len(unique) < len(parts):
+            return ' / '.join(unique)
+    return text
+
+
+def _seg_exp_tipo_nombre(*values: Any) -> str:
+    for value in values:
+        label = _seg_exp_clean_label(value, '')
+        if label and not re.fullmatch(r'\d+', label):
+            return label
+    return 'Sin canal'
+
+
+def _seg_exp_metric_key(value: str | None) -> str:
+    key = str(value or 'nps').strip().lower()
+    return key if key in {'nps', 'rmd', 'combinado'} else 'nps'
+
+
+def _seg_exp_metric_label(metric: str) -> str:
+    return {'nps': 'NPS', 'rmd': 'RMD', 'combinado': 'NPS + RMD'}.get(metric, 'NPS')
+
+
+def _seg_exp_period(periodo: str | None = None) -> tuple[int, int]:
+    raw = str(periodo or '').strip()
+    if re.fullmatch(r'20\d{2}-(?:0[1-9]|1[0-2])', raw):
+        year, month = raw.split('-')
+        return int(year), int(month)
+    active = get_periodo_activo()
+    fecha_hasta = active.get('fecha_hasta')
+    if isinstance(fecha_hasta, str) and len(fecha_hasta) >= 7:
+        try:
+            return int(fecha_hasta[:4]), int(fecha_hasta[5:7])
+        except ValueError:
+            pass
+    year = int(active.get('periodo_anio') or date.today().year)
+    month = int(active.get('periodo_mes') or 0)
+    if not 1 <= month <= 12:
+        month = date.today().month
+    return year, month
+
+
+def _seg_exp_period_label(year: int, month: int) -> str:
+    meses = ('Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre')
+    return f'{meses[month - 1]} {year}' if 1 <= month <= 12 else str(year)
+
+
+def _seg_exp_nps_score_to_indice(score: float | None) -> float | None:
+    if score is None:
+        return None
+    if score <= 6:
+        return -100.0
+    if score < 9:
+        return 0.0
+    return 100.0
+
+
+def _seg_exp_nps_metric(row: dict) -> float | None:
+    detalle = _seg_exp_num(row.get('nps_detalle_indice'))
+    if detalle is not None:
+        return detalle
+    legacy = _seg_exp_num(row.get('nps_valor'))
+    if legacy is None:
+        return None
+    if 0 <= legacy <= 10:
+        return _seg_exp_nps_score_to_indice(legacy)
+    return max(-100.0, min(100.0, legacy))
+
+
+def _seg_exp_nps_estado(row: dict) -> str:
+    indice = _seg_exp_nps_metric(row)
+    if indice is not None:
+        if indice < 0:
+            return 'malo'
+        if indice < 50:
+            return 'neutro'
+        return 'bueno'
+    return 'sin_dato'
+
+
+def _seg_exp_rmd_estado(row: dict) -> str:
+    rmd = _seg_exp_num(row.get('rmd_valor'))
+    if rmd is None:
+        return 'sin_dato'
+    if rmd <= 2:
+        return 'malo'
+    if rmd < 4:
+        return 'neutro'
+    return 'bueno'
+
+
+def _seg_exp_estado(row: dict, metric: str) -> str:
+    if metric == 'nps':
+        return _seg_exp_nps_estado(row)
+    if metric == 'rmd':
+        return _seg_exp_rmd_estado(row)
+    states = {_seg_exp_nps_estado(row), _seg_exp_rmd_estado(row)}
+    if 'malo' in states:
+        return 'malo'
+    if 'neutro' in states:
+        return 'neutro'
+    if 'bueno' in states:
+        return 'bueno'
+    return 'sin_dato'
+
+
+def _seg_exp_metric_value(row: dict, metric: str) -> float | None:
+    if metric == 'rmd':
+        return _seg_exp_num(row.get('rmd_valor'))
+    if metric == 'combinado':
+        values: list[float] = []
+        nps = _seg_exp_nps_metric(row)
+        rmd = _seg_exp_num(row.get('rmd_valor'))
+        if nps is not None:
+            values.append((nps + 100.0) / 2.0)
+        if rmd is not None:
+            values.append((rmd / 5.0) * 100.0)
+        return round(sum(values) / len(values), 2) if values else None
+    return _seg_exp_nps_metric(row)
+
+
+def _seg_exp_evaluated(row: dict, metric: str) -> bool:
+    return _seg_exp_metric_value(row, metric) is not None
+
+
+def _seg_exp_avg(values: Iterable[float | int | None]) -> float | None:
+    nums = [float(v) for v in values if v is not None]
+    return round(sum(nums) / len(nums), 2) if nums else None
+
+
+def _seg_exp_group_summary(rows: list[dict], keys: tuple[str, ...], metric: str) -> list[dict]:
+    groups: dict[tuple[Any, ...], list[dict]] = {}
+    for row in rows:
+        groups.setdefault(tuple(row.get(k) for k in keys), []).append(row)
+
+    result = []
+    severity = {'malo': 0, 'neutro': 1, 'bueno': 2, 'sin_dato': 3}
+    for key, items in groups.items():
+        out = {keys[i]: key[i] for i in range(len(keys))}
+        state_counts = {'bueno': 0, 'neutro': 0, 'malo': 0, 'sin_dato': 0}
+        type_counts: dict[str, int] = {}
+        for row in items:
+            state = row.get('estado') or 'sin_dato'
+            state_counts[state] = state_counts.get(state, 0) + 1
+            type_name = row.get('tipo_negocio_nombre') or row.get('tipo_negocio') or 'Sin canal'
+            type_counts[type_name] = type_counts.get(type_name, 0) + 1
+        dominant_type = sorted(type_counts.items(), key=lambda item: (-item[1], item[0]))[0][0] if type_counts else 'Sin canal'
+        responses = sum(_seg_exp_int(row.get('nps_respuestas')) for row in items)
+        if responses:
+            promoters = sum(_seg_exp_int(row.get('nps_promotores')) for row in items)
+            detractors = sum(_seg_exp_int(row.get('nps_detractores')) for row in items)
+            nps_indice = round((promoters - detractors) / responses * 100, 2)
+        else:
+            nps_indice = _seg_exp_avg(_seg_exp_nps_metric(row) for row in items)
+        rmd_prom = _seg_exp_avg(_seg_exp_num(row.get('rmd_valor')) for row in items)
+        probe = {'nps_detalle_indice': nps_indice, 'rmd_valor': rmd_prom}
+        out.update({
+            'clientes': len(items),
+            'clientes_evaluados': sum(1 for row in items if _seg_exp_evaluated(row, metric)),
+            'clientes_nps': sum(1 for row in items if _seg_exp_nps_metric(row) is not None),
+            'clientes_rmd': sum(1 for row in items if _seg_exp_num(row.get('rmd_valor')) is not None),
+            'nps_indice': nps_indice,
+            'nps_respuestas': responses,
+            'rmd_promedio': rmd_prom,
+            'metrica_valor': _seg_exp_metric_value(probe, metric),
+            'estado': _seg_exp_estado(probe, metric),
+            'tipo_negocio_principal': dominant_type,
+            'tipos_negocio': len(type_counts),
+            'venta_ytd': round(sum(_seg_exp_num(row.get('venta_ytd')) or 0 for row in items), 2),
+            'hl_ytd': round(sum(_seg_exp_num(row.get('hl_ytd')) or 0 for row in items), 2),
+            'pedidos_ytd': sum(_seg_exp_int(row.get('pedidos_ytd')) for row in items),
+            'score_promedio': _seg_exp_avg(_seg_exp_num(row.get('score_total')) for row in items),
+            **state_counts,
+        })
+        result.append(out)
+    return sorted(result, key=lambda r: (severity.get(r.get('estado'), 9), -int(r.get('clientes_evaluados') or 0), str(r.get(keys[-1]) or '')))
+
+
+def get_experiencia_clientes(
+    sucursal: str | None = None,
+    cluster: str | None = None,
+    periodo: str | None = None,
+    metrica: str | None = None,
+    localidad: str | None = None,
+    tipo_negocio: str | None = None,
+    estado: str | None = None,
+) -> dict:
+    ensure_tables()
+    metric = _seg_exp_metric_key(metrica)
+    cluster = _normalize_cluster_filter(cluster)
+    year, month = _seg_exp_period(periodo)
+    empty = {
+        'periodo': {'anio': year, 'mes': month, 'value': f'{year}-{month:02d}', 'label': _seg_exp_period_label(year, month)},
+        'filtros': {'sucursal': sucursal or 'TODAS', 'cluster': cluster or '', 'localidad': localidad or 'TODAS', 'tipo_negocio': tipo_negocio or 'TODAS', 'estado': estado or 'TODOS', 'metrica': metric},
+        'filtros_disponibles': {'localidades': [], 'tipos_negocio': []},
+        'resumen': {'clientes': 0, 'clientes_evaluados': 0, 'metrica': metric, 'metrica_label': _seg_exp_metric_label(metric)},
+        'mapa_localidades': [],
+        'por_localidad': [],
+        'por_tipo_negocio': [],
+        'por_cluster': [],
+    }
+    if not _dpo_cache_has_rows():
+        return empty
+
+    conds = ['1=1']
+    period_start = date(year, month, 1)
+    period_end = date(year, month, monthrange(year, month)[1])
+    params: dict[str, Any] = {'anio': year, 'mes': month, 'period_start': period_start, 'period_end': period_end}
+    if sucursal and sucursal != 'TODAS':
+        conds.append('d.sucursal = %(suc)s')
+        params['suc'] = sucursal
+    if cluster:
+        conds.append('d.cluster_dpo = %(cluster)s')
+        params['cluster'] = cluster
+
+    with pg_cursor() as cur:
+        cur.execute(
+            f"""
+            WITH canal_raw AS (
+                SELECT
+                    NULLIF(TRIM(v.cliente), '') AS cliente,
+                    COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal,
+                    COALESCE(
+                        NULLIF(TRIM(v.descripcion_canal), ''),
+                        NULLIF(TRIM(v.descripcion_detallada_canal), ''),
+                        NULLIF(TRIM(v.canal), ''),
+                        'Sin canal'
+                    ) AS canal_descripcion,
+                    SUM(COALESCE(v.importe_neto, 0)) AS venta_canal
+                FROM ventas_detalle v
+                WHERE v.fecha BETWEEN %(period_start)s AND %(period_end)s
+                  AND NULLIF(TRIM(v.cliente), '') IS NOT NULL
+                GROUP BY 1, 2, 3
+            ),
+            canales AS (
+                SELECT DISTINCT ON (cliente, sucursal)
+                       cliente,
+                       sucursal,
+                       canal_descripcion
+                FROM canal_raw
+                ORDER BY cliente, sucursal, venta_canal DESC NULLS LAST, canal_descripcion
+            ),
+            hist AS (
+                SELECT DISTINCT ON (cliente)
+                       cliente, nps_valor AS nps_hist_valor, rmd_valor AS rmd_hist_valor
+                FROM seg_cliente_metricas_servicio_historico
+                WHERE periodo_anio = %(anio)s
+                  AND periodo_mes IN (%(mes)s, 0)
+                ORDER BY cliente, CASE WHEN periodo_mes = %(mes)s THEN 0 ELSE 1 END, updated_at DESC
+            ),
+            base AS (
+                SELECT
+                    d.cliente,
+                    COALESCE(NULLIF(TRIM(d.descripcion_cliente), ''), NULLIF(TRIM(c.razon_social), ''), NULLIF(TRIM(c.nombre_fantasia), ''), d.cliente) AS descripcion_cliente,
+                    d.sucursal,
+                    d.sucursal_nombre,
+                    COALESCE(NULLIF(TRIM(d.localidad), ''), NULLIF(TRIM(c.localidad), ''), NULLIF(TRIM(g.localidad), ''), 'Sin localidad') AS localidad,
+                    COALESCE(ch.canal_descripcion, NULLIF(TRIM(c.descripcion), ''), NULLIF(TRIM(c.subcanal), ''), NULLIF(TRIM(c.ramo), ''), 'Sin canal') AS tipo_negocio,
+                    ch.canal_descripcion,
+                    NULLIF(TRIM(c.descripcion), '') AS tipo_negocio_cliente,
+                    NULLIF(TRIM(c.ramo), '') AS ramo,
+                    NULLIF(TRIM(c.subcanal), '') AS subcanal,
+                    d.cluster_dpo,
+                    d.subcluster_logistico,
+                    d.venta_ytd,
+                    d.hl_ytd,
+                    d.pedidos_ytd,
+                    d.score_total,
+                    COALESCE(h.rmd_hist_valor, d.rmd_valor) AS rmd_valor,
+                    COALESCE(nm.nps_indice, h.nps_hist_valor, d.nps_valor) AS nps_valor,
+                    nm.nps_indice AS nps_detalle_indice,
+                    nm.respuestas AS nps_respuestas,
+                    nm.promotores AS nps_promotores,
+                    nm.pasivos AS nps_pasivos,
+                    nm.detractores AS nps_detractores,
+                    nm.score_promedio AS nps_score_promedio,
+                    g.latitud AS geo_latitud,
+                    g.longitud AS geo_longitud,
+                    REPLACE(REGEXP_REPLACE(TRIM(COALESCE(c.coord_y, c.coord_y_entrega, '')), '[[:space:]]+', '', 'g'), ',', '.') AS coord_y_txt,
+                    REPLACE(REGEXP_REPLACE(TRIM(COALESCE(c.coord_x, c.coord_x_entrega, '')), '[[:space:]]+', '', 'g'), ',', '.') AS coord_x_txt
+                FROM seg_cliente_dpo_cache d
+                LEFT JOIN clientes c
+                       ON TRIM(c.cliente) = TRIM(d.cliente)
+                      AND COALESCE(NULLIF(TRIM(c.sucursal), ''), d.sucursal) = d.sucursal
+                LEFT JOIN cliente_geografia g
+                       ON g.cliente_id = d.cliente
+                      AND COALESCE(NULLIF(TRIM(g.sucursal), ''), d.sucursal) = d.sucursal
+                LEFT JOIN canales ch
+                       ON ch.cliente = d.cliente
+                      AND ch.sucursal = d.sucursal
+                LEFT JOIN hist h ON h.cliente = d.cliente
+                LEFT JOIN seg_cliente_nps_mensual nm
+                       ON nm.cliente = d.cliente
+                      AND nm.periodo_anio = %(anio)s
+                      AND nm.periodo_mes = %(mes)s
+                WHERE {' AND '.join(conds)}
+            ),
+            coords AS (
+                SELECT *,
+                       CASE WHEN coord_y_txt ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN coord_y_txt::NUMERIC END AS cli_latitud,
+                       CASE WHEN coord_x_txt ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN coord_x_txt::NUMERIC END AS cli_longitud
+                FROM base
+            )
+            SELECT *,
+                   COALESCE(geo_latitud, cli_latitud) AS latitud,
+                   COALESCE(geo_longitud, cli_longitud) AS longitud
+            FROM coords
+            ORDER BY venta_ytd DESC NULLS LAST, cliente
+            """,
+            params,
+        )
+        raw_rows = _dict_rows(cur)
+
+    normalized: list[dict] = []
+    for row in raw_rows:
+        tipo_nombre = _seg_exp_tipo_nombre(
+            row.get('canal_descripcion'),
+            row.get('tipo_negocio'),
+            row.get('tipo_negocio_cliente'),
+            row.get('subcanal'),
+            row.get('ramo'),
+        )
+        item = {
+            'cliente': str(row.get('cliente') or ''),
+            'descripcion_cliente': row.get('descripcion_cliente') or row.get('cliente') or '-',
+            'sucursal': row.get('sucursal'),
+            'sucursal_nombre': row.get('sucursal_nombre'),
+            'localidad': _seg_exp_clean_label(row.get('localidad'), 'Sin localidad'),
+            'tipo_negocio': tipo_nombre,
+            'tipo_negocio_nombre': tipo_nombre,
+            'canal_descripcion': _seg_exp_clean_label(row.get('canal_descripcion'), ''),
+            'ramo': _seg_exp_clean_label(row.get('ramo'), ''),
+            'subcanal': _seg_exp_clean_label(row.get('subcanal'), ''),
+            'cluster_dpo': _normalize_cluster_filter(row.get('cluster_dpo')) or row.get('cluster_dpo') or 'Sin cluster',
+            'subcluster_logistico': row.get('subcluster_logistico') or 'Estandar',
+            'venta_ytd': round(_seg_exp_num(row.get('venta_ytd')) or 0, 2),
+            'hl_ytd': round(_seg_exp_num(row.get('hl_ytd')) or 0, 2),
+            'pedidos_ytd': _seg_exp_int(row.get('pedidos_ytd')),
+            'score_total': _seg_exp_num(row.get('score_total')),
+            'rmd_valor': _seg_exp_num(row.get('rmd_valor')),
+            'nps_valor': _seg_exp_num(row.get('nps_valor')),
+            'nps_detalle_indice': _seg_exp_num(row.get('nps_detalle_indice')),
+            'nps_respuestas': _seg_exp_int(row.get('nps_respuestas')),
+            'nps_promotores': _seg_exp_int(row.get('nps_promotores')),
+            'nps_pasivos': _seg_exp_int(row.get('nps_pasivos')),
+            'nps_detractores': _seg_exp_int(row.get('nps_detractores')),
+            'nps_score_promedio': _seg_exp_num(row.get('nps_score_promedio')),
+            'latitud': _seg_exp_num(row.get('latitud')),
+            'longitud': _seg_exp_num(row.get('longitud')),
+        }
+        item['nps_indice'] = _seg_exp_nps_metric(item)
+        item['metrica_valor'] = _seg_exp_metric_value(item, metric)
+        item['estado'] = _seg_exp_estado(item, metric)
+        normalized.append(item)
+
+    loc_options = sorted({row['localidad'] for row in normalized if row.get('localidad')})
+    type_options = sorted({row['tipo_negocio_nombre'] for row in normalized if row.get('tipo_negocio_nombre')})
+
+    rows = []
+    for row in normalized:
+        if localidad and localidad != 'TODAS' and row.get('localidad') != localidad:
+            continue
+        if tipo_negocio and tipo_negocio != 'TODAS' and row.get('tipo_negocio') != tipo_negocio:
+            continue
+        if estado and estado != 'TODOS' and row.get('estado') != estado:
+            continue
+        rows.append(row)
+
+    severity = {'malo': 0, 'neutro': 1, 'bueno': 2, 'sin_dato': 3}
+    mapa = []
+    for loc in _seg_exp_group_summary(rows, ('sucursal', 'sucursal_nombre', 'localidad'), metric):
+        loc_rows = [row for row in rows if row.get('sucursal') == loc.get('sucursal') and row.get('localidad') == loc.get('localidad')]
+        gps_rows = [row for row in loc_rows if row.get('latitud') is not None and row.get('longitud') is not None]
+        if gps_rows:
+            loc['latitud'] = round(sum(float(row['latitud']) for row in gps_rows) / len(gps_rows), 8)
+            loc['longitud'] = round(sum(float(row['longitud']) for row in gps_rows) / len(gps_rows), 8)
+            loc['geo_fuente'] = 'GPS clientes'
+        loc['clientes_peores'] = sorted(
+            [
+                {
+                    'cliente': row.get('cliente'),
+                    'descripcion_cliente': row.get('descripcion_cliente'),
+                    'cluster_dpo': row.get('cluster_dpo'),
+                    'tipo_negocio': row.get('tipo_negocio_nombre') or row.get('tipo_negocio'),
+                    'tipo_negocio_nombre': row.get('tipo_negocio_nombre') or row.get('tipo_negocio'),
+                    'nps_indice': row.get('nps_indice'),
+                    'rmd_valor': row.get('rmd_valor'),
+                    'metrica_valor': row.get('metrica_valor'),
+                    'estado': row.get('estado'),
+                    'venta_ytd': row.get('venta_ytd'),
+                    'hl_ytd': row.get('hl_ytd'),
+                }
+                for row in loc_rows
+                if _seg_exp_evaluated(row, metric)
+            ],
+            key=lambda row: (severity.get(row.get('estado'), 9), float(row.get('metrica_valor') if row.get('metrica_valor') is not None else 9999)),
+        )[:8]
+        if loc.get('latitud') is not None and loc.get('longitud') is not None:
+            mapa.append(loc)
+
+    responses = sum(_seg_exp_int(row.get('nps_respuestas')) for row in rows)
+    if responses:
+        promoters = sum(_seg_exp_int(row.get('nps_promotores')) for row in rows)
+        detractors = sum(_seg_exp_int(row.get('nps_detractores')) for row in rows)
+        nps_indice = round((promoters - detractors) / responses * 100, 2)
+        nps_fuente = 'detalle'
+    else:
+        nps_indice = _seg_exp_avg(row.get('nps_indice') for row in rows)
+        nps_fuente = 'vigente'
+
+    counts = {'bueno': 0, 'neutro': 0, 'malo': 0, 'sin_dato': 0}
+    for row in rows:
+        counts[row.get('estado') or 'sin_dato'] = counts.get(row.get('estado') or 'sin_dato', 0) + 1
+
+    resumen = {
+        'clientes': len(rows),
+        'clientes_evaluados': sum(1 for row in rows if _seg_exp_evaluated(row, metric)),
+        'clientes_nps': sum(1 for row in rows if row.get('nps_indice') is not None),
+        'clientes_rmd': sum(1 for row in rows if row.get('rmd_valor') is not None),
+        'nps_indice': nps_indice,
+        'nps_respuestas': responses,
+        'nps_fuente': nps_fuente,
+        'rmd_promedio': _seg_exp_avg(row.get('rmd_valor') for row in rows),
+        'venta_ytd': round(sum(float(row.get('venta_ytd') or 0) for row in rows), 2),
+        'hl_ytd': round(sum(float(row.get('hl_ytd') or 0) for row in rows), 2),
+        'pedidos_ytd': sum(int(row.get('pedidos_ytd') or 0) for row in rows),
+        'localidades': len({row.get('localidad') for row in rows}),
+        'tipos_negocio': len({row.get('tipo_negocio') for row in rows}),
+        'con_gps': sum(1 for row in rows if row.get('latitud') is not None and row.get('longitud') is not None),
+        'metrica': metric,
+        'metrica_label': _seg_exp_metric_label(metric),
+        **counts,
+    }
+    resumen['metrica_valor'] = _seg_exp_metric_value({'nps_detalle_indice': nps_indice, 'rmd_valor': resumen['rmd_promedio']}, metric)
+
+    return {
+        'periodo': {'anio': year, 'mes': month, 'value': f'{year}-{month:02d}', 'label': _seg_exp_period_label(year, month)},
+        'filtros': {
+            'sucursal': sucursal or 'TODAS',
+            'cluster': cluster or '',
+            'localidad': localidad or 'TODAS',
+            'tipo_negocio': tipo_negocio or 'TODAS',
+            'estado': estado or 'TODOS',
+            'metrica': metric,
+        },
+        'filtros_disponibles': {
+            'localidades': [{'value': value, 'label': value} for value in loc_options],
+            'tipos_negocio': [{'value': value, 'label': value} for value in type_options],
+        },
+        'resumen': resumen,
+        'mapa_localidades': sorted(mapa, key=lambda row: (-int(row.get('clientes_evaluados') or 0), str(row.get('localidad') or ''))),
+        'por_localidad': _seg_exp_group_summary(rows, ('sucursal', 'sucursal_nombre', 'localidad'), metric),
+        'por_tipo_negocio': _seg_exp_group_summary(rows, ('tipo_negocio',), metric),
+        'por_cluster': _seg_exp_group_summary(rows, ('cluster_dpo',), metric),
+    }
 
 
 def get_cliente_detalle(cliente: str) -> dict | None:

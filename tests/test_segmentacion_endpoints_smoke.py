@@ -57,6 +57,42 @@ def test_get_mapa_clientes_smoke(client, monkeypatch):
     assert payload["total"] == len(payload["data"])
 
 
+def test_get_experiencia_clientes_smoke(client, monkeypatch):
+    captured = {}
+    sample = {
+        "periodo": {"value": "2026-05", "label": "Mayo 2026"},
+        "resumen": {"clientes": 2, "clientes_evaluados": 1, "metrica": "nps"},
+        "mapa_localidades": [],
+        "por_localidad": [],
+        "por_tipo_negocio": [],
+    }
+
+    def fake_experiencia(**kwargs):
+        captured.update(kwargs)
+        return sample
+
+    monkeypatch.setattr(segmentacion.svc, "get_experiencia_clientes", fake_experiencia)
+
+    res = client.get(
+        "/api/segmentacion/experiencia-clientes"
+        "?sucursal=1&cluster=Ganador&periodo=2026-05&metrica=combinado&localidad=Dolores&tipo_negocio=Kiosco&estado=malo"
+    )
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"]["resumen"]["clientes"] == 2
+    assert captured == {
+        "sucursal": "1",
+        "cluster": "Ganador",
+        "periodo": "2026-05",
+        "metrica": "combinado",
+        "localidad": "Dolores",
+        "tipo_negocio": "Kiosco",
+        "estado": "malo",
+    }
+
+
 def test_get_autoelevador_resumen_smoke(client, monkeypatch):
     sample = {
         "clientes_totales": 10,

@@ -22,6 +22,7 @@ BLUEPRINT_MODULES = (
     'app.routes.flota',
     'app.routes.simulacion_logistica',
     'app.routes.sync_sheets',
+    'app.routes.frescura',
     'app.routes.segmentacion',
     'app.routes.admin_proyecto',
 )
@@ -82,6 +83,13 @@ def create_app(env: str | None = None) -> Flask:
         if guarded:
             return guarded
         return render_template('segmentacion_clientes.html')
+
+    @app.get('/frescura-oportunidades')
+    def frescura_oportunidades():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('frescura_oportunidades.html')
 
     @app.get('/admin')
     @app.get('/admin/proyecto')

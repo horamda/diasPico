@@ -6,6 +6,8 @@ All heavy SQL lives here; routes stay thin.
 from __future__ import annotations
 import csv
 import re
+import unicodedata
+from typing import Any
 from io import BytesIO, StringIO
 from datetime import date, timedelta
 import calendar as cal_mod
@@ -14,6 +16,12 @@ import threading
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import cm
+from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Table, TableStyle
 
 from app.database import pg_cursor
 from app.services.articulos_svc import ensure_articulos_table
@@ -27,6 +35,64 @@ _PC_TABLE_READY = False
 _PC_TABLE_LOCK = threading.Lock()
 _AUS_TABLE_READY = False
 _AUS_TABLE_LOCK = threading.Lock()
+
+DIA_SEMANA_LABELS = {
+    1: 'Lunes',
+    2: 'Martes',
+    3: 'Miércoles',
+    4: 'Jueves',
+    5: 'Viernes',
+    6: 'Sábado',
+    7: 'Domingo',
+}
+METRICAS_VENTA_DIA = (
+    ('hectolitros', 'Hectolitros'),
+    ('bultos', 'Bultos'),
+    ('pallets', 'Pallets'),
+)
+MESES_ES = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+EXP_GEO_BA_BOUNDS = {
+    'lat_min': -37.35,
+    'lat_max': -35.00,
+    'lng_min': -59.20,
+    'lng_max': -56.20,
+}
+
+EXP_LOCALIDAD_CENTROIDES = {
+    'AGUAS VERDES': (-36.637117, -56.684881),
+    'BARRIO PEDRO ROCCO': (-36.739771, -56.678140),
+    'CASTELLI': (-36.091427, -57.807336),
+    'CHASCOMUS': (-35.578687, -58.013825),
+    'COSTA AZUL': (-36.670473, -56.682691),
+    'COSTA DEL ESTE': (-36.611477, -56.688155),
+    'DOLORES': (-36.315362, -57.675540),
+    'ESQUINA DE CROTTO': (-36.301599, -57.381924),
+    'GENERAL BELGRANO': (-35.765718, -58.497222),
+    'GENERAL CONESA': (-36.518970, -57.323687),
+    'GENERAL GUIDO': (-36.641686, -57.792113),
+    'GENERAL LAVALLE': (-36.406340, -56.943226),
+    'LA LUCILA DEL MAR': (-36.658444, -56.692802),
+    'LAS TONINAS': (-36.488249, -56.705074),
+    'LEZAMA': (-35.873877, -57.895467),
+    'MAIPU': (-36.862750, -57.882910),
+    'MAR DE AJO': (-36.721292, -56.677609),
+    'MAR DEL TUYU': (-36.581319, -56.687479),
+    'NUEVA ATLANTIS': (-36.763385, -56.676521),
+    'PARAJE PAVON': (-36.707014, -56.761508),
+    'PILA': (-36.004134, -58.141126),
+    'RANCHOS': (-35.516013, -58.318804),
+    'SAN BERNARDO DEL TUYU': (-36.686593, -56.684146),
+    'SAN CLEMENTE DEL TUYU': (-36.356051, -56.719430),
+    'SANTA TERESITA': (-36.543140, -56.704375),
+    'SANTO DOMINGO': (-36.711453, -57.586255),
+    'SEVIGNE': (-36.208279, -57.741585),
+    'VILLA CLELIA': (-36.723978, -56.692957),
+    'VILLANUEVA': (-35.676873, -58.433794),
+}
 
 
 def _ensure_periodos_criticos_table() -> None:
@@ -218,6 +284,655 @@ def get_sucursales() -> list[dict]:
         if s not in SUCURSAL_LABELS:
             result.append({'value': s, 'label': s})
     return result
+
+
+def _exp_num(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _exp_clean(value: Any, default: str = 'Sin dato') -> str:
+    text = str(value or '').strip()
+    return text if text else default
+
+
+def _exp_geo_key(value: Any) -> str:
+    text = unicodedata.normalize('NFD', str(value or '').strip().upper())
+    text = ''.join(ch for ch in text if unicodedata.category(ch) != 'Mn')
+    return re.sub(r'\s+', ' ', text)
+
+
+def _exp_coord_en_ba(lat: float | None, lng: float | None) -> bool:
+    if lat is None or lng is None:
+        return False
+    if lat == 0 and lng == 0:
+        return False
+    return (
+        EXP_GEO_BA_BOUNDS['lat_min'] <= lat <= EXP_GEO_BA_BOUNDS['lat_max']
+        and EXP_GEO_BA_BOUNDS['lng_min'] <= lng <= EXP_GEO_BA_BOUNDS['lng_max']
+    )
+
+
+def _exp_localidad_centroide(localidad: Any) -> tuple[float, float] | None:
+    return EXP_LOCALIDAD_CENTROIDES.get(_exp_geo_key(localidad))
+
+
+def _exp_median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _exp_coord_mediana(rows: list[dict]) -> tuple[float, float] | None:
+    coords = [
+        (float(row['latitud']), float(row['longitud']))
+        for row in rows
+        if _exp_coord_en_ba(_exp_num(row.get('latitud')), _exp_num(row.get('longitud')))
+    ]
+    if not coords:
+        return None
+    lat = _exp_median([coord[0] for coord in coords])
+    lng = _exp_median([coord[1] for coord in coords])
+    if lat is None or lng is None:
+        return None
+    return round(lat, 6), round(lng, 6)
+
+
+def _exp_avg(rows: list[dict], field: str) -> float | None:
+    vals = [_exp_num(row.get(field)) for row in rows]
+    vals = [v for v in vals if v is not None]
+    return round(sum(vals) / len(vals), 2) if vals else None
+
+
+def _exp_nps_score_to_indice(nps_score: float | None) -> float | None:
+    if nps_score is None:
+        return None
+    if nps_score <= 6:
+        return -100.0
+    if nps_score < 9:
+        return 0.0
+    return 100.0
+
+
+def _exp_nps_estado(nps_score: float | None, nps_indice: float | None) -> str:
+    if nps_indice is not None:
+        if nps_indice < 0:
+            return 'malo'
+        if nps_indice < 50:
+            return 'neutro'
+        return 'bueno'
+    if nps_score is not None:
+        if nps_score <= 6:
+            return 'malo'
+        if nps_score < 9:
+            return 'neutro'
+        return 'bueno'
+    return 'sin_dato'
+
+
+def _exp_rmd_estado(rmd: float | None) -> str:
+    if rmd is None:
+        return 'sin_dato'
+    if rmd <= 2:
+        return 'malo'
+    if rmd < 4:
+        return 'neutro'
+    return 'bueno'
+
+
+def _exp_estado_combinado(nps_score: float | None, nps_indice: float | None, rmd: float | None) -> str:
+    estados = [_exp_nps_estado(nps_score, nps_indice), _exp_rmd_estado(rmd)]
+    if 'malo' in estados:
+        return 'malo'
+    if 'neutro' in estados:
+        return 'neutro'
+    if 'bueno' in estados:
+        return 'bueno'
+    return 'sin_dato'
+
+
+def _exp_metric_key(value: str | None) -> str:
+    key = str(value or 'nps').strip().lower()
+    if key in {'rmd', 'nps', 'combinado'}:
+        return key
+    return 'nps'
+
+
+def _exp_metric_label(metric: str) -> str:
+    return {'nps': 'NPS', 'rmd': 'RMD', 'combinado': 'NPS + RMD'}.get(metric, 'NPS')
+
+
+def _exp_metric_evaluated(row: dict, metric: str) -> bool:
+    if metric == 'nps':
+        return row.get('nps_score') is not None or row.get('nps_indice') is not None or int(row.get('nps_respuestas') or 0) > 0
+    if metric == 'rmd':
+        return row.get('rmd_valor') is not None
+    return row.get('nps_score') is not None or row.get('nps_indice') is not None or row.get('rmd_valor') is not None
+
+
+def _exp_group_estado(metric: str, nps_score: float | None, nps_indice: float | None, rmd: float | None) -> str:
+    if metric == 'nps':
+        return _exp_nps_estado(nps_score, nps_indice)
+    if metric == 'rmd':
+        return _exp_rmd_estado(rmd)
+    return _exp_estado_combinado(nps_score, nps_indice, rmd)
+
+
+def _exp_metric_score(row: dict, metric: str) -> float | None:
+    if metric == 'rmd':
+        return _exp_num(row.get('rmd_valor'))
+    if metric == 'combinado':
+        nps = _exp_num(row.get('nps_indice'))
+        if nps is None:
+            nps = _exp_nps_score_to_indice(_exp_num(row.get('nps_score')))
+        rmd = _exp_num(row.get('rmd_valor'))
+        nps_norm = (nps + 100) / 2 if nps is not None else None
+        rmd_norm = (rmd / 5) * 100 if rmd is not None else None
+        vals = [v for v in (nps_norm, rmd_norm) if v is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+    nps_indice = _exp_num(row.get('nps_indice'))
+    if nps_indice is not None:
+        return nps_indice
+    return _exp_nps_score_to_indice(_exp_num(row.get('nps_score')))
+
+
+def _exp_nps_group_metrics(rows: list[dict]) -> dict:
+    respuestas = sum(int(_exp_num(row.get('nps_respuestas')) or 0) for row in rows)
+    promotores = sum(int(_exp_num(row.get('nps_promotores')) or 0) for row in rows)
+    pasivos = sum(int(_exp_num(row.get('nps_pasivos')) or 0) for row in rows)
+    detractores = sum(int(_exp_num(row.get('nps_detractores')) or 0) for row in rows)
+    clientes_detallado = sum(1 for row in rows if int(_exp_num(row.get('nps_respuestas')) or 0) > 0)
+    clientes_legacy = sum(
+        1 for row in rows
+        if int(_exp_num(row.get('nps_respuestas')) or 0) == 0
+        and (row.get('nps_indice') is not None or row.get('nps_score') is not None)
+    )
+    if respuestas > 0:
+        weighted_scores = [
+            (_exp_num(row.get('nps_score')), int(_exp_num(row.get('nps_respuestas')) or 0))
+            for row in rows
+        ]
+        score_num = sum(score * count for score, count in weighted_scores if score is not None and count > 0)
+        score_den = sum(count for score, count in weighted_scores if score is not None and count > 0)
+        return {
+            'nps_score_promedio': round(score_num / score_den, 2) if score_den else None,
+            'nps_indice_promedio': round(((promotores - detractores) / respuestas) * 100, 2),
+            'nps_respuestas': respuestas,
+            'nps_promotores': promotores,
+            'nps_pasivos': pasivos,
+            'nps_detractores': detractores,
+            'nps_clientes_detallado': clientes_detallado,
+            'nps_clientes_legacy': clientes_legacy,
+            'nps_fuente': 'conteo_respuestas_mixto' if clientes_legacy else 'conteo_respuestas',
+        }
+    return {
+        'nps_score_promedio': _exp_avg(rows, 'nps_score'),
+        'nps_indice_promedio': _exp_avg(rows, 'nps_indice'),
+        'nps_respuestas': respuestas,
+        'nps_promotores': promotores,
+        'nps_pasivos': pasivos,
+        'nps_detractores': detractores,
+        'nps_clientes_detallado': clientes_detallado,
+        'nps_clientes_legacy': clientes_legacy,
+        'nps_fuente': 'valor_cliente_legacy',
+    }
+
+
+def _exp_cliente_detalle(row: dict, metric: str) -> dict:
+    metric_score = _exp_metric_score(row, metric)
+    return {
+        'cliente': row.get('cliente'),
+        'descripcion_cliente': row.get('descripcion_cliente'),
+        'tipo_negocio': row.get('tipo_negocio'),
+        'estado': row.get('estado'),
+        'estado_nps': row.get('estado_nps'),
+        'estado_rmd': row.get('estado_rmd'),
+        'estado_combinado': row.get('estado_combinado'),
+        'nps_score': row.get('nps_score'),
+        'nps_indice': row.get('nps_indice'),
+        'nps_respuestas': row.get('nps_respuestas'),
+        'nps_promotores': row.get('nps_promotores'),
+        'nps_pasivos': row.get('nps_pasivos'),
+        'nps_detractores': row.get('nps_detractores'),
+        'rmd_valor': row.get('rmd_valor'),
+        'metrica_valor': metric_score,
+        'venta_mes': round(float(row.get('venta_mes') or 0), 2),
+        'hl_mes': round(float(row.get('hl_mes') or 0), 2),
+        'pedidos_mes': int(row.get('pedidos_mes') or 0),
+        'venta_ytd': round(float(row.get('venta_ytd') or 0), 2),
+        'hl_ytd': round(float(row.get('hl_ytd') or 0), 2),
+        'pedidos_ytd': int(row.get('pedidos_ytd') or 0),
+    }
+
+
+def _exp_clientes_ranking(rows: list[dict], metric: str, limit: int = 12) -> list[dict]:
+    severity = {'malo': 0, 'neutro': 1, 'bueno': 2, 'sin_dato': 3}
+
+    def sort_key(row: dict) -> tuple:
+        score = _exp_metric_score(row, metric)
+        return (
+            severity.get(row.get('estado') or 'sin_dato', 9),
+            score is None,
+            score if score is not None else 999999,
+            -float(row.get('hl_mes') or row.get('hl_ytd') or 0),
+            str(row.get('descripcion_cliente') or row.get('cliente') or ''),
+        )
+
+    ranked = sorted(rows, key=sort_key)
+    return [_exp_cliente_detalle(row, metric) for row in ranked[:limit]]
+
+
+def _exp_counts(rows: list[dict]) -> dict:
+    counts = {'bueno': 0, 'neutro': 0, 'malo': 0, 'sin_dato': 0}
+    for row in rows:
+        state = row.get('estado') or 'sin_dato'
+        counts[state] = counts.get(state, 0) + 1
+    return counts
+
+
+def _exp_period_label(anio: int, mes: int) -> str:
+    label = MESES_ES[mes - 1] if 1 <= mes <= 12 else f'Mes {mes}'
+    return f'{label} {anio}'
+
+
+def _exp_group_summary(rows: list[dict], keys: tuple[str, ...], metric: str = 'nps') -> list[dict]:
+    groups: dict[tuple, list[dict]] = {}
+    for row in rows:
+        key = tuple(row.get(k) for k in keys)
+        groups.setdefault(key, []).append(row)
+
+    result = []
+    for key, items in groups.items():
+        out = {keys[idx]: key[idx] for idx in range(len(keys))}
+        counts = _exp_counts(items)
+        nps_metrics = _exp_nps_group_metrics(items)
+        nps_score = nps_metrics['nps_score_promedio']
+        nps_indice = nps_metrics['nps_indice_promedio']
+        rmd = _exp_avg(items, 'rmd_valor')
+        evaluados = [item for item in items if _exp_metric_evaluated(item, metric)]
+        out.update({
+            'clientes': len(items),
+            'clientes_evaluados': len(evaluados),
+            'clientes_nps': sum(1 for item in items if _exp_metric_evaluated(item, 'nps')),
+            'clientes_rmd': sum(1 for item in items if item.get('rmd_valor') is not None),
+            'clientes_con_venta_mes': sum(1 for item in items if float(item.get('venta_mes') or 0) != 0 or float(item.get('hl_mes') or 0) != 0),
+            'venta_mes': round(sum(float(item.get('venta_mes') or 0) for item in items), 2),
+            'hl_mes': round(sum(float(item.get('hl_mes') or 0) for item in items), 2),
+            'pedidos_mes': sum(int(item.get('pedidos_mes') or 0) for item in items),
+            **nps_metrics,
+            'rmd_promedio': rmd,
+            'estado': _exp_group_estado(metric, nps_score, nps_indice, rmd),
+            **counts,
+        })
+        result.append(out)
+
+    severity = {'malo': 0, 'neutro': 1, 'bueno': 2, 'sin_dato': 3}
+    return sorted(result, key=lambda r: (severity.get(r.get('estado'), 9), -int(r.get('clientes_evaluados') or 0), str(r.get(keys[-1]) or '')))
+
+
+def get_experiencia_clientes(
+    sucursal: str = 'TODAS',
+    periodo: str | None = None,
+    anio: int | None = None,
+    mes: int | None = None,
+    localidad: str | None = None,
+    tipo_negocio: str | None = None,
+    estado: str | None = None,
+    metrica: str | None = None,
+) -> dict:
+    """Customer experience dashboard data from DPO cluster, RMD and NPS sources."""
+    metric = _exp_metric_key(metrica)
+    periodo_anio: int | None = anio
+    periodo_mes: int | None = mes
+    if periodo:
+        try:
+            periodo_anio, periodo_mes = _parse_mes_key(periodo, 'periodo')
+        except ValueError:
+            raise ValueError('periodo debe tener formato YYYY-MM')
+
+    with pg_cursor() as cur:
+        cur.execute("""
+            SELECT periodo_anio, periodo_mes
+            FROM seg_cliente_cluster_historico
+            WHERE periodo_mes BETWEEN 1 AND 12
+            GROUP BY periodo_anio, periodo_mes
+            ORDER BY periodo_anio DESC, periodo_mes DESC
+            LIMIT 36
+        """)
+        periodos = [dict(r) for r in cur.fetchall()]
+
+    if not periodos:
+        return {
+            'periodo': None,
+            'filtros': {},
+            'filtros_disponibles': {'sucursales': [], 'localidades': [], 'tipos_negocio': [], 'periodos': []},
+            'resumen': {},
+            'mapa_localidades': [],
+            'por_sucursal': [],
+            'por_tipo_negocio': [],
+            'por_localidad': [],
+        }
+
+    if periodo_anio is None or periodo_mes is None:
+        periodo_anio = int(periodos[0]['periodo_anio'])
+        periodo_mes = int(periodos[0]['periodo_mes'])
+
+    if not (1 <= int(periodo_mes) <= 12):
+        raise ValueError('mes debe estar entre 1 y 12')
+
+    sucursal = str(sucursal or 'TODAS').strip() or 'TODAS'
+    period_start = date(int(periodo_anio), int(periodo_mes), 1)
+    period_end = date(int(periodo_anio), int(periodo_mes), cal_mod.monthrange(int(periodo_anio), int(periodo_mes))[1])
+    params: dict[str, Any] = {
+        'anio': int(periodo_anio),
+        'mes': int(periodo_mes),
+        'period_start': period_start,
+        'period_end': period_end,
+    }
+    suc_where = ''
+    if sucursal != 'TODAS':
+        suc_where = 'AND h.sucursal_id = %(sucursal)s'
+        params['sucursal'] = sucursal
+
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            WITH canal_raw AS (
+                SELECT
+                    NULLIF(TRIM(v.cliente), '') AS cliente,
+                    COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                    COALESCE(
+                        NULLIF(TRIM(v.descripcion_canal), ''),
+                        NULLIF(TRIM(v.descripcion_detallada_canal), ''),
+                        NULLIF(TRIM(v.canal), ''),
+                        'Sin canal'
+                    ) AS canal_descripcion,
+                    SUM(COALESCE(v.importe_neto, 0)) AS venta_canal
+                FROM ventas_detalle v
+                WHERE v.fecha BETWEEN %(period_start)s AND %(period_end)s
+                  AND NULLIF(TRIM(v.cliente), '') IS NOT NULL
+                GROUP BY 1, 2, 3
+            ),
+            canales AS (
+                SELECT DISTINCT ON (cliente, sucursal_id)
+                    cliente,
+                    sucursal_id,
+                    canal_descripcion
+                FROM canal_raw
+                ORDER BY cliente, sucursal_id, venta_canal DESC NULLS LAST, canal_descripcion
+            ),
+            ventas_mes AS (
+                SELECT
+                    NULLIF(TRIM(v.cliente), '') AS cliente,
+                    COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                    SUM(COALESCE(v.importe_neto, 0)) AS venta_mes,
+                    SUM(COALESCE(v.unidad_medida, 0)) AS hl_mes,
+                    COUNT(DISTINCT {V_PEDIDO_KEY}) AS pedidos_mes
+                FROM ventas_detalle v
+                WHERE v.fecha BETWEEN %(period_start)s AND %(period_end)s
+                  AND NULLIF(TRIM(v.cliente), '') IS NOT NULL
+                GROUP BY 1, 2
+            ),
+            base AS (
+                SELECT
+                    h.cliente,
+                    COALESCE(NULLIF(TRIM(h.descripcion_cliente), ''), NULLIF(TRIM(c.nombre_fantasia), ''), NULLIF(TRIM(c.razon_social), ''), h.cliente) AS descripcion_cliente,
+                    h.sucursal_id,
+                    COALESCE(NULLIF(TRIM(suc.nombre), ''), h.sucursal_id) AS sucursal_nombre,
+                    COALESCE(NULLIF(TRIM(h.localidad), ''), NULLIF(TRIM(c.localidad), ''), NULLIF(TRIM(g.localidad), ''), 'Sin localidad') AS localidad,
+                    COALESCE(ch.canal_descripcion, NULLIF(TRIM(c.descripcion), ''), 'Sin canal') AS tipo_negocio,
+                    ch.canal_descripcion AS canal_descripcion,
+                    NULLIF(TRIM(c.ramo), '') AS ramo,
+                    NULLIF(TRIM(c.subcanal), '') AS subcanal,
+                    h.cluster_dpo,
+                    h.subcluster_logistico,
+                    h.venta_ytd,
+                    h.hl_ytd,
+                    h.pedidos_ytd,
+                    COALESCE(vm.venta_mes, 0) AS venta_mes,
+                    COALESCE(vm.hl_mes, 0) AS hl_mes,
+                    COALESCE(vm.pedidos_mes, 0) AS pedidos_mes,
+                    h.rmd_valor,
+                    COALESCE(nm.nps_indice, h.nps_valor) AS nps_indice,
+                    nm.score_promedio AS nps_score,
+                    nm.respuestas AS nps_respuestas,
+                    nm.promotores AS nps_promotores,
+                    nm.pasivos AS nps_pasivos,
+                    nm.detractores AS nps_detractores,
+                    nm.ultima_fecha AS nps_ultima_fecha,
+                    g.latitud AS geo_latitud,
+                    g.longitud AS geo_longitud,
+                    REPLACE(REGEXP_REPLACE(TRIM(COALESCE(c.coord_y_entrega, c.coord_y, '')), '[[:space:]]+', '', 'g'), ',', '.') AS coord_y_txt,
+                    REPLACE(REGEXP_REPLACE(TRIM(COALESCE(c.coord_x_entrega, c.coord_x, '')), '[[:space:]]+', '', 'g'), ',', '.') AS coord_x_txt
+                FROM seg_cliente_cluster_historico h
+                LEFT JOIN clientes c
+                       ON TRIM(c.cliente) = TRIM(h.cliente)
+                      AND COALESCE(NULLIF(TRIM(c.sucursal), ''), h.sucursal_id) = h.sucursal_id
+                LEFT JOIN cliente_geografia g
+                       ON TRIM(g.cliente_id) = TRIM(h.cliente)
+                      AND COALESCE(NULLIF(TRIM(g.sucursal), ''), h.sucursal_id) = h.sucursal_id
+                LEFT JOIN seg_cliente_nps_mensual nm
+                       ON nm.cliente = h.cliente
+                      AND nm.periodo_anio = h.periodo_anio
+                      AND nm.periodo_mes = h.periodo_mes
+                LEFT JOIN canales ch
+                       ON ch.cliente = h.cliente
+                      AND ch.sucursal_id = h.sucursal_id
+                LEFT JOIN ventas_mes vm
+                       ON vm.cliente = h.cliente
+                      AND vm.sucursal_id = h.sucursal_id
+                LEFT JOIN sucursales suc ON suc.id = h.sucursal_id
+                WHERE h.periodo_anio = %(anio)s
+                  AND h.periodo_mes = %(mes)s
+                  {suc_where}
+            ),
+            coords AS (
+                SELECT *,
+                       CASE WHEN coord_y_txt ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN coord_y_txt::NUMERIC END AS cli_latitud,
+                       CASE WHEN coord_x_txt ~ '^-?[0-9]+(\\.[0-9]+)?$' THEN coord_x_txt::NUMERIC END AS cli_longitud
+                FROM base
+            )
+            SELECT
+                cliente,
+                descripcion_cliente,
+                sucursal_id,
+                sucursal_nombre,
+                localidad,
+                tipo_negocio,
+                canal_descripcion,
+                ramo,
+                subcanal,
+                cluster_dpo,
+                subcluster_logistico,
+                venta_ytd,
+                hl_ytd,
+                pedidos_ytd,
+                venta_mes,
+                hl_mes,
+                pedidos_mes,
+                rmd_valor,
+                nps_indice,
+                nps_score,
+                nps_respuestas,
+                nps_promotores,
+                nps_pasivos,
+                nps_detractores,
+                nps_ultima_fecha,
+                COALESCE(geo_latitud, cli_latitud) AS latitud,
+                COALESCE(geo_longitud, cli_longitud) AS longitud
+            FROM coords
+        """, params)
+        base_rows = [dict(r) for r in cur.fetchall()]
+
+    normalized: list[dict] = []
+    for row in base_rows:
+        nps_score = _exp_num(row.get('nps_score'))
+        nps_indice = _exp_num(row.get('nps_indice'))
+        rmd = _exp_num(row.get('rmd_valor'))
+        lat = _exp_num(row.get('latitud'))
+        lng = _exp_num(row.get('longitud'))
+        if not _exp_coord_en_ba(lat, lng):
+            lat = None
+            lng = None
+        item = {
+            'cliente': _exp_clean(row.get('cliente'), ''),
+            'descripcion_cliente': _exp_clean(row.get('descripcion_cliente'), ''),
+            'sucursal_id': _exp_clean(row.get('sucursal_id'), ''),
+            'sucursal_nombre': _exp_clean(row.get('sucursal_nombre'), row.get('sucursal_id') or 'Sin sucursal'),
+            'localidad': _exp_clean(row.get('localidad'), 'Sin localidad'),
+            'tipo_negocio': _exp_clean(row.get('tipo_negocio'), 'Sin tipo'),
+            'canal_descripcion': _exp_clean(row.get('canal_descripcion'), ''),
+            'ramo': _exp_clean(row.get('ramo'), ''),
+            'subcanal': _exp_clean(row.get('subcanal'), ''),
+            'cluster_dpo': _exp_clean(row.get('cluster_dpo'), 'Sin cluster'),
+            'subcluster_logistico': _exp_clean(row.get('subcluster_logistico'), ''),
+            'venta_mes': _exp_num(row.get('venta_mes')) or 0,
+            'hl_mes': _exp_num(row.get('hl_mes')) or 0,
+            'pedidos_mes': int(_exp_num(row.get('pedidos_mes')) or 0),
+            'venta_ytd': _exp_num(row.get('venta_ytd')) or 0,
+            'hl_ytd': _exp_num(row.get('hl_ytd')) or 0,
+            'pedidos_ytd': int(_exp_num(row.get('pedidos_ytd')) or 0),
+            'rmd_valor': rmd,
+            'nps_indice': nps_indice,
+            'nps_score': nps_score,
+            'nps_respuestas': int(_exp_num(row.get('nps_respuestas')) or 0),
+            'nps_promotores': int(_exp_num(row.get('nps_promotores')) or 0),
+            'nps_pasivos': int(_exp_num(row.get('nps_pasivos')) or 0),
+            'nps_detractores': int(_exp_num(row.get('nps_detractores')) or 0),
+            'nps_ultima_fecha': row.get('nps_ultima_fecha').isoformat() if row.get('nps_ultima_fecha') else None,
+            'latitud': lat,
+            'longitud': lng,
+        }
+        item['estado_nps'] = _exp_nps_estado(item['nps_score'], item['nps_indice'])
+        item['estado_rmd'] = _exp_rmd_estado(item['rmd_valor'])
+        item['estado_combinado'] = _exp_estado_combinado(item['nps_score'], item['nps_indice'], item['rmd_valor'])
+        item['estado'] = {
+            'nps': item['estado_nps'],
+            'rmd': item['estado_rmd'],
+            'combinado': item['estado_combinado'],
+        }[metric]
+        normalized.append(item)
+
+    def _matches(row: dict) -> bool:
+        if localidad and localidad != 'TODAS' and row.get('localidad') != localidad:
+            return False
+        if tipo_negocio and tipo_negocio != 'TODAS' and row.get('tipo_negocio') != tipo_negocio:
+            return False
+        if estado and estado != 'TODOS' and row.get('estado') != estado:
+            return False
+        return True
+
+    rows = [row for row in normalized if _matches(row)]
+    evaluados = [row for row in rows if _exp_metric_evaluated(row, metric)]
+    counts = _exp_counts(rows)
+    with_gps = [row for row in rows if row.get('latitud') is not None and row.get('longitud') is not None]
+    nps_resumen = _exp_nps_group_metrics(rows)
+
+    mapa = []
+    for loc in _exp_group_summary(rows, ('sucursal_id', 'sucursal_nombre', 'localidad'), metric):
+        loc_rows = [
+            row for row in rows
+            if row.get('sucursal_id') == loc.get('sucursal_id') and row.get('localidad') == loc.get('localidad')
+        ]
+        centroide = _exp_localidad_centroide(loc.get('localidad'))
+        geo_fuente = 'localidad'
+        if centroide is None:
+            centroide = _exp_coord_mediana(loc_rows)
+            geo_fuente = 'clientes'
+        if centroide is None:
+            continue
+        loc['latitud'] = centroide[0]
+        loc['longitud'] = centroide[1]
+        loc['geo_fuente'] = geo_fuente
+        loc['clientes_peores'] = _exp_clientes_ranking(
+            [row for row in loc_rows if _exp_metric_evaluated(row, metric)],
+            metric,
+            limit=8,
+        )
+        loc['clientes_muestra'] = _exp_clientes_ranking(loc_rows, metric, limit=15)
+        loc['clientes_muestra_total'] = len(loc_rows)
+        mapa.append(loc)
+
+    period_options = [
+        {
+            'value': f"{int(p['periodo_anio'])}-{int(p['periodo_mes']):02d}",
+            'label': _exp_period_label(int(p['periodo_anio']), int(p['periodo_mes'])),
+        }
+        for p in periodos
+    ]
+    suc_options = sorted(
+        {
+            (row['sucursal_id'], row['sucursal_nombre'])
+            for row in normalized
+            if row.get('sucursal_id')
+        },
+        key=lambda item: item[0],
+    )
+    loc_options = sorted({row['localidad'] for row in normalized if row.get('localidad')})
+    type_options = sorted({row['tipo_negocio'] for row in normalized if row.get('tipo_negocio')})
+
+    return {
+        'periodo': {
+            'anio': int(periodo_anio),
+            'mes': int(periodo_mes),
+            'value': f'{int(periodo_anio)}-{int(periodo_mes):02d}',
+            'label': _exp_period_label(int(periodo_anio), int(periodo_mes)),
+        },
+        'filtros': {
+            'sucursal': sucursal,
+            'localidad': localidad or 'TODAS',
+            'tipo_negocio': tipo_negocio or 'TODAS',
+            'estado': estado or 'TODOS',
+            'metrica': metric,
+        },
+        'filtros_disponibles': {
+            'periodos': period_options,
+            'sucursales': [{'value': value, 'label': label} for value, label in suc_options],
+            'localidades': [{'value': value, 'label': value} for value in loc_options],
+            'tipos_negocio': [{'value': value, 'label': value} for value in type_options],
+            'estados': [
+                {'value': 'bueno', 'label': 'Buenos'},
+                {'value': 'neutro', 'label': 'Neutros'},
+                {'value': 'malo', 'label': 'Malos'},
+                {'value': 'sin_dato', 'label': 'Sin dato'},
+            ],
+            'metricas': [
+                {'value': 'nps', 'label': 'NPS'},
+                {'value': 'rmd', 'label': 'RMD'},
+                {'value': 'combinado', 'label': 'NPS + RMD'},
+            ],
+        },
+        'resumen': {
+            'clientes': len(rows),
+            'clientes_evaluados': len(evaluados),
+            'clientes_nps': sum(1 for row in rows if _exp_metric_evaluated(row, 'nps')),
+            'clientes_rmd': sum(1 for row in rows if row.get('rmd_valor') is not None),
+            'clientes_con_venta_mes': sum(1 for row in rows if float(row.get('venta_mes') or 0) != 0 or float(row.get('hl_mes') or 0) != 0),
+            'venta_mes': round(sum(float(row.get('venta_mes') or 0) for row in rows), 2),
+            'hl_mes': round(sum(float(row.get('hl_mes') or 0) for row in rows), 2),
+            'pedidos_mes': sum(int(row.get('pedidos_mes') or 0) for row in rows),
+            **nps_resumen,
+            'rmd_promedio': _exp_avg(rows, 'rmd_valor'),
+            'localidades': len({row.get('localidad') for row in rows}),
+            'tipos_negocio': len({row.get('tipo_negocio') for row in rows}),
+            'con_gps': len(with_gps),
+            'sin_gps': len(rows) - len(with_gps),
+            'metrica': metric,
+            'metrica_label': _exp_metric_label(metric),
+            **counts,
+        },
+        'mapa_localidades': sorted(mapa, key=lambda r: (-int(r.get('clientes_evaluados') or 0), str(r.get('localidad') or ''))),
+        'por_sucursal': _exp_group_summary(rows, ('sucursal_id', 'sucursal_nombre'), metric),
+        'por_tipo_negocio': _exp_group_summary(rows, ('tipo_negocio',), metric),
+        'por_localidad': _exp_group_summary(rows, ('sucursal_id', 'sucursal_nombre', 'localidad'), metric),
+    }
 
 
 # ── Calendario mensual ────────────────────────────────────────
@@ -991,6 +1706,1078 @@ def export_dias_detalle_periodo(
     bio.seek(0)
     filename = f'dias_detalle_{sucursal}_{desde}_a_{hasta}.xlsx'.replace('/', '-')
     return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def _xml_escape(value: Any) -> str:
+    text = str(value if value is not None else '-')
+    return (
+        text.replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('\n', '<br/>')
+    )
+
+
+def _pdf_p(value: Any, style: ParagraphStyle) -> Paragraph:
+    return Paragraph(_xml_escape(value), style)
+
+
+def _pdf_table(
+    headers: list[str],
+    rows: list[list[Any]],
+    styles: dict[str, ParagraphStyle],
+    widths: list[float] | None = None,
+) -> Table:
+    data_rows = [[_pdf_p(h, styles['th']) for h in headers]]
+    data_rows.extend([[_pdf_p(value, styles['td']) for value in row] for row in rows])
+    table = Table(data_rows, colWidths=widths, repeatRows=1)
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#172033')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#D8DEE9')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F7FAFC')]),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
+
+def _venta_dia_value(metric: str, value: float) -> float | int:
+    if metric in {'bultos', 'salidas', 'personas'}:
+        return int(round(value))
+    if metric == 'pallets':
+        return round(value, 2)
+    return round(value, 1)
+
+
+def _venta_dia_display_rows(rows: list[dict], metric: str, include_total_row: bool) -> dict:
+    grouped: dict[str, dict[int, float]] = {}
+    row_totals: dict[str, float] = {}
+    total_by_day = {dow: 0.0 for dow in DIA_SEMANA_LABELS}
+
+    for row in rows:
+        sucursal_id = str(row.get('sucursal_id') or '1')
+        dow = int(row.get('dow') or 0)
+        if dow not in DIA_SEMANA_LABELS:
+            continue
+        value = float(row.get(metric) or 0)
+        suc_group = grouped.setdefault(sucursal_id, {})
+        suc_group[dow] = suc_group.get(dow, 0.0) + value
+        row_totals[sucursal_id] = row_totals.get(sucursal_id, 0.0) + value
+        total_by_day[dow] += value
+
+    def _sort_key(sucursal_id: str) -> tuple[str, str]:
+        return (SUCURSAL_LABELS.get(sucursal_id, sucursal_id), sucursal_id)
+
+    filas = []
+    for sucursal_id in sorted(grouped, key=_sort_key):
+        dias = [_venta_dia_value(metric, grouped[sucursal_id].get(dow, 0.0)) for dow in DIA_SEMANA_LABELS]
+        filas.append({
+            'sucursal_id': sucursal_id,
+            'sucursal': SUCURSAL_LABELS.get(sucursal_id, sucursal_id),
+            'dias': dias,
+            'total': _venta_dia_value(metric, row_totals.get(sucursal_id, 0.0)),
+            'es_total': False,
+        })
+
+    total_row = None
+    if include_total_row and filas:
+        total_row = {
+            'sucursal_id': 'TOTAL',
+            'sucursal': 'Total',
+            'dias': [_venta_dia_value(metric, total_by_day.get(dow, 0.0)) for dow in DIA_SEMANA_LABELS],
+            'total': _venta_dia_value(metric, sum(total_by_day.values())),
+            'es_total': True,
+        }
+
+    return {
+        'filas': filas,
+        'total': total_row,
+    }
+
+
+def _venta_dia_iso_year_range(anio: int) -> tuple[date, date]:
+    inicio = date.fromisocalendar(anio, 1, 1)
+    fin = date.fromisocalendar(anio + 1, 1, 1) - timedelta(days=1)
+    return inicio, fin
+
+
+def _venta_dia_shift_year(fecha: date, years: int = -1) -> date:
+    target_year = fecha.year + years
+    try:
+        return fecha.replace(year=target_year)
+    except ValueError:
+        # 29/02 -> 28/02 en años no bisiestos.
+        return fecha.replace(year=target_year, day=28)
+
+
+def _venta_dia_comparativo_rango(
+    periodo_tipo: str | None,
+    anio: int | None,
+    mes: str | None,
+    semana: int | None,
+    fecha_desde: date | None,
+    fecha_hasta: date | None,
+    anio_periodo: int,
+) -> tuple[date | None, date | None, int]:
+    tipo = (periodo_tipo or '').strip().lower()
+    if not tipo:
+        if fecha_desde or fecha_hasta:
+            tipo = 'rango'
+        elif mes:
+            tipo = 'mes'
+        elif semana is not None:
+            tipo = 'semana'
+        elif anio is not None:
+            tipo = 'anio'
+        else:
+            tipo = 'todo'
+
+    if tipo == 'mes':
+        if not mes:
+            return None, None, anio_periodo
+        anio_mes, mes_num = _parse_mes_key(mes, 'mes')
+        ini, fin = _rango_mes(anio_mes - 1, mes_num)
+        return ini, fin, anio_mes
+
+    if tipo == 'semana':
+        anio_ref = anio or anio_periodo
+        if semana is None:
+            return None, None, anio_ref
+        ini = date.fromisocalendar(anio_ref - 1, semana, 1)
+        fin = date.fromisocalendar(anio_ref - 1, semana, 7)
+        return ini, fin, anio_ref
+
+    if tipo in {'anio', 'aÃ±o', 'year', 'todo', 'all', 'historico'}:
+        anio_ref = anio or anio_periodo
+        ini, fin = _venta_dia_iso_year_range(anio_ref - 1)
+        return ini, fin, anio_ref
+
+    if tipo == 'rango':
+        if not fecha_desde or not fecha_hasta:
+            return None, None, anio_periodo
+        return _venta_dia_shift_year(fecha_desde, -1), _venta_dia_shift_year(fecha_hasta, -1), anio_periodo
+
+    return None, None, anio_periodo
+
+
+def _venta_dia_periodo_rango(
+    periodo_tipo: str | None,
+    anio: int | None,
+    mes: str | None,
+    semana: int | None,
+    desde: str | None,
+    hasta: str | None,
+) -> tuple[date | None, date | None, str, int]:
+    tipo = (periodo_tipo or '').strip().lower()
+    anio_ref = anio or date.today().year
+
+    if not tipo:
+        if desde or hasta:
+            tipo = 'rango'
+        elif mes:
+            tipo = 'mes'
+        elif semana is not None:
+            tipo = 'semana'
+        elif anio is not None:
+            tipo = 'anio'
+        else:
+            tipo = 'todo'
+
+    if tipo in {'todo', 'all', 'historico'}:
+        return None, None, 'Todo el histórico', anio_ref
+
+    if tipo == 'mes':
+        if not mes:
+            raise ValueError('mes requerido para periodo mes')
+        anio_mes, mes_num = _parse_mes_key(mes, 'mes')
+        ini, fin = _rango_mes(anio_mes, mes_num)
+        return ini, fin, f'{MESES_ES[mes_num - 1]} {anio_mes}', anio_mes
+
+    if tipo in {'anio', 'año', 'year'}:
+        if anio is None:
+            raise ValueError('anio requerido para periodo año')
+        ini, fin = _venta_dia_iso_year_range(anio)
+        return ini, fin, f'Año ISO {anio}', anio
+
+    if tipo == 'semana':
+        if anio is None or semana is None:
+            raise ValueError('anio y semana requeridos para periodo semana')
+        ini = date.fromisocalendar(anio, semana, 1)
+        fin = date.fromisocalendar(anio, semana, 7)
+        return ini, fin, f'Semana ISO {semana:02d} - {anio}', anio
+
+    if tipo == 'rango':
+        if not desde or not hasta:
+            raise ValueError('desde y hasta requeridos para periodo rango')
+        ini = date.fromisoformat(desde)
+        fin = date.fromisoformat(hasta)
+        if ini > fin:
+            raise ValueError('desde no puede ser posterior a hasta')
+        return ini, fin, f'{ini.isoformat()} a {fin.isoformat()}', anio_ref
+
+    raise ValueError('Periodo no soportado')
+
+
+def _venta_dia_daily_rows(
+    sucursal: str,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> list[dict]:
+    swv = _suc_filter(sucursal, 'v')
+    date_clause = ''
+    params: dict[str, Any] = {'s': sucursal}
+    if fecha_desde:
+        date_clause += ' AND v.fecha >= %(desde)s'
+        params['desde'] = fecha_desde
+    if fecha_hasta:
+        date_clause += ' AND v.fecha <= %(hasta)s'
+        params['hasta'] = fecha_hasta
+
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            SELECT
+                v.fecha::date AS fecha,
+                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                EXTRACT(ISODOW FROM v.fecha)::int AS dow,
+                SUM(COALESCE(v.unidad_medida, 0)) AS hectolitros,
+                SUM(COALESCE(v.bultos, 0)) AS bultos,
+                SUM(
+                    CASE WHEN COALESCE(a.bultos_por_pallet, 0) > 0
+                         THEN COALESCE(v.bultos, 0) / a.bultos_por_pallet
+                         ELSE 0
+                    END
+                ) AS pallets,
+                COUNT(DISTINCT v.fecha::text || '|' || COALESCE(NULLIF(TRIM(v.transporte), ''), NULLIF(TRIM(v.descripcion_transporte), ''), 'SIN_TRANSPORTE')) AS salidas
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+              {swv}
+              {date_clause}
+            GROUP BY 1, 2, 3
+            ORDER BY 1, 2
+        """, params)
+        return [dict(r) for r in cur.fetchall()]
+
+
+def _venta_dia_personas_daily_rows(
+    sucursal: str,
+    fecha_desde: date | None = None,
+    fecha_hasta: date | None = None,
+) -> list[dict]:
+    dot_map = _dot_map(sucursal, fecha_desde, fecha_hasta)
+    rows: list[dict] = []
+    for fecha_iso, info in sorted(dot_map.items()):
+        if not info.get('tiene_datos'):
+            continue
+        total_personas = float(info.get('total_personas') or 0)
+        if total_personas <= 0:
+            continue
+        fecha = date.fromisoformat(fecha_iso)
+        rows.append({
+            'fecha': fecha,
+            'sucursal_id': str(sucursal or 'TODAS'),
+            'dow': fecha.isoweekday(),
+            'personas': total_personas,
+        })
+    return rows
+
+
+def _venta_dia_filtrar_rango(rows: list[dict], fecha_desde: date | None, fecha_hasta: date | None) -> list[dict]:
+    if fecha_desde is None and fecha_hasta is None:
+        return rows
+
+    filtradas: list[dict] = []
+    for row in rows:
+        fecha = row.get('fecha')
+        if not fecha:
+            continue
+        if isinstance(fecha, str):
+            fecha = date.fromisoformat(fecha)
+        if fecha_desde and fecha < fecha_desde:
+            continue
+        if fecha_hasta and fecha > fecha_hasta:
+            continue
+        filtradas.append(row)
+    return filtradas
+
+
+def _venta_dia_comparativo_semanal(rows: list[dict], anio_ref: int) -> dict:
+    semanas = list(range(1, 54))
+    series: dict[str, dict[int, dict[int, float]]] = {
+        metric_key: {
+            anio_ref - 1: {sem: 0.0 for sem in semanas},
+            anio_ref: {sem: 0.0 for sem in semanas},
+        }
+        for metric_key, _metric_label in METRICAS_VENTA_DIA
+    }
+
+    for row in rows:
+        fecha = row.get('fecha')
+        if not fecha:
+            continue
+        if isinstance(fecha, str):
+            fecha = date.fromisoformat(fecha)
+        iso_year, iso_week, _iso_dow = fecha.isocalendar()
+        if iso_year not in {anio_ref - 1, anio_ref}:
+            continue
+        for metric_key, _metric_label in METRICAS_VENTA_DIA:
+            series[metric_key][iso_year][iso_week] += float(row.get(metric_key) or 0)
+
+    metricas: dict[str, dict[str, Any]] = {}
+    for metric_key, metric_label in METRICAS_VENTA_DIA:
+        actual_raw = [series[metric_key][anio_ref].get(sem, 0.0) for sem in semanas]
+        anterior_raw = [series[metric_key][anio_ref - 1].get(sem, 0.0) for sem in semanas]
+        total_actual = sum(actual_raw)
+        total_anterior = sum(anterior_raw)
+        variacion_abs = total_actual - total_anterior
+        variacion_pct = None
+        if total_anterior:
+            variacion_pct = round((variacion_abs / total_anterior) * 100, 1)
+        metricas[metric_key] = {
+            'titulo': metric_label,
+            'semanas': semanas,
+            'actual': [_venta_dia_value(metric_key, value) for value in actual_raw],
+            'anterior': [_venta_dia_value(metric_key, value) for value in anterior_raw],
+            'total_actual': _venta_dia_value(metric_key, total_actual),
+            'total_anterior': _venta_dia_value(metric_key, total_anterior),
+            'variacion_abs': _venta_dia_value(metric_key, variacion_abs),
+            'variacion_pct': variacion_pct,
+        }
+
+    return {
+        'anio': anio_ref,
+        'anio_anterior': anio_ref - 1,
+        'semanas': semanas,
+        'metricas': metricas,
+    }
+
+
+def _venta_dia_heatmap_target(rows: list[dict], mes: str | None, heatmap_metric: str | None = None) -> tuple[int, int] | None:
+    if not rows:
+        return None
+
+    metric = (heatmap_metric or 'hectolitros').strip().lower()
+    if metric not in {'hectolitros', 'bultos', 'pallets', 'salidas', 'personas'}:
+        metric = 'hectolitros'
+
+    target: tuple[int, int] | None = None
+    if mes:
+        try:
+            target = _parse_mes_key(mes, 'mes')
+        except ValueError:
+            target = None
+
+    month_totals: dict[tuple[int, int], float] = {}
+    matched_target = False
+    for row in rows:
+        fecha = row.get('fecha')
+        if not fecha:
+            continue
+        if isinstance(fecha, str):
+            fecha = date.fromisoformat(fecha)
+        key = (fecha.year, fecha.month)
+        month_totals[key] = month_totals.get(key, 0.0) + float(row.get(metric) or 0)
+        if target and key == target:
+            matched_target = True
+
+    if target is None or not matched_target:
+        if not month_totals:
+            return None
+        target = max(month_totals.items(), key=lambda item: item[1])[0]
+
+    return target
+
+
+def _venta_dia_heatmap_mes(rows: list[dict], target: tuple[int, int] | None, heatmap_metric: str | None = None) -> dict | None:
+    if not rows or target is None:
+        return None
+
+    metric = (heatmap_metric or 'hectolitros').strip().lower()
+    if metric not in {'hectolitros', 'bultos', 'pallets', 'salidas', 'personas'}:
+        metric = 'hectolitros'
+
+    anio_mes, mes_num = target
+    semana_max = max(1, (cal_mod.monthrange(anio_mes, mes_num)[1] + 6) // 7)
+    semanas = list(range(1, semana_max + 1))
+    data = [[0.0 for _ in range(len(DIA_SEMANA_LABELS))] for _ in semanas]
+    max_val = 0.0
+
+    for row in rows:
+        fecha = row.get('fecha')
+        if not fecha:
+            continue
+        if isinstance(fecha, str):
+            fecha = date.fromisoformat(fecha)
+        if fecha.year != anio_mes or fecha.month != mes_num:
+            continue
+
+        dow = int(row.get('dow') or fecha.isoweekday())
+        if dow not in DIA_SEMANA_LABELS:
+            continue
+        semana = min(semana_max, (fecha.day + 6) // 7)
+        value = float(row.get(metric) or 0)
+        data[semana - 1][dow - 1] += value
+        if data[semana - 1][dow - 1] > max_val:
+            max_val = data[semana - 1][dow - 1]
+
+    return {
+        'anio': anio_mes,
+        'mes': mes_num,
+        'periodo_label': f'{MESES_ES[mes_num - 1]} {anio_mes}',
+        'agregacion': 'acumulado',
+        'metrica': metric,
+        'metrica_label': {
+            'hectolitros': 'Hectolitros',
+            'bultos': 'Bultos',
+            'pallets': 'Pallets',
+            'salidas': 'Salidas',
+            'personas': 'Personas',
+        }[metric],
+        'semanas': semanas,
+        'dias': [{'num': dow, 'label': label} for dow, label in DIA_SEMANA_LABELS.items()],
+        'data': [[_venta_dia_value(metric, value) for value in fila] for fila in data],
+        'min_val': 0.0,
+        'max_val': _venta_dia_value(metric, max_val),
+    }
+
+
+def _venta_dia_insights(rows: list[dict], comparativo: dict | None) -> list[dict]:
+    if not rows:
+        return []
+
+    total_hl = 0.0
+    total_by_dow = {dow: 0.0 for dow in DIA_SEMANA_LABELS}
+    dates_by_dow: dict[int, set[date]] = {dow: set() for dow in DIA_SEMANA_LABELS}
+    total_by_date: dict[date, float] = {}
+    branch_by_dow: dict[int, dict[str, float]] = {dow: {} for dow in DIA_SEMANA_LABELS}
+    total_by_branch: dict[str, float] = {}
+
+    for row in rows:
+        fecha = row.get('fecha')
+        if not fecha:
+            continue
+        if isinstance(fecha, str):
+            fecha = date.fromisoformat(fecha)
+
+        dow = int(row.get('dow') or fecha.isoweekday())
+        if dow not in DIA_SEMANA_LABELS:
+            continue
+
+        hl = float(row.get('hectolitros') or 0)
+        sucursal_id = str(row.get('sucursal_id') or '1')
+
+        total_hl += hl
+        total_by_dow[dow] += hl
+        dates_by_dow[dow].add(fecha)
+        total_by_date[fecha] = total_by_date.get(fecha, 0.0) + hl
+        branch_by_dow[dow][sucursal_id] = branch_by_dow[dow].get(sucursal_id, 0.0) + hl
+        total_by_branch[sucursal_id] = total_by_branch.get(sucursal_id, 0.0) + hl
+
+    if not total_by_date or total_hl <= 0:
+        return []
+
+    insights: list[dict] = []
+    avg_daily = total_hl / len(total_by_date)
+    avg_by_dow = {
+        dow: (total_by_dow[dow] / len(dates_by_dow[dow])) if dates_by_dow[dow] else 0.0
+        for dow in DIA_SEMANA_LABELS
+    }
+
+    dias_con_datos = {dow: avg for dow, avg in avg_by_dow.items() if dates_by_dow[dow]}
+    if not dias_con_datos:
+        return []
+
+    strongest_dow = max(dias_con_datos, key=dias_con_datos.get)
+    weakest_dow = min(dias_con_datos, key=dias_con_datos.get)
+    strongest_avg = dias_con_datos[strongest_dow]
+    weakest_avg = dias_con_datos[weakest_dow]
+
+    if avg_daily > 0 and strongest_avg > 0:
+        insights.append({
+            'tipo': 'info',
+            'icono': '📈',
+            'titulo': 'Día más fuerte',
+            'texto': (
+                f"{DIA_SEMANA_LABELS[strongest_dow]} lidera con {_venta_dia_value('hectolitros', strongest_avg)} HL "
+                f"promedio por día, {round((strongest_avg / avg_daily) * 100, 1)}% del promedio diario del período."
+            ),
+            'accion': None,
+        })
+
+    if avg_daily > 0 and len(dias_con_datos) > 1 and weakest_avg > 0:
+        weakest_share = (weakest_avg / avg_daily) * 100
+        if weakest_share < 50:
+            insights.append({
+                'tipo': 'danger',
+                'icono': '⚠️',
+                'titulo': 'Día muy flojo detectado',
+                'texto': (
+                    f"{DIA_SEMANA_LABELS[weakest_dow]} está al {round(weakest_share, 1)}% del promedio diario "
+                    f"({ _venta_dia_value('hectolitros', weakest_avg)} HL vs {_venta_dia_value('hectolitros', avg_daily)} HL)."
+                ),
+                'accion': None,
+            })
+
+    if total_hl > 0:
+        pct_jue_vie = ((total_by_dow[4] + total_by_dow[5]) / total_hl) * 100
+        if pct_jue_vie > 35:
+            insights.append({
+                'tipo': 'info',
+                'icono': '🧭',
+                'titulo': 'Concentración jueves-viernes',
+                'texto': (
+                    f"Jueves y viernes concentran el {round(pct_jue_vie, 1)}% del volumen del período. "
+                    "Asegurá capacidad y cobertura en esa ventana."
+                ),
+                'accion': None,
+            })
+
+    branch_ids = [branch_id for branch_id, total in total_by_branch.items() if total > 0]
+    if len(branch_ids) >= 2:
+        best_gap: dict[str, Any] | None = None
+        for dow in DIA_SEMANA_LABELS:
+            values = sorted(
+                ((branch_id, branch_by_dow[dow].get(branch_id, 0.0)) for branch_id in branch_ids),
+                key=lambda item: item[1],
+                reverse=True,
+            )
+            if len(values) < 2:
+                continue
+            top_branch, top_val = values[0]
+            second_branch, second_val = values[1]
+            if top_val <= 0 or second_val <= 0:
+                continue
+            ratio = top_val / second_val
+            if ratio < 1.2:
+                continue
+            if best_gap is None or ratio > best_gap['ratio']:
+                best_gap = {
+                    'dow': dow,
+                    'top_branch': top_branch,
+                    'top_val': top_val,
+                    'second_branch': second_branch,
+                    'second_val': second_val,
+                    'ratio': ratio,
+                }
+        if best_gap:
+            insights.append({
+                'tipo': 'info',
+                'icono': '🏷️',
+                'titulo': 'Asimetría entre sucursales',
+                'texto': (
+                    f"{SUCURSAL_LABELS.get(best_gap['top_branch'], best_gap['top_branch'])} supera a "
+                    f"{SUCURSAL_LABELS.get(best_gap['second_branch'], best_gap['second_branch'])} el "
+                    f"{DIA_SEMANA_LABELS[best_gap['dow']]}: "
+                    f"{_venta_dia_value('hectolitros', best_gap['top_val'])} vs "
+                    f"{_venta_dia_value('hectolitros', best_gap['second_val'])} HL."
+                ),
+                'accion': None,
+            })
+
+    cmp_metric = (comparativo or {}).get('metricas', {}).get('hectolitros', {})
+    actual = cmp_metric.get('actual') or []
+    anterior = cmp_metric.get('anterior') or []
+    semanas = (comparativo or {}).get('semanas') or list(range(1, len(actual) + 1))
+    worst_drop: dict[str, Any] | None = None
+    for idx, semana in enumerate(semanas):
+        if idx >= len(actual) or idx >= len(anterior):
+            continue
+        prev = float(anterior[idx] or 0)
+        act = float(actual[idx] or 0)
+        if prev <= 0:
+            continue
+        pct = ((act - prev) / prev) * 100
+        if pct < -15 and (worst_drop is None or pct < worst_drop['pct']):
+            worst_drop = {
+                'semana': semana,
+                'pct': pct,
+                'actual': act,
+                'anterior': prev,
+            }
+    if worst_drop:
+        insights.append({
+            'tipo': 'warning',
+            'icono': '📉',
+            'titulo': 'Caída YoY semanal',
+            'texto': (
+                f"La semana {worst_drop['semana']} cayó {round(abs(worst_drop['pct']), 1)}% vs el año anterior "
+                f"({_venta_dia_value('hectolitros', worst_drop['actual'])} HL vs {_venta_dia_value('hectolitros', worst_drop['anterior'])} HL)."
+            ),
+            'accion': None,
+        })
+
+    orden = {'danger': 0, 'warning': 1, 'info': 2}
+    return sorted(insights, key=lambda item: orden.get(item.get('tipo'), 99))
+
+
+def get_venta_por_dia(
+    sucursal: str,
+    desde: str | None = None,
+    hasta: str | None = None,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+) -> dict:
+    ensure_ventas_detalle_table()
+    ensure_articulos_table()
+
+    params_db = get_params(sucursal)
+    umbral = umbral_override if umbral_override is not None else float(params_db['umbral_pct'])
+    metrica = metrica_override if metrica_override is not None else params_db['metrica']
+
+    fecha_desde = date.fromisoformat(desde) if desde else None
+    fecha_hasta = date.fromisoformat(hasta) if hasta else None
+    if fecha_desde and fecha_hasta and fecha_desde > fecha_hasta:
+        raise ValueError('desde no puede ser posterior a hasta')
+
+    swv = _suc_filter(sucursal, 'v')
+    date_clause = ''
+    params: dict[str, Any] = {'s': sucursal}
+    if fecha_desde:
+        date_clause += ' AND v.fecha >= %(desde)s'
+        params['desde'] = fecha_desde
+    if fecha_hasta:
+        date_clause += ' AND v.fecha <= %(hasta)s'
+        params['hasta'] = fecha_hasta
+
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            SELECT
+                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                EXTRACT(ISODOW FROM v.fecha)::int AS dow,
+                SUM(COALESCE(v.unidad_medida, 0)) AS hectolitros,
+                SUM(COALESCE(v.bultos, 0)) AS bultos,
+                SUM(
+                    CASE WHEN COALESCE(a.bultos_por_pallet, 0) > 0
+                         THEN COALESCE(v.bultos, 0) / a.bultos_por_pallet
+                         ELSE 0
+                    END
+                ) AS pallets
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+              {swv}
+              {date_clause}
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        """, params)
+        raw_rows = [dict(r) for r in cur.fetchall()]
+
+    include_total_row = sucursal == 'TODAS' and len({r['sucursal_id'] for r in raw_rows}) > 1
+    matricies = {}
+    for metric_key, metric_label in METRICAS_VENTA_DIA:
+        matricies[metric_key] = {
+            'titulo': metric_label,
+            **_venta_dia_display_rows(raw_rows, metric_key, include_total_row),
+        }
+
+    if fecha_desde and fecha_hasta:
+        periodo = f'{fecha_desde.isoformat()} a {fecha_hasta.isoformat()}'
+    elif fecha_desde:
+        periodo = f'Desde {fecha_desde.isoformat()}'
+    elif fecha_hasta:
+        periodo = f'Hasta {fecha_hasta.isoformat()}'
+    else:
+        periodo = 'Todo el histórico'
+
+    return {
+        'sucursal': sucursal,
+        'periodo': periodo,
+        'dias_semana': [{'num': dow, 'label': label} for dow, label in DIA_SEMANA_LABELS.items()],
+        'filtros': {
+            'sucursal': sucursal,
+            'sucursal_label': 'Todas' if sucursal == 'TODAS' else SUCURSAL_LABELS.get(sucursal, sucursal),
+            'umbral_pct': umbral,
+            'metrica': metrica,
+            'desde': fecha_desde.isoformat() if fecha_desde else None,
+            'hasta': fecha_hasta.isoformat() if fecha_hasta else None,
+        },
+        'metricas': matricies,
+    }
+
+
+def export_venta_por_dia(
+    sucursal: str,
+    desde: str | None = None,
+    hasta: str | None = None,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+    formato: str = 'xlsx',
+) -> tuple[BytesIO, str, str]:
+    data = get_venta_por_dia(
+        sucursal=sucursal,
+        desde=desde,
+        hasta=hasta,
+        umbral_override=umbral_override,
+        metrica_override=metrica_override,
+    )
+    formato = (formato or 'xlsx').lower().strip()
+    if formato not in {'xlsx', 'pdf'}:
+        raise ValueError('Formato no soportado. Use xlsx o pdf.')
+    safe_period = re.sub(r'[^A-Za-z0-9]+', '_', data['periodo']).strip('_').lower() or 'todo_historico'
+    filename_base = f"venta_por_dia_{sucursal}_{safe_period}".replace('/', '-')
+
+    if formato == 'pdf':
+        bio = BytesIO()
+        doc = SimpleDocTemplate(
+            bio,
+            pagesize=landscape(A4),
+            rightMargin=0.8 * cm,
+            leftMargin=0.8 * cm,
+            topMargin=0.9 * cm,
+            bottomMargin=0.9 * cm,
+            title='Venta por día',
+        )
+        base = getSampleStyleSheet()
+        styles = {
+            'title': ParagraphStyle('TitleCustom', parent=base['Title'], fontSize=18, leading=22, textColor=colors.HexColor('#172033'), spaceAfter=6),
+            'subtitle': ParagraphStyle('SubtitleCustom', parent=base['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#667085'), spaceAfter=8),
+            'section': ParagraphStyle('SectionCustom', parent=base['Heading2'], fontSize=11, leading=14, textColor=colors.HexColor('#172033'), spaceBefore=6, spaceAfter=5),
+            'normal': ParagraphStyle('NormalCustom', parent=base['Normal'], fontSize=8, leading=10, textColor=colors.HexColor('#172033')),
+            'th': ParagraphStyle('HeaderCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER),
+            'td': ParagraphStyle('DataCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033')),
+            'right': ParagraphStyle('RightCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033'), alignment=TA_RIGHT),
+        }
+
+        story: list[Any] = []
+        story.append(Paragraph('Venta por día', styles['title']))
+        story.append(Paragraph(
+            f"<b>{_xml_escape(data['filtros']['sucursal_label'])}</b> | {_xml_escape(data['periodo'])}<br/>"
+            "Matrices acumuladas por sucursal y día de semana. "
+            "Métricas mostradas: hectolitros, bultos y pallets.",
+            styles['subtitle'],
+        ))
+
+        day_labels = [label for _num, label in data['dias_semana']]
+        headers = ['Sucursal', *day_labels, 'Total']
+        widths = [4.2 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.5 * cm]
+
+        for idx, (metric_key, metric_label) in enumerate(METRICAS_VENTA_DIA):
+            metric_data = data['metricas'][metric_key]
+            if idx > 0:
+                story.append(PageBreak())
+            story.append(Paragraph(metric_label, styles['section']))
+            rows = [[row['sucursal'], *row['dias'], row['total']] for row in metric_data['filas']]
+            if metric_data.get('total'):
+                rows.append([metric_data['total']['sucursal'], *metric_data['total']['dias'], metric_data['total']['total']])
+            if not rows:
+                story.append(Paragraph('Sin datos para esta métrica con los filtros actuales.', styles['normal']))
+                continue
+            table = _pdf_table(headers, rows, styles, widths)
+            if metric_data.get('total'):
+                total_idx = len(rows)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, total_idx), (-1, total_idx), colors.HexColor('#EEF2FF')),
+                    ('FONTNAME', (0, total_idx), (-1, total_idx), 'Helvetica-Bold'),
+                ]))
+            story.append(table)
+
+        doc.build(story)
+        bio.seek(0)
+        return bio, f'{filename_base}.pdf', 'application/pdf'
+
+    wb = Workbook()
+    default_ws = wb.active
+    wb.remove(default_ws)
+
+    def style_ws(ws, widths: list[int], metric_key: str, total_row_idx: int | None) -> None:
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for row in ws.iter_rows(min_row=1, max_row=1):
+            for cell in row:
+                cell.fill = PatternFill('solid', fgColor='1F2937')
+                cell.font = Font(color='FFFFFF', bold=True)
+                cell.alignment = Alignment(horizontal='center')
+        if total_row_idx is not None:
+            for row in ws.iter_rows(min_row=total_row_idx, max_row=total_row_idx):
+                for cell in row:
+                    cell.fill = PatternFill('solid', fgColor='EEF2FF')
+                    cell.font = Font(color='172033', bold=True)
+        for idx, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(idx)].width = width
+        number_format = '#,##0.00' if metric_key == 'pallets' else '#,##0.0' if metric_key == 'hectolitros' else '#,##0'
+        for col in range(2, 10):
+            for cell_row in ws.iter_rows(min_row=2, min_col=col, max_col=col):
+                for item in cell_row:
+                    item.number_format = number_format
+
+    sheet_names = {'hectolitros': 'Hectolitros', 'bultos': 'Bultos', 'pallets': 'Pallets'}
+    headers = ['Sucursal', *[label for _num, label in data['dias_semana']], 'Total']
+    widths = [24, 12, 12, 12, 12, 12, 12, 12, 14]
+
+    for metric_key, metric_label in METRICAS_VENTA_DIA:
+        metric_data = data['metricas'][metric_key]
+        ws = wb.create_sheet(sheet_names[metric_key])
+        ws.append(headers)
+        for row in metric_data['filas']:
+            ws.append([row['sucursal'], *row['dias'], row['total']])
+        total_row_idx = None
+        if metric_data.get('total'):
+            ws.append([metric_data['total']['sucursal'], *metric_data['total']['dias'], metric_data['total']['total']])
+            total_row_idx = ws.max_row
+        style_ws(ws, widths, metric_key, total_row_idx)
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio, f'{filename_base}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+def get_venta_por_dia(
+    sucursal: str,
+    desde: str | None = None,
+    hasta: str | None = None,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+    heatmap_metrica: str | None = None,
+    periodo_tipo: str | None = None,
+    anio: int | None = None,
+    mes: str | None = None,
+    semana: int | None = None,
+    anio_comparativo: int | None = None,
+) -> dict:
+    ensure_ventas_detalle_table()
+    ensure_articulos_table()
+
+    params_db = get_params(sucursal)
+    umbral = umbral_override if umbral_override is not None else float(params_db['umbral_pct'])
+    metrica = metrica_override if metrica_override is not None else params_db['metrica']
+
+    fecha_desde, fecha_hasta, periodo, anio_periodo = _venta_dia_periodo_rango(
+        periodo_tipo=periodo_tipo,
+        anio=anio,
+        mes=mes,
+        semana=semana,
+        desde=desde,
+        hasta=hasta,
+    )
+
+    raw_rows = _venta_dia_filtrar_rango(_venta_dia_daily_rows(sucursal, fecha_desde, fecha_hasta), fecha_desde, fecha_hasta)
+    include_total_row = sucursal == 'TODAS' and len({r['sucursal_id'] for r in raw_rows}) > 1
+
+    metricas = {}
+    for metric_key, metric_label in METRICAS_VENTA_DIA:
+        metricas[metric_key] = {
+            'titulo': metric_label,
+            **_venta_dia_display_rows(raw_rows, metric_key, include_total_row),
+        }
+
+    cmp_desde, cmp_hasta, derived_anio_comp = _venta_dia_comparativo_rango(
+        periodo_tipo=periodo_tipo,
+        anio=anio,
+        mes=mes,
+        semana=semana,
+        fecha_desde=fecha_desde,
+        fecha_hasta=fecha_hasta,
+        anio_periodo=anio_periodo,
+    )
+    anio_comp = anio_comparativo or derived_anio_comp
+    comparativo = None
+    if anio_comp is not None:
+        rows_cmp = _venta_dia_filtrar_rango(_venta_dia_daily_rows(sucursal, cmp_desde, cmp_hasta), cmp_desde, cmp_hasta)
+        comparativo_actual_rows = raw_rows
+        if fecha_desde is None and fecha_hasta is None:
+            actual_desde, actual_hasta = _venta_dia_iso_year_range(anio_comp)
+            comparativo_actual_rows = _venta_dia_filtrar_rango(
+                _venta_dia_daily_rows(sucursal, actual_desde, actual_hasta),
+                actual_desde,
+                actual_hasta,
+            )
+        comparativo = _venta_dia_comparativo_semanal(comparativo_actual_rows + rows_cmp, anio_comp)
+
+    heatmap_target = _venta_dia_heatmap_target(raw_rows, mes, 'hectolitros')
+    heatmap = _venta_dia_heatmap_mes(raw_rows, heatmap_target, 'hectolitros')
+    heatmap_salidas = _venta_dia_heatmap_mes(raw_rows, heatmap_target, 'salidas')
+    personas_rows = _venta_dia_personas_daily_rows(sucursal, fecha_desde, fecha_hasta)
+    if heatmap_target is None and personas_rows:
+        heatmap_target = _venta_dia_heatmap_target(personas_rows, mes, 'personas')
+    heatmap_personas = _venta_dia_heatmap_mes(personas_rows, heatmap_target, 'personas')
+    heatmaps = {
+        'hectolitros': heatmap,
+        'salidas': heatmap_salidas,
+        'personas': heatmap_personas,
+    }
+    insights_rows = raw_rows
+    if fecha_desde is None and fecha_hasta is None and anio_comp is not None:
+        actual_desde, actual_hasta = _venta_dia_iso_year_range(anio_comp)
+        insights_rows = _venta_dia_filtrar_rango(
+            _venta_dia_daily_rows(sucursal, actual_desde, actual_hasta),
+            actual_desde,
+            actual_hasta,
+        )
+    insights = _venta_dia_insights(insights_rows, comparativo)
+
+    return {
+        'sucursal': sucursal,
+        'periodo_tipo': periodo_tipo or 'auto',
+        'periodo': periodo,
+        'anio_periodo': anio_periodo,
+        'anio_comparativo': anio_comp,
+        'dias_semana': [{'num': dow, 'label': label} for dow, label in DIA_SEMANA_LABELS.items()],
+        'filtros': {
+            'sucursal': sucursal,
+            'sucursal_label': 'Todas' if sucursal == 'TODAS' else SUCURSAL_LABELS.get(sucursal, sucursal),
+            'umbral_pct': umbral,
+            'metrica': metrica,
+            'heatmap_metrica': heatmap.get('metrica') if heatmap else 'hectolitros',
+            'periodo_tipo': periodo_tipo or 'auto',
+            'anio': anio_periodo,
+            'anio_comparativo': anio_comp,
+            'mes': mes,
+            'semana': semana,
+            'desde': fecha_desde.isoformat() if fecha_desde else None,
+            'hasta': fecha_hasta.isoformat() if fecha_hasta else None,
+        },
+        'metricas': metricas,
+        'heatmaps': heatmaps,
+        'comparativo_semanal': comparativo,
+        'heatmap': heatmap,
+        'insights': insights,
+    }
+
+
+def export_venta_por_dia(
+    sucursal: str,
+    desde: str | None = None,
+    hasta: str | None = None,
+    umbral_override: float | None = None,
+    metrica_override: str | None = None,
+    heatmap_metrica: str | None = None,
+    periodo_tipo: str | None = None,
+    anio: int | None = None,
+    mes: str | None = None,
+    semana: int | None = None,
+    anio_comparativo: int | None = None,
+    formato: str = 'xlsx',
+) -> tuple[BytesIO, str, str]:
+    data = get_venta_por_dia(
+        sucursal=sucursal,
+        desde=desde,
+        hasta=hasta,
+        umbral_override=umbral_override,
+        metrica_override=metrica_override,
+        heatmap_metrica=heatmap_metrica,
+        periodo_tipo=periodo_tipo,
+        anio=anio,
+        mes=mes,
+        semana=semana,
+        anio_comparativo=anio_comparativo,
+    )
+    formato = (formato or 'xlsx').lower().strip()
+    if formato not in {'xlsx', 'pdf'}:
+        raise ValueError('Formato no soportado. Use xlsx o pdf.')
+    safe_period = re.sub(r'[^A-Za-z0-9]+', '_', data['periodo']).strip('_').lower() or 'todo_historico'
+    filename_base = f"venta_por_dia_{sucursal}_{safe_period}".replace('/', '-')
+
+    if formato == 'pdf':
+        bio = BytesIO()
+        doc = SimpleDocTemplate(
+            bio,
+            pagesize=landscape(A4),
+            rightMargin=0.8 * cm,
+            leftMargin=0.8 * cm,
+            topMargin=0.9 * cm,
+            bottomMargin=0.9 * cm,
+            title='Venta por día',
+        )
+        base = getSampleStyleSheet()
+        styles = {
+            'title': ParagraphStyle('TitleCustom', parent=base['Title'], fontSize=18, leading=22, textColor=colors.HexColor('#172033'), spaceAfter=6),
+            'subtitle': ParagraphStyle('SubtitleCustom', parent=base['Normal'], fontSize=9, leading=12, textColor=colors.HexColor('#667085'), spaceAfter=8),
+            'section': ParagraphStyle('SectionCustom', parent=base['Heading2'], fontSize=11, leading=14, textColor=colors.HexColor('#172033'), spaceBefore=6, spaceAfter=5),
+            'normal': ParagraphStyle('NormalCustom', parent=base['Normal'], fontSize=8, leading=10, textColor=colors.HexColor('#172033')),
+            'th': ParagraphStyle('HeaderCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.white, alignment=TA_CENTER),
+            'td': ParagraphStyle('DataCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033')),
+            'right': ParagraphStyle('RightCell', parent=base['Normal'], fontSize=7, leading=9, textColor=colors.HexColor('#172033'), alignment=TA_RIGHT),
+        }
+
+        story: list[Any] = []
+        story.append(Paragraph('Venta por día', styles['title']))
+        story.append(Paragraph(
+            f"<b>{_xml_escape(data['filtros']['sucursal_label'])}</b> | {_xml_escape(data['periodo'])}<br/>"
+            "Matrices acumuladas por sucursal y día de semana. "
+            "Métricas mostradas: hectolitros, bultos y pallets.",
+            styles['subtitle'],
+        ))
+
+        day_labels = [label for _num, label in data['dias_semana']]
+        headers = ['Sucursal', *day_labels, 'Total']
+        widths = [4.2 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.3 * cm, 2.5 * cm]
+
+        for idx, (metric_key, metric_label) in enumerate(METRICAS_VENTA_DIA):
+            metric_data = data['metricas'][metric_key]
+            if idx > 0:
+                story.append(PageBreak())
+            story.append(Paragraph(metric_label, styles['section']))
+            rows = [[row['sucursal'], *row['dias'], row['total']] for row in metric_data['filas']]
+            if metric_data.get('total'):
+                rows.append([metric_data['total']['sucursal'], *metric_data['total']['dias'], metric_data['total']['total']])
+            if not rows:
+                story.append(Paragraph('Sin datos para esta métrica con los filtros actuales.', styles['normal']))
+                continue
+            table = _pdf_table(headers, rows, styles, widths)
+            if metric_data.get('total'):
+                total_idx = len(rows)
+                table.setStyle(TableStyle([
+                    ('BACKGROUND', (0, total_idx), (-1, total_idx), colors.HexColor('#EEF2FF')),
+                    ('FONTNAME', (0, total_idx), (-1, total_idx), 'Helvetica-Bold'),
+                ]))
+            story.append(table)
+
+        doc.build(story)
+        bio.seek(0)
+        return bio, f'{filename_base}.pdf', 'application/pdf'
+
+    wb = Workbook()
+    default_ws = wb.active
+    wb.remove(default_ws)
+
+    def style_ws(ws, widths: list[int], metric_key: str, total_row_idx: int | None) -> None:
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for row in ws.iter_rows(min_row=1, max_row=1):
+            for cell in row:
+                cell.fill = PatternFill('solid', fgColor='1F2937')
+                cell.font = Font(color='FFFFFF', bold=True)
+                cell.alignment = Alignment(horizontal='center')
+        if total_row_idx is not None:
+            for row in ws.iter_rows(min_row=total_row_idx, max_row=total_row_idx):
+                for cell in row:
+                    cell.fill = PatternFill('solid', fgColor='EEF2FF')
+                    cell.font = Font(color='172033', bold=True)
+        for idx, width in enumerate(widths, 1):
+            ws.column_dimensions[get_column_letter(idx)].width = width
+        number_format = '#,##0.00' if metric_key == 'pallets' else '#,##0.0' if metric_key == 'hectolitros' else '#,##0'
+        for col in range(2, 10):
+            for cell_row in ws.iter_rows(min_row=2, min_col=col, max_col=col):
+                for item in cell_row:
+                    item.number_format = number_format
+
+    sheet_names = {'hectolitros': 'Hectolitros', 'bultos': 'Bultos', 'pallets': 'Pallets'}
+    headers = ['Sucursal', *[label for _num, label in data['dias_semana']], 'Total']
+    widths = [24, 12, 12, 12, 12, 12, 12, 12, 14]
+
+    for metric_key, metric_label in METRICAS_VENTA_DIA:
+        metric_data = data['metricas'][metric_key]
+        ws = wb.create_sheet(sheet_names[metric_key])
+        ws.append(headers)
+        for row in metric_data['filas']:
+            ws.append([row['sucursal'], *row['dias'], row['total']])
+        total_row_idx = None
+        if metric_data.get('total'):
+            ws.append([metric_data['total']['sucursal'], *metric_data['total']['dias'], metric_data['total']['total']])
+            total_row_idx = ws.max_row
+        style_ws(ws, widths, metric_key, total_row_idx)
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio, f'{filename_base}.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 
 def get_cobertura_picos(empresa_id: str, sucursal_id: str, anio: int, mes: int) -> dict:

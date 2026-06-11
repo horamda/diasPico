@@ -64,6 +64,23 @@ def test_segmentacion_solapa_costo_pdv_conectada_a_reporte():
     assert 'state.sectionSignatures["cost-pdv"] = signature;' in html
 
 
+def test_segmentacion_solapa_experiencia_conectada_a_clusterizacion():
+    html = TEMPLATE.read_text(encoding="utf-8")
+
+    assert 'data-tab="experience"' in html
+    assert 'id="view-experience"' in html
+    assert "/api/segmentacion/experiencia-clientes" in html
+    assert "function renderExperience()" in html
+    assert "function renderExperienceMap" in html
+    assert "function experienceParams()" in html
+    assert "selectedCluster()" in html.split("function experienceParams()", 1)[1].split("function fillSelectPreserving", 1)[0]
+    assert "expSegPeriodo" in html
+    assert "expSegMetrica" in html
+    assert "expSegTipoNegocio" in html
+    assert "expSegLocalidad" in html
+    assert "clientes_peores" in html
+
+
 def test_segmentacion_solapas_responsivas():
     html = TEMPLATE.read_text(encoding="utf-8")
 

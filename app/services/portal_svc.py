@@ -30,6 +30,14 @@ _DEFAULT_MODULES = (
         'orden': 20,
     },
     {
+        'codigo': 'frescura_oportunidades',
+        'titulo': 'Frescura y oportunidades',
+        'descripcion': 'Articulos con frescura critica y oportunidades comerciales por cliente.',
+        'ruta': '/frescura-oportunidades',
+        'image_url': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=60',
+        'orden': 25,
+    },
+    {
         'codigo': 'panel_proyecto',
         'titulo': 'Panel Proyecto',
         'descripcion': 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
@@ -419,4 +427,3 @@ def set_user_access_map(user_id: int, module_ids: list[int]) -> dict:
                     [(user_id, module_id, True) for module_id in ids],
                 )
     return {'usuario_id': user_id, 'module_ids': ids}
-

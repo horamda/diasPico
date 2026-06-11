@@ -110,6 +110,10 @@ GET /api/articulos/sin-clasificar?mes=YYYY-MM&sucursal=TODAS
 GET /api/picos/calendario?mes=YYYY-MM&sucursal=TODAS
 GET /api/picos/kpis?mes=YYYY-MM&sucursal=TODAS
 GET /api/picos/historico?sucursal=TODAS&meses=12
+GET /api/picos/venta-dia?sucursal=TODAS&periodo_tipo=anio&anio=2026
+GET /api/picos/venta-dia?sucursal=TODAS&periodo_tipo=mes&mes=2026-06
+GET /api/picos/venta-dia/export?sucursal=TODAS&periodo_tipo=anio&anio=2026&formato=xlsx
+GET /api/picos/venta-dia/export?sucursal=TODAS&periodo_tipo=anio&anio=2026&formato=pdf
 GET /api/rechazos
 GET /api/admin-proyecto/dashboard
 GET /api/admin-proyecto/tablas
@@ -123,3 +127,5 @@ GET /api/segmentacion/cache
 POST /api/segmentacion/cache/refresh
 POST /api/segmentacion/recalcular
 ```
+
+`venta-dia` acepta `periodo_tipo=todo|mes|anio|semana|rango` y devuelve comparativos ISO semana a semana para el año seleccionado.

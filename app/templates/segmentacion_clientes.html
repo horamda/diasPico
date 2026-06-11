@@ -413,6 +413,213 @@
     .map-kpi label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 700; }
     .map-kpi strong { font-size: 15px; line-height: 1.2; }
 
+    .exp-filter-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr)) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .exp-help-line {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .exp-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .exp-map-layout {
+      display: grid;
+      grid-template-columns: minmax(420px, 1.45fr) minmax(280px, .75fr);
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .exp-map-canvas {
+      min-height: 430px;
+      height: 100%;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      overflow: hidden;
+      background: #eef3f8;
+    }
+
+    .exp-map-canvas .empty {
+      height: 100%;
+      min-height: 430px;
+    }
+
+    .exp-chart-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .exp-status-card {
+      min-height: 100%;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: var(--panel-2);
+      padding: 12px;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .exp-status-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .exp-status-title {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .exp-status-sub {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .exp-state-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 28px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .exp-state-dot,
+    .exp-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+
+    .exp-score-list {
+      display: grid;
+      gap: 9px;
+    }
+
+    .exp-score-row {
+      display: grid;
+      grid-template-columns: 82px 1fr 70px;
+      align-items: center;
+      gap: 9px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .exp-score-row span:last-child {
+      text-align: right;
+      font-family: var(--mono);
+      color: var(--muted);
+    }
+
+    .exp-score-track {
+      height: 9px;
+      border-radius: 999px;
+      background: #e5e9f0;
+      overflow: hidden;
+    }
+
+    .exp-score-fill {
+      height: 100%;
+      border-radius: 999px;
+      min-width: 2px;
+    }
+
+    .exp-legend {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .exp-legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .exp-table-sub {
+      display: block;
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--mono);
+      white-space: normal;
+    }
+
+    .exp-popup {
+      min-width: 260px;
+      display: grid;
+      gap: 8px;
+      font-family: var(--sans);
+    }
+
+    .exp-popup h4 {
+      margin: 0;
+      font-size: 14px;
+    }
+
+    .exp-popup-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .exp-popup-grid div {
+      border: 1px solid #e5e7eb;
+      border-radius: 7px;
+      padding: 6px;
+      background: #f8fafc;
+    }
+
+    .exp-popup-grid label {
+      display: block;
+      color: #64748b;
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .exp-popup-grid strong {
+      display: block;
+      margin-top: 2px;
+      font-size: 12px;
+      color: #0f172a;
+    }
+
+    .exp-popup-worst {
+      margin: 0;
+      padding-left: 17px;
+      display: grid;
+      gap: 4px;
+      color: #334155;
+      font-size: 12px;
+    }
+
     .table-wrap {
       width: 100%;
       max-width: 100%;
@@ -889,6 +1096,9 @@
       .filters { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
       .config-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
       .upload-grid { grid-template-columns: repeat(2, minmax(150px, 1fr)); }
+      .exp-filter-grid { grid-template-columns: repeat(3, minmax(150px, 1fr)); }
+      .exp-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .exp-map-layout, .exp-chart-grid { grid-template-columns: 1fr; }
       .tabs { gap: 3px; }
       .tab { min-height: 34px; padding: 7px 9px; gap: 5px; font-size: 12px; }
       .tab svg { width: 15px; height: 15px; }
@@ -909,8 +1119,10 @@
       .panel-head .inline-filters { width: 100%; justify-content: space-between; }
       .panel-meta { white-space: normal; }
       .toolbar { grid-template-columns: 1fr; }
-      .filters, .config-grid, .weights-grid, .metric-grid, .upload-grid { grid-template-columns: 1fr; }
+      .filters, .config-grid, .weights-grid, .metric-grid, .upload-grid, .exp-filter-grid, .exp-kpi-grid { grid-template-columns: 1fr; }
       .map-toolbar, .map-kpis { grid-template-columns: 1fr; }
+      .exp-map-canvas, .exp-map-canvas .empty { min-height: 360px; }
+      .exp-score-row { grid-template-columns: 70px 1fr 58px; }
       .kpi-grid { grid-template-columns: 1fr; }
       .search { min-width: 100%; }
       .search-wrap { width: 100%; }
@@ -1019,6 +1231,7 @@
         <button class="tab active" data-tab="overview"><i data-lucide="layout-dashboard"></i>Resumen</button>
         <button class="tab" data-tab="clients"><i data-lucide="users"></i>Clientes</button>
         <button class="tab" data-tab="territory"><i data-lucide="map"></i>Territorio</button>
+        <button class="tab" data-tab="experience"><i data-lucide="message-square-text"></i>Experiencia</button>
         <button class="tab" data-tab="service"><i data-lucide="clipboard-list"></i>Plan</button>
         <button class="tab" data-tab="costs"><i data-lucide="truck"></i>Costos</button>
         <button class="tab" data-tab="cost-pdv"><i data-lucide="route"></i>Costo PDV</button>
@@ -1128,6 +1341,108 @@
             </div>
           </article>
         </div>
+      </section>
+
+      <section class="view" id="view-experience">
+        <article class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="panel-title"><i data-lucide="message-square-text"></i>Experiencia del cliente por cluster</div>
+              <div class="panel-meta">Replica integrada con sucursal y cluster global</div>
+            </div>
+            <div class="exp-legend">
+              <span><i class="exp-dot" style="background:#16a34a"></i>Bueno</span>
+              <span><i class="exp-dot" style="background:#f59e0b"></i>Neutro</span>
+              <span><i class="exp-dot" style="background:#dc2626"></i>Malo</span>
+              <span><i class="exp-dot" style="background:#94a3b8"></i>Sin dato</span>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="exp-filter-grid">
+              <div class="field">
+                <label for="expSegPeriodo">Periodo</label>
+                <input class="control" id="expSegPeriodo" type="month">
+              </div>
+              <div class="field">
+                <label for="expSegMetrica">Metrica</label>
+                <select class="control" id="expSegMetrica">
+                  <option value="nps">NPS</option>
+                  <option value="rmd">RMD</option>
+                  <option value="combinado">NPS + RMD</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="expSegLocalidad">Localidad</label>
+                <select class="control" id="expSegLocalidad"><option value="TODAS">Todas</option></select>
+              </div>
+              <div class="field">
+                <label for="expSegTipoNegocio">Tipo de negocio</label>
+                <select class="control" id="expSegTipoNegocio"><option value="TODAS">Todos</option></select>
+              </div>
+              <div class="field">
+                <label for="expSegEstado">Estado</label>
+                <select class="control" id="expSegEstado">
+                  <option value="TODOS">Todos</option>
+                  <option value="bueno">Bueno</option>
+                  <option value="neutro">Neutro</option>
+                  <option value="malo">Malo</option>
+                  <option value="sin_dato">Sin dato</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Accion</label>
+                <button class="btn primary" id="expSegRefreshBtn"><i data-lucide="refresh-cw"></i>Actualizar</button>
+              </div>
+            </div>
+            <div class="exp-help-line" id="expSegMeta">Los filtros globales de Sucursal y Cluster tambien aplican a esta solapa.</div>
+          </div>
+        </article>
+
+        <section class="exp-kpi-grid" id="expSegKpis"></section>
+
+        <div class="exp-map-layout">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="map-pinned"></i>Mapa de evaluaciones por localidad</div>
+              <div class="panel-meta" id="expSegMapMeta"></div>
+            </div>
+            <div class="panel-body">
+              <div id="expSegMap" class="exp-map-canvas"><div class="empty">Cargando mapa...</div></div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="traffic-cone"></i>Semaforo de experiencia</div>
+              <div class="panel-meta" id="expSegStatusMeta"></div>
+            </div>
+            <div class="panel-body">
+              <div class="exp-status-card" id="expSegSemaforo"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="exp-chart-grid">
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="pie-chart"></i>Distribucion de estados</div></div>
+            <div class="panel-body"><div class="chart-box"><canvas id="expSegEstadoChart"></canvas></div></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="map-pin"></i>Localidades criticas</div></div>
+            <div class="panel-body"><div class="chart-box"><canvas id="expSegLocalidadChart"></canvas></div></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head"><div class="panel-title"><i data-lucide="store"></i>Tipo de negocio</div></div>
+            <div class="panel-body"><div class="chart-box"><canvas id="expSegTipoChart"></canvas></div></div>
+          </article>
+        </div>
+
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="list-checks"></i>Resumen por localidad</div>
+            <div class="panel-meta" id="expSegTableMeta"></div>
+          </div>
+          <div class="table-wrap" id="expSegLocalidadTable"></div>
+        </article>
       </section>
 
       <section class="view" id="view-service">
@@ -1677,10 +1992,14 @@
       evolution: [],
       inflation: [],
       quality: { fuentes: [], resumen: {}, alertas: [], versiones: [] },
+      experience: null,
+      experienceOptionsReady: false,
       sectionSignatures: {},
       charts: {},
       map: null,
       mapLayerGroup: null,
+      expMap: null,
+      expMapLayerGroup: null,
       activeTab: "overview",
       loading: false,
       clientPage: 1,
@@ -1932,6 +2251,7 @@
       if ($("inflationUploadBtn")) $("inflationUploadBtn").disabled = on;
       if ($("npsDetailUploadBtn")) $("npsDetailUploadBtn").disabled = on;
       if ($("clientCardBtn")) $("clientCardBtn").disabled = on;
+      if ($("expSegRefreshBtn")) $("expSegRefreshBtn").disabled = on;
       setGlobalLoading(on, message);
     }
 
@@ -2026,7 +2346,7 @@
     }
 
     async function loadSecondaryData(seq, tab = state.activeTab, force = false) {
-      if (!["territory", "data", "costs", "cost-pdv", "quality", "settings", "evolution"].includes(tab)) return;
+      if (!["territory", "experience", "data", "costs", "cost-pdv", "quality", "settings", "evolution"].includes(tab)) return;
       const signature = tabCacheSignature(tab);
       const isCostTab = tab === "costs" || tab === "cost-pdv";
       if (isCostTab && !force && state.costReportSignature === signature) {
@@ -2087,6 +2407,16 @@
             apply: (data) => { state.mapRows = data || []; }
           }
         );
+      } else if (tab === "experience") {
+        const expParams = experienceParams();
+        tasks.push({
+          label: "experiencia",
+          run: () => api(`/api/segmentacion/experiencia-clientes?${expParams.toString()}`, undefined, 45000),
+          apply: (data) => {
+            state.experience = data || null;
+            fillExperienceSelects(state.experience);
+          }
+        });
       } else if (tab === "data") {
         tasks.push(
           {
@@ -2137,6 +2467,7 @@
       if (!tasks.length) return;
       setGlobalLoading(true, {
         territory: "Actualizando territorio...",
+        experience: "Actualizando experiencia...",
         data: "Actualizando carga complementaria...",
         costs: "Actualizando costos...",
         "cost-pdv": "Actualizando costo por PDV...",
@@ -2176,7 +2507,7 @@
     }
 
     function showGlobalError(message) {
-      ["branchSummary", "clientsTable", "clientServiceCard", "serviceTable", "costReportTable", "costExcludedTable", "costPdvTable", "costPdvExcludedTable", "localityTable", "territoryMap", "qualityTable", "qualityVersions", "inflationTable"].forEach((id) => {
+      ["branchSummary", "clientsTable", "clientServiceCard", "serviceTable", "costReportTable", "costExcludedTable", "costPdvTable", "costPdvExcludedTable", "localityTable", "territoryMap", "expSegLocalidadTable", "expSegSemaforo", "qualityTable", "qualityVersions", "inflationTable"].forEach((id) => {
         const el = $(id);
         if (el) el.innerHTML = `<div class="error">${esc(message)}</div>`;
       });
@@ -2269,6 +2600,115 @@
       const link = $("costPdvExportXlsx");
       if (!link) return;
       link.href = `/api/segmentacion/reporte/costos-atencion/export?${costReportParams(5000, true).toString()}`;
+    }
+
+    function expMetricLabel(metric = $("expSegMetrica")?.value || "nps") {
+      return { nps: "NPS", rmd: "RMD", combinado: "NPS + RMD" }[metric] || "NPS";
+    }
+
+    function expStateLabel(value) {
+      return { bueno: "Bueno", neutro: "Neutro", malo: "Malo", sin_dato: "Sin dato" }[value] || "Sin dato";
+    }
+
+    function expStateColor(value) {
+      return { bueno: "#16a34a", neutro: "#f59e0b", malo: "#dc2626", sin_dato: "#94a3b8" }[value] || "#94a3b8";
+    }
+
+    function expMetricColor(value, metric = $("expSegMetrica")?.value || "nps") {
+      if (!hasMetricValue(value)) return "var(--muted)";
+      const n = Number(value);
+      if (metric === "rmd") {
+        if (n >= 4) return "var(--green)";
+        if (n >= 3) return "var(--amber)";
+        return "var(--red)";
+      }
+      if (metric === "combinado") {
+        if (n >= 70) return "var(--green)";
+        if (n >= 45) return "var(--amber)";
+        return "var(--red)";
+      }
+      if (n >= 50) return "var(--green)";
+      if (n >= 0) return "var(--amber)";
+      return "var(--red)";
+    }
+
+    function expMetricText(value, metric = $("expSegMetrica")?.value || "nps") {
+      if (!hasMetricValue(value)) return "Sin dato";
+      if (metric === "rmd") return num(value, 2);
+      if (metric === "combinado") return `${num(value, 1)}/100`;
+      return num(value, 1);
+    }
+
+    function expMetricAxis(metric = $("expSegMetrica")?.value || "nps") {
+      if (metric === "rmd") return { min: 0, max: 5 };
+      if (metric === "combinado") return { min: 0, max: 100 };
+      return { min: -100, max: 100 };
+    }
+
+    function expDefaultPeriod() {
+      const period = state.params.periodo || {};
+      const end = dateInputValue(period.fecha_hasta);
+      if (end) return end.slice(0, 7);
+      const year = Number(period.periodo_anio || new Date().getFullYear());
+      const month = Number(period.periodo_mes || (new Date().getMonth() + 1));
+      return `${year}-${String(Math.min(Math.max(month, 1), 12)).padStart(2, "0")}`;
+    }
+
+    function ensureExperienceFilters() {
+      if ($("expSegPeriodo") && !$("expSegPeriodo").value) $("expSegPeriodo").value = expDefaultPeriod();
+      if ($("expSegMetrica") && !$("expSegMetrica").value) $("expSegMetrica").value = "nps";
+      if ($("expSegLocalidad") && !$("expSegLocalidad").value) $("expSegLocalidad").value = "TODAS";
+      if ($("expSegTipoNegocio") && !$("expSegTipoNegocio").value) $("expSegTipoNegocio").value = "TODAS";
+      if ($("expSegEstado") && !$("expSegEstado").value) $("expSegEstado").value = "TODOS";
+    }
+
+    function experienceParams() {
+      ensureExperienceFilters();
+      const params = new URLSearchParams();
+      const branch = selectedBranch();
+      const cluster = selectedCluster();
+      const periodo = $("expSegPeriodo")?.value || expDefaultPeriod();
+      const metrica = $("expSegMetrica")?.value || "nps";
+      const localidad = $("expSegLocalidad")?.value || "TODAS";
+      const tipoNegocio = $("expSegTipoNegocio")?.value || "TODAS";
+      const estado = $("expSegEstado")?.value || "TODOS";
+      if (branch !== "TODAS") params.set("sucursal", branch);
+      if (cluster) params.set("cluster", cluster);
+      params.set("periodo", periodo);
+      params.set("metrica", metrica);
+      if (localidad !== "TODAS") params.set("localidad", localidad);
+      if (tipoNegocio !== "TODAS") params.set("tipo_negocio", tipoNegocio);
+      if (estado !== "TODOS") params.set("estado", estado);
+      return params;
+    }
+
+    function fillSelectPreserving(id, items, allValue, allLabel) {
+      const select = $(id);
+      if (!select) return;
+      const current = select.value || allValue;
+      const options = Array.isArray(items) ? items : [];
+      select.innerHTML = `<option value="${esc(allValue)}">${esc(allLabel)}</option>${options.map((item) => {
+        const value = typeof item === "string" ? item : item.value;
+        const label = typeof item === "string" ? item : (item.label || item.value);
+        return `<option value="${esc(value)}">${esc(label)}</option>`;
+      }).join("")}`;
+      const values = new Set([allValue, ...options.map((item) => String(typeof item === "string" ? item : item.value))]);
+      select.value = values.has(String(current)) ? current : allValue;
+    }
+
+    function fillExperienceSelects(data = state.experience) {
+      const filtros = data?.filtros_disponibles || {};
+      fillSelectPreserving("expSegLocalidad", filtros.localidades || [], "TODAS", "Todas");
+      fillSelectPreserving("expSegTipoNegocio", filtros.tipos_negocio || [], "TODAS", "Todos");
+    }
+
+    function refreshExperience(force = true) {
+      state.sectionSignatures.experience = "";
+      if (state.activeTab === "experience") loadSecondaryData(state.loadSeq, "experience", force);
+    }
+
+    function expStatePill(stateKey) {
+      return `<span class="exp-state-pill"><i class="exp-state-dot" style="background:${expStateColor(stateKey)}"></i>${esc(expStateLabel(stateKey))}</span>`;
     }
 
     function renderClientCardOptions() {
@@ -2410,6 +2850,9 @@
       switch (tab) {
         case "territory":
           return `${branch}|${mapWeight}|${mapLimit}`;
+        case "experience":
+          ensureExperienceFilters();
+          return `${branch}|${cluster}|${$("expSegPeriodo")?.value || ""}|${$("expSegMetrica")?.value || "nps"}|${$("expSegLocalidad")?.value || "TODAS"}|${$("expSegTipoNegocio")?.value || "TODAS"}|${$("expSegEstado")?.value || "TODOS"}`;
         case "data":
           return branch;
         case "costs":
@@ -2437,6 +2880,8 @@
         safeRender("clientes", renderClients);
       } else if (tab === "territory") {
         safeRender("territorio", renderTerritory);
+      } else if (tab === "experience") {
+        safeRender("experiencia", renderExperience);
       } else if (tab === "service") {
         safeRender("plan", renderService);
       } else if (tab === "settings") {
@@ -2464,6 +2909,7 @@
       safeRender("opciones cliente", renderClientCardOptions);
       safeRender("clientes", renderClients);
       safeRender("territorio", renderTerritory);
+      if (state.activeTab === "experience") safeRender("experiencia", renderExperience);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
       safeRender("costo PDV", renderCostPdv);
@@ -2488,6 +2934,7 @@
       safeRender("opciones cliente", renderClientCardOptions);
       safeRender("clientes", renderClients);
       safeRender("territorio", renderTerritory);
+      if (state.activeTab === "experience") safeRender("experiencia", renderExperience);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
       safeRender("costo PDV", renderCostPdv);
@@ -2827,6 +3274,284 @@
       `;
       $("clientsTable").querySelectorAll("[data-client]").forEach((row) => row.addEventListener("click", () => openClient(row.dataset.client)));
       if (window.lucide) lucide.createIcons();
+    }
+
+    function renderExperience() {
+      ensureExperienceFilters();
+      const data = state.experience;
+      if (!data) {
+        $("expSegMeta").textContent = "Cargando experiencia de clientes con los filtros actuales...";
+        $("expSegKpis").innerHTML = `<div class="loading"><span></span></div>`;
+        $("expSegSemaforo").innerHTML = `<div class="loading"><span></span></div>`;
+        $("expSegLocalidadTable").innerHTML = `<div class="loading"><span></span></div>`;
+        $("expSegMapMeta").textContent = "";
+        $("expSegStatusMeta").textContent = "";
+        $("expSegTableMeta").textContent = "";
+        return;
+      }
+      fillExperienceSelects(data);
+      renderExperienceMeta(data);
+      renderExperienceKpis(data);
+      renderExperienceSemaforo(data);
+      renderExperienceCharts(data);
+      renderExperienceTable(data);
+      renderExperienceMap(data);
+      if (window.lucide) lucide.createIcons();
+    }
+
+    function renderExperienceMeta(data) {
+      const resumen = data.resumen || {};
+      const periodo = data.periodo?.label || $("expSegPeriodo")?.value || "-";
+      const branch = selectedBranch() === "TODAS" ? "Todas" : branchLabel(selectedBranch());
+      const cluster = selectedCluster() ? clusterLabel(selectedCluster()) : "Todos";
+      const metric = resumen.metrica_label || expMetricLabel();
+      $("expSegMeta").textContent = `Periodo: ${periodo} | Sucursal: ${branch} | Cluster: ${cluster} | Metrica: ${metric} | Localidades: ${num(resumen.localidades || 0)} | Tipo de negocio: ${$("expSegTipoNegocio")?.value || "TODOS"}. NPS se calcula como % promotores - % detractores; RMD usa escala 1 a 5; combinado normaliza ambos a 0-100.`;
+    }
+
+    function renderExperienceKpis(data) {
+      const r = data.resumen || {};
+      const metricKey = r.metrica || $("expSegMetrica")?.value || "nps";
+      const coberturaEval = Number(r.clientes || 0) ? Number(r.clientes_evaluados || 0) / Number(r.clientes || 0) * 100 : 0;
+      $("expSegKpis").innerHTML = `
+        ${metric("Clientes evaluados", `${num(r.clientes_evaluados || 0)} / ${num(r.clientes || 0)}`, "var(--blue)", `<span class="metric-detail">Cobertura ${pct(coberturaEval, 1)} | GPS ${num(r.con_gps || 0)}</span>`)}
+        ${metric(expMetricLabel(metricKey), expMetricText(r.metrica_valor, metricKey), expMetricColor(r.metrica_valor, metricKey), `<span class="metric-detail">NPS ${expMetricText(r.nps_indice, "nps")} | RMD ${rmdText(r.rmd_promedio)}</span>`)}
+        ${metric("Venta YTD", moneyCard(r.venta_ytd || 0), "var(--text)", `<span class="metric-detail">HL ${num(r.hl_ytd || 0, 1)} | Pedidos ${num(r.pedidos_ytd || 0)}</span>`)}
+        ${metric("Cobertura NPS / RMD", `${num(r.clientes_nps || 0)} / ${num(r.clientes_rmd || 0)}`, "var(--green)", `<span class="metric-detail">NPS fuente ${esc(r.nps_fuente || "-")} | Resp. ${num(r.nps_respuestas || 0)}</span>`)}
+      `;
+    }
+
+    function renderExperienceSemaforo(data) {
+      const r = data.resumen || {};
+      const counts = [
+        ["bueno", Number(r.bueno || 0)],
+        ["neutro", Number(r.neutro || 0)],
+        ["malo", Number(r.malo || 0)],
+        ["sin_dato", Number(r.sin_dato || 0)]
+      ];
+      const total = counts.reduce((sum, item) => sum + item[1], 0) || Number(r.clientes || 0) || 0;
+      const dominant = counts
+        .filter(([key]) => key !== "sin_dato")
+        .sort((a, b) => b[1] - a[1])[0]?.[0] || "sin_dato";
+      $("expSegStatusMeta").textContent = total ? `${num(total)} clientes` : "Sin datos";
+      $("expSegSemaforo").innerHTML = `
+        <div class="exp-status-head">
+          <div>
+            <div class="exp-status-title">${esc(expMetricLabel(r.metrica))}: ${esc(expMetricText(r.metrica_valor, r.metrica))}</div>
+            <div class="exp-status-sub">Semaforo calculado sobre clientes filtrados. Sin dato no penaliza, pero muestra falta de cobertura.</div>
+          </div>
+          ${expStatePill(dominant)}
+        </div>
+        <div class="exp-score-list">
+          ${counts.map(([key, value]) => {
+            const width = total ? Math.max(2, value / total * 100) : 0;
+            return `
+              <div class="exp-score-row">
+                <span>${esc(expStateLabel(key))}</span>
+                <div class="exp-score-track"><div class="exp-score-fill" style="width:${width}%;background:${expStateColor(key)}"></div></div>
+                <span>${num(value)} | ${pct(total ? value / total * 100 : 0, 0)}</span>
+              </div>
+            `;
+          }).join("")}
+        </div>
+        <div class="note">
+          <strong>Lectura rapida</strong><br>
+          Rojo identifica localidades o ramos con detractores NPS o RMD bajo. Amarillo marca zona neutral. Verde concentra evaluaciones positivas.
+        </div>
+      `;
+    }
+
+    function renderExperienceCharts(data) {
+      const r = data.resumen || {};
+      const metric = r.metrica || $("expSegMetrica")?.value || "nps";
+      const estados = ["bueno", "neutro", "malo", "sin_dato"];
+      const stateValues = estados.map((key) => Number(r[key] || 0));
+      const stateTotal = stateValues.reduce((sum, value) => sum + value, 0);
+      renderChart("expSegEstadoChart", "doughnut", {
+        labels: estados.map(expStateLabel),
+        datasets: [{
+          data: stateValues,
+          backgroundColor: estados.map(expStateColor),
+          borderColor: "#fff",
+          borderWidth: 2,
+          valueFormatter: (value) => stateTotal ? `${num(value)}\n${pct(value / stateTotal * 100, 0)}` : num(value)
+        }]
+      }, {
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.label}: ${num(ctx.raw || 0)} (${pct(stateTotal ? Number(ctx.raw || 0) / stateTotal * 100 : 0, 1)})`
+            }
+          },
+          datalabels: {
+            display: (ctx) => Number(ctx.dataset.data?.[ctx.dataIndex] || 0) > 0,
+            color: "#fff",
+            font: { size: 10, weight: "800" },
+            formatter: (value) => num(value)
+          }
+        }
+      });
+
+      const axis = expMetricAxis(metric);
+      const chartOptions = {
+        indexAxis: "y",
+        scales: {
+          x: { min: axis.min, max: axis.max, grid: { color: "#eef2f6" }, ticks: { color: "#667085", callback: (value) => expMetricText(value, metric) } },
+          y: { grid: { display: false }, ticks: { color: "#667085" } }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${expMetricLabel(metric)}: ${expMetricText(ctx.raw, metric)}`
+            }
+          },
+          datalabels: {
+            display: (ctx) => hasMetricValue(ctx.dataset.data?.[ctx.dataIndex]),
+            color: "#172033",
+            anchor: "end",
+            align: "right",
+            clamp: true,
+            formatter: (value) => expMetricText(value, metric),
+            font: { size: 10, weight: "800" }
+          }
+        }
+      };
+      const rankRows = (rows, key) => (Array.isArray(rows) ? rows : [])
+        .filter((row) => hasMetricValue(row.metrica_valor))
+        .sort((a, b) => Number(a.metrica_valor) - Number(b.metrica_valor) || Number(b.clientes_evaluados || 0) - Number(a.clientes_evaluados || 0))
+        .slice(0, 12)
+        .reverse();
+      const locRows = rankRows(data.por_localidad, "localidad");
+      renderChart("expSegLocalidadChart", "bar", {
+        labels: locRows.map((row) => String(row.localidad || "Sin localidad").slice(0, 22)),
+        datasets: [{
+          data: locRows.map((row) => row.metrica_valor),
+          backgroundColor: locRows.map((row) => expStateColor(row.estado)),
+          borderColor: locRows.map((row) => expStateColor(row.estado)),
+          borderWidth: 1,
+          valueFormatter: (value) => expMetricText(value, metric)
+        }]
+      }, chartOptions);
+      const typeRows = rankRows(data.por_tipo_negocio, "tipo_negocio").slice(0, 10);
+      renderChart("expSegTipoChart", "bar", {
+        labels: typeRows.map((row) => String(row.tipo_negocio_nombre || row.tipo_negocio || "Sin canal").slice(0, 22)),
+        datasets: [{
+          data: typeRows.map((row) => row.metrica_valor),
+          backgroundColor: typeRows.map((row) => expStateColor(row.estado)),
+          borderColor: typeRows.map((row) => expStateColor(row.estado)),
+          borderWidth: 1,
+          valueFormatter: (value) => expMetricText(value, metric)
+        }]
+      }, chartOptions);
+    }
+
+    function renderExperienceTable(data) {
+      const rows = Array.isArray(data.por_localidad) ? data.por_localidad : [];
+      $("expSegTableMeta").textContent = `${num(rows.length)} localidades`;
+      if (!rows.length) {
+        $("expSegLocalidadTable").innerHTML = `<div class="empty">Sin localidades para los filtros actuales</div>`;
+        return;
+      }
+      const metric = data.resumen?.metrica || $("expSegMetrica")?.value || "nps";
+      $("expSegLocalidadTable").innerHTML = `
+        <table>
+          <thead><tr>
+            ${thHelp("Sucursal")}${thHelp("Localidad")}${thHelp("Tipo de negocio")}${thHelp("Estado")}${thHelp("Clientes", "num")}${thHelp(expMetricLabel(metric), "num")}${thHelp("NPS indice", "num")}${thHelp("RMD", "num")}${thHelp("Buenos", "num")}${thHelp("Neutros", "num")}${thHelp("Malos", "num")}
+          </tr></thead>
+          <tbody>${rows.slice(0, 180).map((row) => `
+            <tr>
+              <td>${esc(branchLabel(row.sucursal) || "-")}</td>
+              <td>${esc(row.localidad || "Sin localidad")}</td>
+              <td>${esc(row.tipo_negocio_principal || row.tipo_negocio_nombre || row.tipo_negocio || "Sin canal")}${Number(row.tipos_negocio || 0) > 1 ? `<span class="exp-table-sub">${num(row.tipos_negocio)} tipos en la localidad</span>` : ""}</td>
+              <td>${expStatePill(row.estado || "sin_dato")}</td>
+              <td class="num">${num(row.clientes_evaluados || 0)} / ${num(row.clientes || 0)}<span class="exp-table-sub">NPS ${num(row.clientes_nps || 0)} | RMD ${num(row.clientes_rmd || 0)}</span></td>
+              <td class="num" style="color:${expMetricColor(row.metrica_valor, metric)}">${expMetricText(row.metrica_valor, metric)}</td>
+              <td class="num" style="color:${npsColor(row.nps_indice)}">${expMetricText(row.nps_indice, "nps")}<span class="exp-table-sub">Resp. ${num(row.nps_respuestas || 0)}</span></td>
+              <td class="num">${rmdText(row.rmd_promedio)}</td>
+              <td class="num" style="color:var(--green)">${num(row.bueno || 0)}</td>
+              <td class="num" style="color:var(--amber)">${num(row.neutro || 0)}</td>
+              <td class="num" style="color:var(--red)">${num(row.malo || 0)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
+    }
+
+    function initExperienceMap() {
+      if (state.expMap || !window.L || !$("expSegMap")) return;
+      $("expSegMap").innerHTML = "";
+      state.expMap = L.map("expSegMap", { zoomControl: true }).setView([-36.3, -57.7], 8);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(state.expMap);
+      state.expMapLayerGroup = L.layerGroup().addTo(state.expMap);
+    }
+
+    function renderExperienceMap(data) {
+      const rows = (Array.isArray(data.mapa_localidades) ? data.mapa_localidades : [])
+        .filter((row) => Number(row.latitud) && Number(row.longitud));
+      $("expSegMapMeta").textContent = rows.length ? `${num(rows.length)} localidades con GPS` : "Sin coordenadas";
+      if (!rows.length) {
+        if (state.expMapLayerGroup) state.expMapLayerGroup.clearLayers();
+        if (!state.expMap && $("expSegMap")) $("expSegMap").innerHTML = `<div class="empty">Sin coordenadas para los filtros actuales</div>`;
+        return;
+      }
+      initExperienceMap();
+      if (!state.expMap || !state.expMapLayerGroup) return;
+      state.expMapLayerGroup.clearLayers();
+      const maxClients = Math.max(...rows.map((row) => Number(row.clientes_evaluados || row.clientes || 0)), 1);
+      const bounds = [];
+      rows.forEach((row) => {
+        const lat = Number(row.latitud);
+        const lon = Number(row.longitud);
+        const clients = Number(row.clientes_evaluados || row.clientes || 0);
+        const radius = 8 + Math.sqrt(clients / maxClients) * 18;
+        const color = expStateColor(row.estado || "sin_dato");
+        bounds.push([lat, lon]);
+        const marker = L.circleMarker([lat, lon], {
+          radius,
+          color,
+          fillColor: color,
+          fillOpacity: 0.45,
+          weight: 2
+        });
+        marker.bindPopup(experiencePopup(row, data.resumen?.metrica || "nps"), { maxWidth: 360 });
+        marker.on("dblclick", () => marker.openPopup());
+        marker.on("click", () => marker.openPopup());
+        marker.addTo(state.expMapLayerGroup);
+      });
+      if (bounds.length) state.expMap.fitBounds(bounds, { padding: [26, 26], maxZoom: 11 });
+      setTimeout(() => state.expMap && state.expMap.invalidateSize(), 60);
+    }
+
+    function experiencePopup(row, metric = "nps") {
+      const worst = Array.isArray(row.clientes_peores) ? row.clientes_peores.slice(0, 5) : [];
+      return `
+        <div class="exp-popup">
+          <h4>${esc(row.localidad || "Sin localidad")}</h4>
+          <div>${expStatePill(row.estado || "sin_dato")}</div>
+          <div class="exp-popup-grid">
+            <div><label>Clientes</label><strong>${num(row.clientes || 0)}</strong></div>
+            <div><label>Evaluados</label><strong>${num(row.clientes_evaluados || 0)}</strong></div>
+            <div><label>NPS</label><strong style="color:${npsColor(row.nps_indice)}">${expMetricText(row.nps_indice, "nps")}</strong></div>
+            <div><label>RMD</label><strong>${rmdText(row.rmd_promedio)}</strong></div>
+            <div><label>${esc(expMetricLabel(metric))}</label><strong style="color:${expMetricColor(row.metrica_valor, metric)}">${expMetricText(row.metrica_valor, metric)}</strong></div>
+            <div><label>Venta</label><strong>${money(row.venta_ytd || 0)}</strong></div>
+          </div>
+          ${worst.length ? `
+            <div><strong>Peores calificaciones</strong></div>
+            <ol class="exp-popup-worst">
+              ${worst.map((client) => `
+                <li>
+                  <strong>${esc(client.cliente || "-")}</strong> ${esc(client.descripcion_cliente || "")}<br>
+                  ${esc(client.tipo_negocio_nombre || client.tipo_negocio || "Sin canal")} | NPS ${expMetricText(client.nps_indice, "nps")} | RMD ${rmdText(client.rmd_valor)} | ${esc(expMetricLabel(metric))} ${expMetricText(client.metrica_valor, metric)}
+                </li>
+              `).join("")}
+            </ol>
+          ` : `<div class="muted">Sin clientes evaluados para listar.</div>`}
+        </div>
+      `;
     }
 
     function renderTerritory() {
@@ -4135,6 +4860,7 @@
       document.querySelectorAll(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${tab}`));
       renderTabContent(tab);
       if (tab === "territory") setTimeout(() => state.map && state.map.invalidateSize(), 40);
+      if (tab === "experience") setTimeout(() => state.expMap && state.expMap.invalidateSize(), 60);
       loadSecondaryData(state.loadSeq, tab);
     }
 
@@ -4155,6 +4881,9 @@
         renderFilterDependentViews();
         if (state.activeTab === "costs" || state.activeTab === "cost-pdv") {
           loadSecondaryData(state.loadSeq, state.activeTab);
+        }
+        if (state.activeTab === "experience") {
+          loadSecondaryData(state.loadSeq, "experience", true);
         }
       });
       on("sortFilter", "change", () => {
@@ -4186,6 +4915,8 @@
         scheduleLoadData();
       }));
       on("mapLayer", "change", () => safeRender("mapa", renderMap));
+      ["expSegPeriodo", "expSegMetrica", "expSegLocalidad", "expSegTipoNegocio", "expSegEstado"].forEach((id) => on(id, "change", () => refreshExperience(true)));
+      on("expSegRefreshBtn", "click", () => refreshExperience(true));
       on("priorityFilter", "change", () => safeRender("plan", renderService));
       on("alertFilter", "change", () => safeRender("plan", renderService));
       on("yearFilter", "change", loadEvolution);

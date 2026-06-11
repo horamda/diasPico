@@ -41,6 +41,16 @@ class AppSettings(BaseSettings):
     EXTERNAL_API_BASE_URL: HttpUrl = Field(default='https://control-asistencia.up.railway.app')
     EXTERNAL_API_KEY: str | None = None
     EXTERNAL_API_TIMEOUT: int = 20
+
+    FRESCURA_API_BASE_URL: str | None = None
+    FRESCURA_API_USER: str | None = None
+    FRESCURA_API_PASSWORD: str | None = None
+    FRESCURA_API_DEPOSITOS: str = '1,4'
+    FRESCURA_API_DEPOSIT_MAP: str = '1:1,4:2'
+    FRESCURA_API_TIMEOUT: int = 20
+    FRESCURA_API_URL: str | None = None
+    FRESCURA_API_TOKEN: str | None = None
+    FRESCURA_API_PATH: str = '/api/frescura/articulos'
     
     DOTACION_ENTREGA_URL: str = Field(
         default='https://docs.google.com/spreadsheets/d/e/2PACX-1vTRrt57z-QDSRmDblvUV6AHs_Q1og0qgW0Ec-fp1L0QjLr8R_346nhHEkKsndqka-wQUdKSc2-3PizX/pub?output=csv&gid=1241670089;'

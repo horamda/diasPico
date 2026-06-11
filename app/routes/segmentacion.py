@@ -1072,6 +1072,22 @@ def mapa_clientes():
         return _err(e, 500)
 
 
+@bp.get('/experiencia-clientes')
+def experiencia_clientes():
+    try:
+        return _ok(svc.get_experiencia_clientes(
+            sucursal=request.args.get('sucursal'),
+            cluster=request.args.get('cluster'),
+            periodo=request.args.get('periodo'),
+            metrica=request.args.get('metrica'),
+            localidad=request.args.get('localidad'),
+            tipo_negocio=request.args.get('tipo_negocio'),
+            estado=request.args.get('estado'),
+        ))
+    except Exception as e:
+        return _err(e, 500)
+
+
 @bp.get('/inflacion')
 def inflacion_mensual():
     try:

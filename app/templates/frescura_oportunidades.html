@@ -1,0 +1,1551 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Frescura y oportunidades</title>
+  {% include 'partials/head_icons.html' %}
+  <link rel="stylesheet" href="/static/design-system.css">
+  <style>
+    :root {
+      --panel: var(--surf);
+      --panel-2: var(--surf2);
+      --line: var(--brd);
+      --line-2: var(--brd2);
+      --txt-main: var(--txt);
+      --txt-soft: var(--muted);
+      --green: var(--grn);
+      --amber: var(--ora);
+      --red: var(--red);
+      --blue: var(--blu);
+      --purple: var(--pur);
+      --shadow-soft: var(--shadow);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--txt-main);
+      font-family: var(--sans);
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+      color: inherit;
+    }
+
+    .page {
+      min-height: 100vh;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+      position: relative;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(31, 41, 55, .9), rgba(15, 23, 42, .96));
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: 24px;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+    }
+
+    .hero p {
+      margin: 6px 0 0;
+      color: var(--txt-soft);
+      font-size: 13px;
+      line-height: 1.5;
+      max-width: 78ch;
+    }
+
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      min-width: 280px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.03);
+      color: var(--txt-soft);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .badge strong { color: var(--txt-main); }
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel-2);
+      color: var(--txt-main);
+      border-radius: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      transition: transform .15s ease, border-color .15s ease, background .15s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); border-color: var(--line-2); }
+    .btn.primary {
+      background: linear-gradient(180deg, rgba(245, 158, 11, .96), rgba(234, 88, 12, .92));
+      border-color: rgba(245, 158, 11, .45);
+      color: #111827;
+      font-weight: 700;
+    }
+    .btn.ghost {
+      background: transparent;
+    }
+    .btn.small {
+      padding: 8px 11px;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    .filters,
+    .cards,
+    .content-grid,
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .filters {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(8, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .field label {
+      font-size: 11px;
+      color: var(--txt-soft);
+      letter-spacing: .02em;
+      text-transform: uppercase;
+    }
+
+    .field input,
+    .field select,
+    .field textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.02);
+      color: var(--txt-main);
+      border-radius: 12px;
+      padding: 10px 12px;
+      outline: none;
+      min-width: 0;
+    }
+
+    .field input:focus,
+    .field select:focus,
+    .field textarea:focus {
+      border-color: rgba(34, 197, 94, .55);
+      box-shadow: 0 0 0 3px rgba(34, 197, 94, .12);
+    }
+
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .cards {
+      padding: 14px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(255,255,255,.025), rgba(255,255,255,.01));
+      padding: 14px;
+      min-height: 92px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--txt-soft);
+    }
+
+    .card .value {
+      font-family: var(--mono);
+      font-size: 26px;
+      font-weight: 700;
+      line-height: 1;
+      margin-top: 10px;
+    }
+
+    .card .sub {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--txt-soft);
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      overflow: hidden;
+    }
+
+    .section {
+      border: none;
+      border-top: 1px solid var(--line);
+      border-radius: 0;
+      box-shadow: none;
+      background: transparent;
+      overflow: hidden;
+    }
+
+    .section-header {
+      padding: 14px 14px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .section-header h2 {
+      margin: 0;
+      font-size: 14px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--txt-soft);
+    }
+
+    .section-header .meta {
+      color: var(--txt-soft);
+      font-size: 12px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .table-wrap {
+      overflow: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1180px;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(20, 24, 34, .98);
+      border-bottom: 1px solid var(--line);
+      color: var(--txt-soft);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      text-align: left;
+      padding: 12px 14px;
+    }
+
+    tbody td {
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      padding: 12px 14px;
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    tbody tr:hover { background: rgba(255,255,255,.03); }
+
+    .mono { font-family: var(--mono); }
+    .num { font-family: var(--mono); text-align: right; }
+    .center { text-align: center; }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .chip.ok { background: rgba(34, 197, 94, .10); color: #86efac; border-color: rgba(34, 197, 94, .25); }
+    .chip.alerta { background: rgba(245, 158, 11, .12); color: #fbbf24; border-color: rgba(245, 158, 11, .25); }
+    .chip.critico { background: rgba(239, 68, 68, .12); color: #fca5a5; border-color: rgba(239, 68, 68, .25); }
+    .chip.sin_fecha { background: rgba(148, 163, 184, .10); color: #cbd5e1; border-color: rgba(148, 163, 184, .20); }
+    .chip.urgente { background: rgba(239, 68, 68, .10); color: #fecaca; border-color: rgba(239, 68, 68, .28); }
+    .chip.alta { background: rgba(245, 158, 11, .10); color: #fde68a; border-color: rgba(245, 158, 11, .28); }
+    .chip.media { background: rgba(59, 130, 246, .10); color: #bfdbfe; border-color: rgba(59, 130, 246, .28); }
+    .chip.baja { background: rgba(148, 163, 184, .10); color: #cbd5e1; border-color: rgba(148, 163, 184, .20); }
+
+    .empty {
+      padding: 36px 14px;
+      text-align: center;
+      color: var(--txt-soft);
+      font-size: 13px;
+    }
+
+    .drawer-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(3, 7, 18, .55);
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s ease;
+      z-index: 30;
+    }
+
+    .drawer-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .drawer {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(760px, 100%);
+      height: 100vh;
+      background: #0f1624;
+      border-left: 1px solid var(--line);
+      transform: translateX(102%);
+      transition: transform .22s ease;
+      z-index: 31;
+      display: flex;
+      flex-direction: column;
+      box-shadow: -18px 0 40px rgba(0,0,0,.35);
+    }
+
+    .drawer.open { transform: translateX(0); }
+
+    .drawer-header {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .drawer-header h3 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .drawer-header .desc {
+      margin-top: 6px;
+      color: var(--txt-soft);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .drawer-body {
+      padding: 14px 16px 20px;
+      overflow: auto;
+      display: grid;
+      gap: 14px;
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .detail-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      padding: 12px;
+    }
+
+    .detail-card .label {
+      color: var(--txt-soft);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .detail-card .value {
+      margin-top: 8px;
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      overflow: hidden;
+    }
+
+    .panel h4 {
+      margin: 0;
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: var(--txt-soft);
+    }
+
+    .panel ul {
+      list-style: none;
+      margin: 0;
+      padding: 10px 12px 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .panel li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 13px;
+      padding: 8px 10px;
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 12px;
+      background: rgba(255,255,255,.02);
+    }
+
+    .panel .small {
+      color: var(--txt-soft);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .opportunities-table {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .opportunities-table thead th,
+    .opportunities-table tbody td {
+      padding: 10px 10px;
+    }
+
+    .plan-box {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.02);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .plan-box textarea {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%) translateY(140%);
+      background: rgba(15, 23, 42, .96);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 14px;
+      color: var(--txt-main);
+      box-shadow: var(--shadow-soft);
+      transition: transform .25s ease;
+      z-index: 40;
+      font-size: 13px;
+    }
+
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    .muted { color: var(--txt-soft); }
+
+    .tabs-bar {
+      display: flex;
+      gap: 2px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 6px 8px;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .tab-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--txt-soft);
+      cursor: pointer;
+      padding: 9px 18px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .03em;
+      transition: color .15s, background .15s;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .tab-btn:hover { background: rgba(255,255,255,.04); color: var(--txt-main); }
+
+    .tab-btn.active {
+      background: rgba(245, 158, 11, .12);
+      color: var(--acc);
+    }
+
+    .tab-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      border-radius: 999px;
+      background: var(--red);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1;
+    }
+
+    .errores-hero {
+      background: linear-gradient(135deg, rgba(127,29,29,.25), rgba(15,23,42,.96));
+      border: 1px solid rgba(239,68,68,.25);
+      border-radius: 14px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .errores-hero .icon { font-size: 28px; line-height: 1; }
+    .errores-hero h3 { margin: 0; font-size: 16px; }
+    .errores-hero p { margin: 4px 0 0; color: var(--txt-soft); font-size: 12px; }
+
+    .errores-kpi {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .errores-kpi .kpi-pill {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 16px;
+      background: var(--panel);
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 100px;
+    }
+
+    .errores-kpi .kpi-pill .num {
+      font-family: var(--mono);
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--red);
+    }
+
+    .errores-kpi .kpi-pill .lbl {
+      font-size: 11px;
+      color: var(--txt-soft);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    .neg { color: var(--red) !important; font-weight: 700; }
+
+    @media (max-width: 1280px) {
+      .filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .panel-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .page { padding: 12px; }
+      .hero { flex-direction: column; align-items: flex-start; }
+      .hero-meta { width: 100%; justify-content: flex-start; min-width: 0; }
+      .filters { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .drawer { width: 100%; }
+      table { min-width: 1120px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <section class="hero">
+      <div>
+        <h1>Frescura y oportunidades</h1>
+        <p>
+          Articulos con frescura critica o en alerta, con cobertura comercial y cartera priorizada
+          segun clientes activos, recencia de compra y potencial de recuperacion.
+        </p>
+      </div>
+      <div class="hero-meta">
+        <span class="badge" id="lastSync">Ultima sincronizacion: -</span>
+        <button class="btn primary" id="syncBtn" onclick="syncFreshness()">Sincronizar</button>
+        <button class="btn ghost" onclick="loadArticles(true)">Solo criticos</button>
+      </div>
+    </section>
+
+    <div class="tabs-bar">
+      <button class="tab-btn active" id="tabBtnFrescura" onclick="switchTab('frescura')">Frescura y oportunidades</button>
+      <button class="tab-btn" id="tabBtnErrores" onclick="switchTab('errores')">
+        Errores de stock
+        <span class="tab-badge" id="erroresBadge" style="display:none">0</span>
+      </button>
+    </div>
+
+    <div id="tabFrescura">
+    <section class="filters">
+      <div class="field">
+        <label for="sucursalFilter">Sucursal</label>
+        <select id="sucursalFilter" onchange="debouncedLoad()">
+          <option value="TODAS">Todas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="estadoFilter">Estado frescura</label>
+        <select id="estadoFilter" onchange="debouncedLoad()">
+          <option value="">Todos</option>
+          <option value="CRITICO">Critico</option>
+          <option value="ALERTA">Alerta</option>
+          <option value="OK">OK</option>
+          <option value="SIN_FECHA">Sin fecha</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="articuloFilter">Articulo</label>
+        <input id="articuloFilter" placeholder="Codigo o descripcion" oninput="debouncedLoad()">
+      </div>
+      <div class="field">
+        <label for="marcaFilter">Marca</label>
+        <select id="marcaFilter" onchange="debouncedLoad()">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="categoriaFilter">Categoria</label>
+        <select id="categoriaFilter" onchange="debouncedLoad()">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="clusterFilter">Cluster cliente</label>
+        <select id="clusterFilter" onchange="debouncedLoad()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="vendedorFilter">Vendedor</label>
+        <select id="vendedorFilter" onchange="debouncedLoad()">
+          <option value="">Todos</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="localidadFilter">Localidad</label>
+        <select id="localidadFilter" onchange="debouncedLoad()">
+          <option value="">Todas</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="diasCobertura">Ventana de cobertura</label>
+        <select id="diasCobertura" onchange="debouncedLoad()">
+          <option value="30">30 días</option>
+          <option value="45">45 días</option>
+          <option value="60">60 días</option>
+          <option value="90" selected>90 días</option>
+          <option value="120">120 días</option>
+          <option value="180">180 días</option>
+        </select>
+      </div>
+      <div class="filter-actions" style="grid-column: 1 / -1;">
+        <button class="btn small" onclick="resetFilters()">Limpiar</button>
+        <button class="btn small primary" onclick="loadArticles()">Actualizar</button>
+        <button class="btn small" onclick="saveConfig()" title="Guardar ventana de cobertura como valor predeterminado">Guardar configuración</button>
+      </div>
+    </section>
+
+    <section class="cards" id="summaryCards">
+      <div class="card"><div class="label">Articulos</div><div class="value" id="kpiArticulos">-</div><div class="sub" id="kpiArticulosSub">Carga inicial</div></div>
+      <div class="card"><div class="label">Criticos / alertas</div><div class="value" id="kpiCriticos">-</div><div class="sub" id="kpiCriticosSub">Semaforo de frescura</div></div>
+      <div class="card"><div class="label">Cobertura promedio</div><div class="value" id="kpiCobertura">-</div><div class="sub" id="kpiCoberturaSub">Sobre clientes activos filtrados</div></div>
+      <div class="card"><div class="label">Clientes potenciales</div><div class="value" id="kpiPotencial">-</div><div class="sub" id="kpiPotencialSub">Good cluster sin SKU</div></div>
+    </section>
+
+    <section class="content-grid">
+      <div class="section">
+        <div class="section-header">
+          <h2>Articulos con frescura</h2>
+          <div class="meta" id="resultMeta">-</div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Sucursal</th>
+                <th>Codigo</th>
+                <th>Descripcion</th>
+                <th>Marca</th>
+                <th>Categoria</th>
+                <th class="num">Bultos</th>
+                <th class="num">Unidades</th>
+                <th class="num">Lotes</th>
+                <th>Vencimiento</th>
+                <th class="num">Dias</th>
+                <th>Estado</th>
+                <th class="num">Activos</th>
+                <th class="num">Compradores</th>
+                <th class="num">Faltantes</th>
+                <th class="num">Cobertura</th>
+                <th>Accion</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="articlesTbody">
+              <tr><td colspan="17" class="empty">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  </div><!-- /tabFrescura -->
+
+  <div id="tabErrores" style="display:none">
+    <div class="errores-hero">
+      <div class="icon">⚠️</div>
+      <div style="flex:1">
+        <h3>Stock negativo detectado</h3>
+        <p>Los siguientes lotes tienen stock menor a cero, lo que indica un posible error de carga o sincronización en el ERP. Revisá y corregí cada caso.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="field" style="min-width:160px">
+          <label for="erroresSucursalFilter">Sucursal</label>
+          <select id="erroresSucursalFilter" onchange="loadErroresStock()">
+            <option value="TODAS">Todas</option>
+          </select>
+        </div>
+        <button class="btn small primary" onclick="loadErroresStock()" style="margin-top:18px">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="errores-kpi" id="erroresKpi" style="margin-top:4px"></div>
+
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-soft);overflow:hidden;margin-top:4px">
+      <div class="section-header">
+        <h2>Lotes con stock negativo</h2>
+        <div class="meta" id="erroresMeta">-</div>
+      </div>
+      <div class="table-wrap" style="padding:0 0 8px">
+        <table>
+          <thead>
+            <tr>
+              <th>Sucursal</th>
+              <th>Código</th>
+              <th>Descripción</th>
+              <th>Marca</th>
+              <th>Lote</th>
+              <th class="num">Stock</th>
+              <th>Vencimiento</th>
+              <th>Estado frescura</th>
+              <th>Última actualización</th>
+              <th>Acción sugerida</th>
+            </tr>
+          </thead>
+          <tbody id="erroresTbody">
+            <tr><td colspan="10" class="empty">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tabErrores -->
+
+  <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+  <aside class="drawer" id="drawer">
+    <div class="drawer-header">
+      <div>
+        <h3 id="drawerTitle">Articulo</h3>
+        <div class="desc" id="drawerDesc">-</div>
+      </div>
+      <button class="btn small" onclick="closeDrawer()">Cerrar</button>
+    </div>
+    <div class="drawer-body">
+      <div class="detail-grid">
+        <div class="detail-card"><div class="label">Bultos</div><div class="value" id="detailStock">-</div></div>
+        <div class="detail-card"><div class="label">Lotes</div><div class="value" id="detailLotes">-</div></div>
+        <div class="detail-card"><div class="label">Proximo vto.</div><div class="value" id="detailVencimiento">-</div></div>
+        <div class="detail-card"><div class="label">Estado</div><div class="value" id="detailEstado">-</div></div>
+        <div class="detail-card"><div class="label">Cobertura</div><div class="value" id="detailCobertura">-</div></div>
+        <div class="detail-card"><div class="label">Potencial</div><div class="value" id="detailPotencial">-</div></div>
+      </div>
+
+      <div class="panel">
+        <h4>Lotes y vencimientos</h4>
+        <div class="table-wrap">
+          <table class="opportunities-table">
+            <thead>
+              <tr>
+                <th>Lote</th>
+                <th class="num">Bultos</th>
+                <th class="num">Unidades</th>
+                <th>Vencimiento</th>
+                <th class="num">Dias</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="lotsTbody">
+              <tr><td colspan="6" class="empty">Sin datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel-grid">
+        <div class="panel">
+          <h4>Clientes</h4>
+          <ul id="clientBuckets">
+            <li><span>Recientes</span><strong>-</strong></li>
+            <li><span>Inactivos</span><strong>-</strong></li>
+            <li><span>Categoria / marca</span><strong>-</strong></li>
+            <li><span>Nunca compraron</span><strong>-</strong></li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h4>Plan de accion</h4>
+          <div class="plan-box">
+            <div class="field">
+              <label for="planTitle">Titulo</label>
+              <input id="planTitle" placeholder="Plan de accion comercial">
+            </div>
+            <div class="field">
+              <label for="planGoal">Objetivo</label>
+              <input id="planGoal" placeholder="Ej: activar clientes en alerta">
+            </div>
+            <div class="field">
+              <label for="planOwner">Responsable</label>
+              <input id="planOwner" placeholder="Vendedor / equipo">
+            </div>
+            <div class="field">
+              <label for="planNotes">Notas</label>
+              <textarea id="planNotes" placeholder="Observaciones, plazos o acciones"></textarea>
+            </div>
+            <button class="btn primary" onclick="savePlan()">Guardar plan</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <h4 style="margin:0" id="nuncaCompraronTitle">Clientes que nunca compraron</h4>
+          <button class="btn small" onclick="exportClientes('nunca_compraron')">Exportar CSV</button>
+        </div>
+        <div class="table-wrap">
+          <table class="opportunities-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Localidad</th>
+                <th>Cluster</th>
+                <th class="num">Score</th>
+                <th>Prioridad</th>
+              </tr>
+            </thead>
+            <tbody id="nuncaCompraronTbody">
+              <tr><td colspan="5" class="empty">Sin datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h4>Oportunidades priorizadas</h4>
+        <div class="table-wrap">
+          <table class="opportunities-table">
+            <thead>
+              <tr>
+                <th>Cliente</th>
+                <th>Cluster</th>
+                <th class="num">Score</th>
+                <th>Prioridad</th>
+                <th>Motivo</th>
+              </tr>
+            </thead>
+            <tbody id="opportunitiesTbody">
+              <tr><td colspan="5" class="empty">Sin datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const state = {
+      data: [],
+      filters: {},
+      selected: null,
+      drawer: null,
+      timer: null,
+      loading: false,
+    };
+
+    const fmt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
+    const fmtInt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+
+    function esc(value) {
+      return String(value ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    function chipClass(value) {
+      const v = String(value || '').toUpperCase();
+      if (v === 'CRITICO') return 'critico';
+      if (v === 'ALERTA') return 'alerta';
+      if (v === 'OK') return 'ok';
+      if (v === 'SIN_FECHA') return 'sin_fecha';
+      if (v === 'URGENTE') return 'urgente';
+      if (v === 'ALTA') return 'alta';
+      if (v === 'MEDIA') return 'media';
+      return 'baja';
+    }
+
+    function stateLabel(value) {
+      const v = String(value || '').toUpperCase();
+      if (v === 'SIN_FECHA') return 'Sin fecha';
+      return v.charAt(0) + v.slice(1).toLowerCase();
+    }
+
+    function formatDate(value) {
+      if (!value) return '-';
+      const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return date.toLocaleDateString('es-AR');
+    }
+
+    function lotTitle(lotes) {
+      if (!Array.isArray(lotes) || !lotes.length) return 'Sin lotes';
+      return lotes.map((lot) => {
+        const sb = lot.stock_bultos != null ? lot.stock_bultos : lot.stock_actual;
+        const stock = fmt.format(Number(sb || 0));
+        return `${lot.lote || 'SIN_LOTE'} | ${formatDate(lot.fecha_vencimiento)} | ${stock} blt`;
+      }).join('\n');
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => toast.classList.remove('show'), 2200);
+    }
+
+    function setLoading(value, label = 'Actualizando...') {
+      state.loading = value;
+      const btn = document.getElementById('syncBtn');
+      if (btn) {
+        btn.disabled = value;
+        btn.textContent = value ? label : 'Sincronizar';
+      }
+    }
+
+    function currentFilters() {
+      return {
+        sucursal: document.getElementById('sucursalFilter').value || 'TODAS',
+        estado: document.getElementById('estadoFilter').value || '',
+        articulo: document.getElementById('articuloFilter').value || '',
+        marca: document.getElementById('marcaFilter').value || '',
+        categoria: document.getElementById('categoriaFilter').value || '',
+        cluster: document.getElementById('clusterFilter').value || '',
+        vendedor: document.getElementById('vendedorFilter').value || '',
+        localidad: document.getElementById('localidadFilter').value || '',
+        dias_cobertura: parseInt(document.getElementById('diasCobertura')?.value || 90),
+        limit: 150,
+        offset: 0,
+      };
+    }
+
+    function buildQuery(extra = {}) {
+      const params = new URLSearchParams();
+      const filters = { ...currentFilters(), ...extra };
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== '' && value != null) params.set(key, value);
+      });
+      return params.toString();
+    }
+
+    function optionItems(values, keepAll = true) {
+      const items = [];
+      const seen = new Set();
+      (values || []).forEach((entry) => {
+        if (entry == null) return;
+        let value = '';
+        let label = '';
+        if (Array.isArray(entry)) {
+          value = String(entry[0] ?? '');
+          label = String(entry[1] ?? entry[0] ?? '');
+        } else if (typeof entry === 'object') {
+          value = String(entry.value ?? entry.id ?? entry.key ?? '');
+          label = String(entry.label ?? entry.nombre ?? entry.name ?? value);
+        } else {
+          value = String(entry);
+          label = value;
+        }
+        if (!value || seen.has(value)) return;
+        seen.add(value);
+        items.push({ value, label });
+      });
+      items.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+      return items;
+    }
+
+    function fillSelect(selectId, values, keepAll = true) {
+      const select = document.getElementById(selectId);
+      const current = select.value;
+      const items = optionItems(values, keepAll);
+      const first = select.querySelector('option');
+      select.innerHTML = '';
+      if (first && keepAll) {
+        select.appendChild(first.cloneNode(true));
+      }
+      items.forEach((item) => {
+        const opt = document.createElement('option');
+        opt.value = item.value;
+        opt.textContent = item.label;
+        select.appendChild(opt);
+      });
+      if ([...select.options].some((opt) => opt.value === current)) {
+        select.value = current;
+      }
+    }
+
+    function renderSummary(resumen) {
+      document.getElementById('kpiArticulos').textContent = fmtInt.format(resumen.articulos || 0);
+      document.getElementById('kpiArticulosSub').textContent = `${fmtInt.format(resumen.ok || 0)} OK, ${fmtInt.format(resumen.sin_fecha || 0)} sin fecha`;
+      document.getElementById('kpiCriticos').textContent = `${fmtInt.format(resumen.criticos || 0)} / ${fmtInt.format(resumen.alertas || 0)}`;
+      document.getElementById('kpiCriticosSub').textContent = 'Criticos / alertas';
+      document.getElementById('kpiCobertura').textContent = `${fmt.format(resumen.cobertura_promedio || 0)}%`;
+      document.getElementById('kpiCoberturaSub').textContent = `${fmtInt.format(resumen.stock_total || 0)} stock total`;
+      document.getElementById('kpiPotencial').textContent = fmtInt.format(resumen.potencial_total || 0);
+      document.getElementById('kpiPotencialSub').textContent = 'Clientes con alto potencial';
+    }
+
+    function renderMeta(data) {
+      const parts = [];
+      if (data.last_sync && data.last_sync.finished_at) {
+        parts.push(`Ultima sync ${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}`);
+      } else {
+        parts.push('Sin sincronizacion registrada');
+      }
+      parts.push(`${fmtInt.format(data.resumen?.articulos || 0)} articulos`);
+      parts.push(`${fmt.format(data.resumen?.cobertura_promedio || 0)}% cobertura`);
+      document.getElementById('resultMeta').textContent = parts.join(' | ');
+      const lastSync = document.getElementById('lastSync');
+      lastSync.innerHTML = data.last_sync && data.last_sync.finished_at
+        ? `Ultima sincronizacion: <strong>${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}</strong>`
+        : 'Ultima sincronizacion: <strong>-</strong>';
+    }
+
+    function renderArticles(items) {
+      const tbody = document.getElementById('articlesTbody');
+      if (!items || !items.length) {
+        tbody.innerHTML = '<tr><td colspan="17" class="empty">No hay articulos para los filtros seleccionados.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map((row) => {
+        const stateName = String(row.estado_frescura || 'SIN_FECHA').toUpperCase();
+        const coverage = Number(row.cobertura_comercial_porcentaje || 0);
+        const lotes = Array.isArray(row.lotes) ? row.lotes : [];
+        const uxb = Number(row.uxb || 0);
+        const bultosTot = Number(row.stock_bultos_total || 0);
+        const unidTot = Number(row.stock_unidades_total || 0);
+        const bultosDisp = bultosTot > 0 ? bultosTot
+                         : (unidTot > 0 && uxb > 0 ? Math.round(unidTot / uxb * 10) / 10
+                         : Number(row.stock_actual || 0));
+        const unidDisp = unidTot > 0 ? unidTot : null;
+        return `
+          <tr>
+            <td>${esc(row.sucursal_nombre || row.sucursal_id || '-')}</td>
+            <td class="mono">${esc(row.codigo_articulo || '-')}</td>
+            <td>${esc(row.descripcion_articulo || '-')}</td>
+            <td>${esc(row.marca || '-')}</td>
+            <td>${esc(row.categoria || '-')}</td>
+            <td class="num mono">${fmt.format(bultosDisp)}</td>
+            <td class="num mono">${unidDisp != null ? fmt.format(unidDisp) : '-'}</td>
+            <td class="num mono" title="${esc(lotTitle(lotes))}">${fmtInt.format(Number(row.lotes_count || lotes.length || 0))}</td>
+            <td class="mono">${formatDate(row.proximo_vencimiento || row.fecha_vencimiento)}</td>
+            <td class="num mono">${row.dias_frescura_restantes == null ? '-' : fmtInt.format(Number(row.dias_frescura_restantes || 0))}</td>
+            <td><span class="chip ${chipClass(stateName)}">${stateLabel(stateName)}</span></td>
+            <td class="num mono">${fmtInt.format(Number(row.clientes_activos_total || 0))}</td>
+            <td class="num mono">${fmtInt.format(Number(row.clientes_que_compraron_alguna_vez || 0))}</td>
+            <td class="num mono">${fmtInt.format(Number(row.clientes_que_nunca_compraron || 0))}</td>
+            <td class="num mono">${fmt.format(coverage)}%</td>
+            <td>${esc(row.accion_sugerida || row.prioridad_accion || '-')}</td>
+            <td class="center">
+              <button class="btn small" data-open-articulo="1" data-codigo="${esc(row.codigo_articulo || '')}" data-sucursal="${esc(row.sucursal_id || '')}">Ver oportunidades</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      tbody.querySelectorAll('[data-open-articulo="1"]').forEach((btn) => {
+        btn.addEventListener('click', () => openArticulo(btn.dataset.codigo, btn.dataset.sucursal));
+      });
+    }
+
+    function renderOptions(data) {
+      fillSelect('sucursalFilter', data.filtros_disponibles?.sucursales || []);
+      fillSelect('marcaFilter', data.filtros_disponibles?.marcas || []);
+      fillSelect('categoriaFilter', data.filtros_disponibles?.categorias || []);
+      fillSelect('clusterFilter', data.filtros_disponibles?.clusters || []);
+      fillSelect('vendedorFilter', data.filtros_disponibles?.vendedores || []);
+      fillSelect('localidadFilter', data.filtros_disponibles?.localidades || []);
+    }
+
+    function renderArticlesResponse(payload) {
+      const data = payload.data || payload;
+      state.data = data.items || [];
+      state.filters = data.filtros_disponibles || {};
+      renderOptions(data);
+      renderSummary(data.resumen || {});
+      renderMeta(data);
+      renderArticles(data.items || []);
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+        ...options,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.ok === false) {
+        throw new Error(payload.error || `HTTP ${response.status}`);
+      }
+      return payload;
+    }
+
+    async function loadArticles(forceCritical = false) {
+      const query = buildQuery(forceCritical ? { estado: 'CRITICO,ALERTA' } : {});
+      try {
+        setLoading(true, 'Actualizando...');
+        const payload = await api(`/api/frescura/articulos?${query}`);
+        renderArticlesResponse(payload);
+      } catch (error) {
+        document.getElementById('articlesTbody').innerHTML = `<tr><td colspan="16" class="empty">Error al cargar: ${esc(error.message)}</td></tr>`;
+        showToast(`Error: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function syncFreshness() {
+      try {
+        setLoading(true, 'Sincronizando...');
+        await api('/api/frescura/sync');
+        showToast('Sincronizacion completada');
+        await loadArticles();
+      } catch (error) {
+        showToast(error.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function debouncedLoad() {
+      clearTimeout(state.timer);
+      state.timer = setTimeout(() => loadArticles(), 180);
+    }
+
+    function resetFilters() {
+      document.getElementById('sucursalFilter').value = 'TODAS';
+      document.getElementById('estadoFilter').value = '';
+      document.getElementById('articuloFilter').value = '';
+      document.getElementById('marcaFilter').value = '';
+      document.getElementById('categoriaFilter').value = '';
+      document.getElementById('clusterFilter').value = '';
+      document.getElementById('vendedorFilter').value = '';
+      document.getElementById('localidadFilter').value = '';
+      loadArticles();
+    }
+
+    function renderNuncaCompraronTable(rows) {
+      const tbody = document.getElementById('nuncaCompraronTbody');
+      if (!tbody) return;
+      if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin clientes en esta categoría.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.map((row) => `
+        <tr>
+          <td>
+            <div><strong>${esc(row.cliente_nombre || row.cliente || '-')}</strong></div>
+            <div class="small">${esc(row.sucursal_nombre || '')}</div>
+          </td>
+          <td>${esc(row.localidad || '-')}</td>
+          <td>${esc(row.cluster_dpo || '-')}</td>
+          <td class="num mono">${fmt.format(Number(row.score_total || 0))}</td>
+          <td><span class="chip ${chipClass(row.prioridad_accion)}">${esc(row.prioridad_accion || '-')}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function exportClientes(tipo) {
+      if (!state.selected?.codigo) { showToast('Seleccioná un artículo'); return; }
+      const { codigo, sucursal } = state.selected;
+      const diasCobertura = document.getElementById('diasCobertura')?.value || '90';
+      const params = new URLSearchParams({ sucursal: sucursal || '', tipo, dias_cobertura: diasCobertura });
+      window.open(`/api/frescura/articulos/${encodeURIComponent(codigo)}/clientes/export?${params.toString()}`, '_blank');
+    }
+
+    async function loadConfig() {
+      try {
+        const data = await api('/api/frescura/config');
+        const config = data.data || {};
+        const el = document.getElementById('diasCobertura');
+        if (el && config.dias_cobertura) {
+          const dias = String(config.dias_cobertura);
+          const existing = [...el.options].find((o) => o.value === dias);
+          if (!existing) {
+            const opt = document.createElement('option');
+            opt.value = dias;
+            opt.textContent = `${dias} días`;
+            el.appendChild(opt);
+          }
+          el.value = dias;
+        }
+      } catch (_) { /* usa default */ }
+    }
+
+    function switchTab(tab) {
+      const isFrescura = tab === 'frescura';
+      document.getElementById('tabFrescura').style.display = isFrescura ? '' : 'none';
+      document.getElementById('tabErrores').style.display  = isFrescura ? 'none' : '';
+      document.getElementById('tabBtnFrescura').classList.toggle('active',  isFrescura);
+      document.getElementById('tabBtnErrores').classList.toggle('active', !isFrescura);
+      if (!isFrescura && document.getElementById('erroresTbody').textContent.trim() === 'Cargando...') {
+        loadErroresStock();
+      }
+    }
+
+    async function loadErroresStock() {
+      const tbody = document.getElementById('erroresTbody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="10" class="empty"><div class="loading"><div class="spinner"></div></div></td></tr>';
+      const sucursal = document.getElementById('erroresSucursalFilter')?.value || 'TODAS';
+      try {
+        const data = await api(`/api/frescura/errores-stock?sucursal=${encodeURIComponent(sucursal)}`);
+        renderErroresStock(data.data || data);
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="10" class="empty" style="color:var(--red)">${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderErroresStock(data) {
+      const items = data.items || [];
+      const total = data.total ?? items.length;
+
+      // Badge en la pestaña
+      const badge = document.getElementById('erroresBadge');
+      if (badge) {
+        badge.style.display = total > 0 ? '' : 'none';
+        badge.textContent = total > 0 ? fmtInt.format(total) : '0';
+      }
+
+      // KPIs
+      const kpiEl = document.getElementById('erroresKpi');
+      if (kpiEl) {
+        const stockTotal = items.reduce((s, r) => s + Number(r.stock_actual || 0), 0);
+        const sucursales = new Set(items.map(r => r.sucursal_id)).size;
+        const articulos  = new Set(items.map(r => r.codigo_articulo)).size;
+        kpiEl.innerHTML = `
+          <div class="kpi-pill"><div class="num">${fmtInt.format(total)}</div><div class="lbl">Lotes con error</div></div>
+          <div class="kpi-pill"><div class="num">${fmtInt.format(articulos)}</div><div class="lbl">Artículos afectados</div></div>
+          <div class="kpi-pill"><div class="num">${fmtInt.format(sucursales)}</div><div class="lbl">Sucursales</div></div>
+          <div class="kpi-pill"><div class="num neg">${fmt.format(stockTotal)}</div><div class="lbl">Stock total (suma)</div></div>
+        `;
+      }
+
+      // Meta
+      const metaEl = document.getElementById('erroresMeta');
+      if (metaEl) metaEl.textContent = total > 0 ? `${fmtInt.format(total)} registros con stock negativo` : 'Sin errores detectados';
+
+      // Filtro de sucursales
+      const selSuc = document.getElementById('erroresSucursalFilter');
+      if (selSuc && data.sucursales?.length) {
+        const current = selSuc.value;
+        const first = selSuc.querySelector('option[value="TODAS"]');
+        selSuc.innerHTML = '';
+        if (first) selSuc.appendChild(first.cloneNode(true));
+        else {
+          const opt = document.createElement('option');
+          opt.value = 'TODAS'; opt.textContent = 'Todas';
+          selSuc.appendChild(opt);
+        }
+        data.sucursales.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s; opt.textContent = s;
+          selSuc.appendChild(opt);
+        });
+        if ([...selSuc.options].some(o => o.value === current)) selSuc.value = current;
+      }
+
+      // Tabla
+      const tbody = document.getElementById('erroresTbody');
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty" style="color:var(--grn)">✓ Sin lotes con stock negativo.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map(row => {
+        const stock = Number(row.stock_actual || 0);
+        return `
+          <tr>
+            <td>${esc(row.sucursal_nombre || row.sucursal_id || '-')}</td>
+            <td class="mono">${esc(row.codigo_articulo || '-')}</td>
+            <td>${esc(row.descripcion_articulo || '-')}</td>
+            <td>${esc(row.marca || '-')}</td>
+            <td class="mono">${esc(row.lote || 'SIN_LOTE')}</td>
+            <td class="num mono neg">${fmt.format(stock)}</td>
+            <td class="mono">${formatDate(row.fecha_vencimiento)}</td>
+            <td><span class="chip ${chipClass(row.estado_frescura)}">${stateLabel(row.estado_frescura)}</span></td>
+            <td class="mono" style="font-size:11px;color:var(--txt-soft)">${row.fecha_actualizacion ? new Date(row.fecha_actualizacion).toLocaleString('es-AR') : '-'}</td>
+            <td style="font-size:12px;color:var(--acc)">Verificar en ERP · corregir ajuste de inventario</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function saveConfig() {
+      const dias = parseInt(document.getElementById('diasCobertura')?.value || 90);
+      try {
+        await api('/api/frescura/config', { method: 'POST', body: JSON.stringify({ dias_cobertura: dias }) });
+        showToast(`Configuración guardada: ventana de ${dias} días`);
+        loadArticles();
+      } catch (e) {
+        showToast(`Error al guardar: ${e.message}`);
+      }
+    }
+
+    function openDrawer() {
+      document.getElementById('drawer').classList.add('open');
+      document.getElementById('drawerBackdrop').classList.add('open');
+    }
+
+    function closeDrawer() {
+      document.getElementById('drawer').classList.remove('open');
+      document.getElementById('drawerBackdrop').classList.remove('open');
+    }
+
+    function renderClientList(targetId, rows, emptyLabel) {
+      const target = document.getElementById(targetId);
+      if (!rows || !rows.length) {
+        target.innerHTML = `<li><span>${esc(emptyLabel)}</span><strong>-</strong></li>`;
+        return;
+      }
+      target.innerHTML = rows.map((row) => {
+        const label = `${row.cliente_nombre || row.cliente || '-'}${row.localidad ? ' · ' + row.localidad : ''}`;
+        const meta = row.score_oportunidad != null ? `${fmt.format(row.score_oportunidad)} pts` : (row.prioridad_accion || '');
+        return `<li><span>${esc(label)}</span><strong>${esc(meta)}</strong></li>`;
+      }).join('');
+    }
+
+    function renderOpportunityTable(rows) {
+      const tbody = document.getElementById('opportunitiesTbody');
+      if (!rows || !rows.length) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Sin oportunidades calculadas.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = rows.slice(0, 80).map((row) => `
+        <tr>
+          <td>
+            <div><strong>${esc(row.cliente_nombre || row.cliente || '-')}</strong></div>
+            <div class="small">${esc(row.sucursal_nombre || row.sucursal || '')}${row.localidad ? ' · ' + esc(row.localidad) : ''}</div>
+          </td>
+          <td>${esc(row.cluster_dpo || '-')}</td>
+          <td class="num mono">${fmt.format(Number(row.score_oportunidad || 0))}</td>
+          <td><span class="chip ${chipClass(row.prioridad_accion)}">${esc(row.prioridad_accion || '-')}</span></td>
+          <td class="small">${esc(row.motivo || '-')}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderLotsTable(lotes, uxb) {
+      const tbody = document.getElementById('lotsTbody');
+      if (!Array.isArray(lotes) || !lotes.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">Sin lotes registrados.</td></tr>';
+        return;
+      }
+      const _uxb = Number(uxb || 0);
+      tbody.innerHTML = lotes.map((lot) => {
+        const stateName = String(lot.estado_frescura || 'SIN_FECHA').toUpperCase();
+        const sb = lot.stock_bultos != null ? Number(lot.stock_bultos) : null;
+        const su = lot.stock_unidades != null ? Number(lot.stock_unidades) : null;
+        const bultosCell = sb != null ? fmt.format(sb)
+                         : (su != null && _uxb > 0 ? fmt.format(Math.round(su / _uxb * 10) / 10)
+                         : fmt.format(Number(lot.stock_actual || 0)));
+        const unidCell = su != null ? fmt.format(su) : '-';
+        return `
+          <tr>
+            <td class="mono">${esc(lot.lote || 'SIN_LOTE')}</td>
+            <td class="num mono">${bultosCell}</td>
+            <td class="num mono">${unidCell}</td>
+            <td class="mono">${formatDate(lot.fecha_vencimiento)}</td>
+            <td class="num mono">${lot.dias_frescura_restantes == null ? '-' : fmtInt.format(Number(lot.dias_frescura_restantes || 0))}</td>
+            <td><span class="chip ${chipClass(stateName)}">${stateLabel(stateName)}</span></td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function openArticulo(codigo, sucursal) {
+      state.selected = { codigo, sucursal };
+      openDrawer();
+      document.getElementById('drawerTitle').textContent = codigo || 'Articulo';
+      document.getElementById('drawerDesc').textContent = 'Cargando detalle...';
+      document.getElementById('detailStock').textContent = '-';
+      document.getElementById('detailLotes').textContent = '-';
+      document.getElementById('detailVencimiento').textContent = '-';
+      document.getElementById('detailEstado').textContent = '-';
+      document.getElementById('detailCobertura').textContent = '-';
+      document.getElementById('detailPotencial').textContent = '-';
+      document.getElementById('clientBuckets').innerHTML = '<li><span>Cargando...</span><strong>-</strong></li>';
+      document.getElementById('lotsTbody').innerHTML = '<tr><td colspan="6" class="empty">Cargando...</td></tr>';
+      document.getElementById('opportunitiesTbody').innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
+      document.getElementById('nuncaCompraronTbody').innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
+      const titleEl = document.getElementById('nuncaCompraronTitle');
+      if (titleEl) titleEl.textContent = 'Clientes que nunca compraron';
+      try {
+        const diasCobertura = parseInt(document.getElementById('diasCobertura')?.value || 90);
+        const query = buildQuery({ sucursal, dias_cobertura: diasCobertura });
+        const resumenPayload = await api(`/api/frescura/articulos/${encodeURIComponent(codigo)}/resumen?${query}`);
+        const resumen = resumenPayload.data || {};
+        const article = resumen.articulo || null;
+        const clientes = resumen.clientes || {};
+        const summary = resumen.resumen || {};
+        const diasLabel = summary?.dias_cobertura || diasCobertura;
+        document.getElementById('drawerTitle').textContent = `${article?.codigo_articulo || codigo} - ${article?.descripcion_articulo || ''}`.trim();
+        document.getElementById('drawerDesc').textContent = `${article?.sucursal_nombre || sucursal || ''} | ${article?.marca || '-'} | ${article?.categoria || '-'}`;
+        const _uxb = Number(article?.uxb || 0);
+        const _bult = Number(article?.stock_bultos_total || 0);
+        const _unid = Number(article?.stock_unidades_total || 0);
+        const _bultDisp = _bult > 0 ? _bult : (_unid > 0 && _uxb > 0 ? Math.round(_unid / _uxb * 10) / 10 : Number(article?.stock_actual || 0));
+        document.getElementById('detailStock').textContent = fmt.format(_bultDisp);
+        document.getElementById('detailLotes').textContent = fmtInt.format(Number(article?.lotes_count || article?.lotes?.length || 0));
+        document.getElementById('detailVencimiento').textContent = formatDate(article?.proximo_vencimiento || article?.fecha_vencimiento);
+        document.getElementById('detailEstado').innerHTML = `<span class="chip ${chipClass(article?.estado_frescura)}">${stateLabel(article?.estado_frescura)}</span>`;
+        document.getElementById('detailCobertura').textContent = `${fmt.format(Number(summary?.cobertura_comercial_porcentaje || 0))}%`;
+        document.getElementById('detailPotencial').textContent = fmtInt.format(Number(summary?.potencial_clientes || 0));
+        renderLotsTable(article?.lotes || [], article?.uxb);
+        renderClientList('clientBuckets', [
+          { cliente_nombre: `Últimos ${diasLabel} días`, score_oportunidad: summary?.clientes_ultimos_config_dias || 0 },
+          { cliente_nombre: `Inactivos`, score_oportunidad: summary?.clientes_inactivos_para_el_sku || 0 },
+          { cliente_nombre: `Categoría / marca`, score_oportunidad: summary?.clientes_categoria_marca_sin_sku || 0 },
+          { cliente_nombre: `Nunca compraron`, score_oportunidad: summary?.clientes_que_nunca_compraron || 0 },
+        ], 'Sin datos');
+        renderOpportunityTable(resumen.oportunidades || []);
+        const nuncaTotal = clientes?.nunca_compraron_total ?? (clientes?.nunca_compraron?.length || 0);
+        const nuncaTitleEl = document.getElementById('nuncaCompraronTitle');
+        if (nuncaTitleEl) nuncaTitleEl.textContent = `Clientes que nunca compraron (${fmtInt.format(nuncaTotal)})`;
+        renderNuncaCompraronTable(clientes?.nunca_compraron || []);
+        document.getElementById('planTitle').value = `Plan ${article?.codigo_articulo || codigo}`;
+        document.getElementById('planGoal').value = 'Reactivar cartera y proteger frescura';
+        document.getElementById('planOwner').value = '';
+        document.getElementById('planNotes').value = '';
+      } catch (error) {
+        showToast(error.message);
+        document.getElementById('drawerDesc').textContent = `Error: ${error.message}`;
+      }
+    }
+
+    async function savePlan() {
+      if (!state.selected?.codigo) {
+        showToast('Selecciona un articulo');
+        return;
+      }
+      try {
+        const body = {
+          titulo: document.getElementById('planTitle').value,
+          objetivo: document.getElementById('planGoal').value,
+          responsable: document.getElementById('planOwner').value,
+          notas: document.getElementById('planNotes').value,
+        };
+        await api(
+          `/api/frescura/articulos/${encodeURIComponent(state.selected.codigo)}/plan-accion?sucursal=${encodeURIComponent(state.selected.sucursal || '')}`,
+          { method: 'POST', body: JSON.stringify(body) }
+        );
+        showToast('Plan guardado');
+      } catch (error) {
+        showToast(error.message);
+      }
+    }
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeDrawer();
+    });
+
+    loadConfig().then(() => loadArticles());
+    // Carga silenciosa del conteo de errores para mostrar el badge
+    api('/api/frescura/errores-stock').then(d => {
+      const total = d?.data?.total ?? 0;
+      const badge = document.getElementById('erroresBadge');
+      if (badge && total > 0) { badge.style.display = ''; badge.textContent = fmtInt.format(total); }
+    }).catch(() => {});
+  </script>
+</body>
+</html>

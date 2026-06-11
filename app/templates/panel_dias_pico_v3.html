@@ -6,6 +6,7 @@
 <title>Días Pico — Operaciones</title>
 {% include 'partials/head_icons.html' %}
 <link rel="stylesheet" href="/static/design-system.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
 /* layout overrides — design-system.css handles reset, typography, base components */
 body{display:flex;flex-direction:column;}
@@ -14,9 +15,12 @@ body{display:flex;flex-direction:column;}
 .topbar .right{margin-left:auto;display:flex;align-items:center;gap:10px;}
 .badge{background:var(--acc);color:#000;font-family:var(--mono);font-size:9px;font-weight:700;padding:3px 7px;border-radius:var(--r-xs);letter-spacing:1px;}
 /* ── LAYOUT ── */
-.layout{display:grid;grid-template-columns:280px 1fr;flex:1;min-height:0;overflow:hidden;}
+.layout{display:grid;grid-template-columns:280px minmax(0,1fr);flex:1;min-height:0;overflow:hidden;transition:grid-template-columns .22s ease;}
+.layout.calendar-collapsed{grid-template-columns:0 minmax(0,1fr);}
 /* ── SIDEBAR ── */
-.sidebar{background:var(--surf);border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;min-height:0;}
+.sidebar{background:var(--surf);border-right:1px solid var(--brd);display:flex;flex-direction:column;overflow-y:auto;padding:16px;gap:16px;min-height:0;min-width:0;transition:opacity .18s ease,padding .18s ease,border-color .18s ease;}
+.layout.calendar-collapsed .sidebar{padding:0;border-right:0;overflow:hidden;opacity:0;pointer-events:none;}
+.layout.calendar-collapsed .sidebar>*{display:none;}
 /* ── CALENDAR ── */
 .cal-nav{display:flex;justify-content:space-between;align-items:center;}
 .cal-nav span{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
@@ -97,7 +101,9 @@ body{display:flex;flex-direction:column;}
 input[type=range]{flex:1;accent-color:var(--acc);}
 .val-badge{font-family:var(--mono);font-size:11px;color:var(--acc);min-width:36px;text-align:center;}
 /* ── MAIN PANEL ── */
-.main{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px;}
+.main{overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:18px;min-width:0;}
+.calendar-toggle{white-space:nowrap;border-color:rgba(91,141,238,.35);color:var(--blu);}
+.calendar-toggle.is-collapsed{border-color:var(--acc);color:var(--acc);background:rgba(245,166,35,.08);}
 /* ── TABS ── */
 .tabs-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;}
 .tabs{display:flex;gap:2px;background:var(--surf2);padding:3px;border-radius:6px;}
@@ -161,6 +167,7 @@ input[type=range]{flex:1;accent-color:var(--acc);}
 .plan-note{font-size:11px;color:var(--muted);line-height:1.5;}
 @media (max-width:1100px){
   .filter-grid,.chart-grid,.drop-two,.objective-grid,.plan-grid{grid-template-columns:1fr;}
+  .vd-filter-grid,.vd-kpi-grid,.vd-triplet-grid,.vd-donut-grid,.vd-heatmap-grid{grid-template-columns:1fr;}
 }
 /* ── TABLE ── */
 .rtbl{width:100%;border-collapse:collapse;}
@@ -185,6 +192,92 @@ input[type=range]{flex:1;accent-color:var(--acc);}
 /* ── BOX / CARD ── */
 .box{background:var(--surf);border:1px solid var(--brd);border-radius:7px;padding:16px;}
 .box{overflow-x:auto;}
+/* ── VENTA DIARIA HEATMAP ── */
+.vd-heatmap-meta{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.vd-heatmap-caption{font-size:12px;font-weight:600;color:var(--txt);letter-spacing:.2px;}
+.vd-heatmap-legend{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-left:auto;}
+.vd-heatmap-scale-label{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;}
+.vd-heatmap-scale-bar{width:clamp(120px,18vw,220px);height:10px;border-radius:999px;border:1px solid rgba(255,255,255,.08);background:linear-gradient(90deg,#0f172a 0%,#1c2a48 16%,#2563eb 34%,#0ea5e9 54%,#22c55e 72%,#eab308 86%,#f97316 100%);}
+.vd-heatmap-shell{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-gutter:stable;}
+.vd-heatmap-table{width:100%;min-width:0;border-collapse:separate;border-spacing:clamp(2px,.35vw,6px) clamp(2px,.35vw,6px);table-layout:fixed;}
+.vd-heatmap-table thead th{font-family:var(--mono);font-size:clamp(8px,1vw,10px);color:var(--muted);font-weight:600;text-align:center;padding:clamp(1px,.2vw,3px) clamp(0px,.3vw,4px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.vd-heatmap-table th:first-child,.vd-heatmap-table td:first-child{position:sticky;left:0;background:var(--surf);z-index:2;}
+.vd-heatmap-week-head{width:clamp(42px,11vw,88px);text-align:left!important;padding-left:0!important;}
+.vd-heatmap-rowlabel{font-family:var(--mono);font-size:clamp(8px,1vw,11px);color:var(--muted);text-align:left!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05;padding:0 clamp(2px,.6vw,8px) 0 0;z-index:3;}
+.vd-heatmap-week-short{display:none;}
+.vd-heatmap-week-full,.vd-heatmap-week-short,.vd-heatmap-week-num{display:inline;}
+.vd-heatmap-cell{padding:0;vertical-align:middle;}
+.vd-heatmap-value{min-height:clamp(28px,4vw,40px);border-radius:12px;border:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;text-align:center;font-family:var(--mono);font-size:clamp(8px,1.1vw,12px);font-weight:700;line-height:1;letter-spacing:.2px;padding:clamp(3px,.45vw,8px) clamp(2px,.4vw,6px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);transition:transform .12s ease,box-shadow .12s ease,filter .12s ease;}
+.vd-heatmap-value:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.05);filter:saturate(1.04);}
+.vd-heatmap-zero .vd-heatmap-value{opacity:.92;}
+.vd-filter-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
+.vd-kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.vd-triplet-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin-top:8px;}
+.vd-donut-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.vd-heatmap-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+.vd-donut-shell{display:flex;flex-direction:column;gap:10px;}
+.vd-donut-wrap{height:220px;}
+.vd-donut-legend{display:grid;gap:6px;}
+.vd-donut-item{display:grid;grid-template-columns:14px 1fr auto;gap:8px;align-items:center;padding:8px 10px;border:1px solid rgba(255,255,255,.06);border-radius:10px;background:rgba(12,18,32,.28);}
+.vd-donut-swatch{width:10px;height:10px;border-radius:999px;box-shadow:0 0 0 2px rgba(255,255,255,.04);}
+.vd-donut-name{font-size:11px;font-weight:600;color:var(--txt);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.vd-donut-value{font-family:var(--mono);font-size:10px;color:var(--muted);white-space:nowrap;text-align:right;}
+/* ── EXPERIENCIA CLIENTES ── */
+.exp-filter-grid{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));}
+.exp-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;}
+.exp-map-layout{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:12px;align-items:stretch;}
+.exp-chart-grid{grid-template-columns:repeat(3,minmax(0,1fr));}
+.exp-map-shell{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.exp-map-canvas{position:relative;height:440px;min-width:620px;border:1px solid rgba(91,141,238,.22);border-radius:14px;overflow:hidden;background:
+  radial-gradient(circle at 18% 26%,rgba(76,190,138,.16),transparent 24%),
+  radial-gradient(circle at 78% 72%,rgba(91,141,238,.18),transparent 28%),
+  linear-gradient(135deg,rgba(8,13,24,.98),rgba(18,25,40,.98));}
+.exp-map-canvas::before{content:'';position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(circle at center,#000 55%,transparent 100%);}
+.exp-map-canvas.leaflet-ready{min-width:0;background:#101827;}
+.exp-map-canvas.leaflet-ready::before{display:none;}
+.exp-map-canvas .leaflet-tile{filter:saturate(.75) brightness(.58) contrast(1.15);}
+.exp-map-canvas .leaflet-control-attribution{background:rgba(8,13,24,.75);color:var(--muted);}
+.exp-map-canvas .leaflet-control-attribution a{color:var(--blu);}
+.exp-map-canvas .leaflet-popup-content-wrapper,.exp-map-canvas .leaflet-popup-tip{background:var(--surf);color:var(--txt);border:1px solid var(--brd);}
+.exp-map-canvas .leaflet-popup-content{font-size:12px;line-height:1.45;}
+.exp-map-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;padding:20px;}
+.exp-map-point{position:absolute;transform:translate(-50%,-50%);border-radius:999px;border:2px solid rgba(255,255,255,.78);box-shadow:0 10px 24px rgba(0,0,0,.35),0 0 0 6px rgba(255,255,255,.04);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;font-weight:800;color:#06101f;cursor:default;z-index:2;}
+.exp-map-point.bueno{background:var(--grn);}
+.exp-map-point.neutro{background:var(--acc);}
+.exp-map-point.malo{background:var(--red);}
+.exp-map-point.sin_dato{background:#7a8191;color:#fff;}
+.exp-map-label{position:absolute;transform:translate(-50%,0);font-size:10px;color:var(--txt);text-shadow:0 2px 8px #000;background:rgba(8,13,24,.72);border:1px solid rgba(255,255,255,.06);border-radius:999px;padding:3px 7px;white-space:nowrap;z-index:1;}
+.exp-legend{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--muted);}
+.exp-legend-item{display:inline-flex;align-items:center;gap:5px;}
+.exp-dot{width:9px;height:9px;border-radius:999px;display:inline-block;}
+.exp-dot.bueno{background:var(--grn);}
+.exp-dot.neutro{background:var(--acc);}
+.exp-dot.malo{background:var(--red);}
+.exp-dot.sin_dato{background:#7a8191;}
+.exp-state-pill{display:inline-flex;align-items:center;justify-content:center;padding:3px 8px;border-radius:999px;font-family:var(--mono);font-size:10px;font-weight:700;text-transform:uppercase;}
+.exp-state-pill.bueno{background:rgba(76,190,138,.14);color:var(--grn);border:1px solid rgba(76,190,138,.35);}
+.exp-state-pill.neutro{background:rgba(245,166,35,.14);color:var(--acc);border:1px solid rgba(245,166,35,.35);}
+.exp-state-pill.malo{background:rgba(224,92,92,.14);color:var(--red);border:1px solid rgba(224,92,92,.35);}
+.exp-state-pill.sin_dato{background:rgba(122,129,145,.14);color:var(--muted);border:1px solid rgba(122,129,145,.35);}
+.exp-score-list{display:grid;gap:10px;}
+.exp-score-row{display:grid;grid-template-columns:90px 1fr 46px;gap:8px;align-items:center;}
+.exp-score-label{font-size:11px;color:var(--muted);white-space:nowrap;}
+.exp-score-track{height:10px;border-radius:999px;background:var(--surf2);overflow:hidden;border:1px solid rgba(255,255,255,.05);}
+.exp-score-fill{height:100%;border-radius:999px;}
+.exp-score-fill.bueno{background:linear-gradient(90deg,rgba(76,190,138,.5),var(--grn));}
+.exp-score-fill.neutro{background:linear-gradient(90deg,rgba(245,166,35,.5),var(--acc));}
+.exp-score-fill.malo{background:linear-gradient(90deg,rgba(224,92,92,.5),var(--red));}
+.exp-score-fill.sin_dato{background:#7a8191;}
+.exp-score-value{font-family:var(--mono);font-size:11px;text-align:right;}
+.exp-table-sub{font-size:10px;color:var(--muted);line-height:1.35;margin-top:3px;}
+@media(max-width:1100px){
+  .exp-map-layout,.exp-chart-grid{grid-template-columns:1fr;}
+  .exp-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+}
+@media(max-width:560px){
+  .exp-kpi-grid{grid-template-columns:1fr;}
+  .exp-map-canvas{height:360px;min-width:560px;}
+}
 /* ── UPLOAD PANEL ── */
 .upload-panel{background:var(--surf);border:1px solid var(--brd);border-radius:7px;overflow:hidden;}
 .upload-hdr{padding:10px 16px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
@@ -236,6 +329,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   .topbar .right label{min-width:54px;}
   .layout{display:block;overflow:visible;min-height:auto;}
   .sidebar{border-right:0;border-bottom:1px solid var(--brd);min-height:auto;overflow:visible;padding:12px;}
+  .layout.calendar-collapsed .sidebar{display:none;}
   .main{overflow:visible;padding:12px;gap:14px;}
   .tabs-row{align-items:stretch;}
   .tabs{width:100%;overflow-x:auto;white-space:nowrap;}
@@ -259,6 +353,15 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   .chart-wrap{height:220px;}
   .mini{padding:7px 8px;}
   .rtbl{min-width:640px;}
+  .vd-heatmap-meta{flex-direction:column;align-items:flex-start;}
+  .vd-heatmap-legend{width:100%;justify-content:flex-start;}
+  .vd-heatmap-scale-bar{width:100%;max-width:none;}
+  .vd-heatmap-table{border-spacing:2px 2px;}
+  .vd-heatmap-week-head{width:36px;}
+  .vd-heatmap-rowlabel{font-size:8px;padding-right:2px;}
+  .vd-heatmap-week-full{display:none;}
+  .vd-heatmap-week-short{display:inline;}
+  .vd-heatmap-value{min-height:28px;font-size:9px;padding:2px 2px;border-radius:10px;}
 }
 </style>
 </head>
@@ -270,6 +373,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   <h1>Panel de Días Pico</h1>
   <div class="right">
     <a class="btn sm" href="/portal" title="Volver al dashboard general">Dashboard</a>
+    <button class="btn sm calendar-toggle" id="toggleCalendarBtn" type="button" onclick="toggleCalendarSidebar()" aria-pressed="false" title="Ocultar calendario lateral">Ocultar calendario</button>
     <label style="font-size:11px;color:var(--muted)">Sucursal</label>
     <select id="selSucursal" onchange="onSucursalChange()"><option value="TODAS">Todas</option></select>
     <label style="font-size:11px;color:var(--muted)">Métrica</label>
@@ -285,7 +389,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   </div>
 </div>
 
-<div class="layout">
+<div class="layout" id="mainLayout">
 <!-- SIDEBAR -->
 <div class="sidebar">
 
@@ -334,7 +438,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   <div class="ctrl-block">
     <label>Umbral pico — % sobre promedio</label>
     <div class="ctrl-row">
-      <input type="range" id="sliderUmbral" min="1.05" max="2.0" step="0.05" value="1.20" oninput="onUmbralChange(this.value)" onchange="loadMes(); loadHistorico()">
+      <input type="range" id="sliderUmbral" min="1.05" max="2.0" step="0.05" value="1.20" oninput="onUmbralChange(this.value)" onchange="loadMes(); loadHistorico(); if (isTabVisible('tab-venta-dia')) loadVentaDia()">
       <span class="val-badge" id="lblUmbral">+20%</span>
     </div>
     <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -356,7 +460,9 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="tabs">
       <div class="tab active" onclick="switchTab('kpis',this)">KPIs</div>
       <div class="tab" onclick="switchTab('historico',this)">Histórico</div>
+      <div class="tab" onclick="switchTab('venta-dia',this)">Venta diaria</div>
       <div class="tab" onclick="switchTab('comparativo',this)">Comparativo</div>
+      <div class="tab" onclick="switchTab('experiencia',this)">Experiencia clientes</div>
       <div class="tab" onclick="switchTab('dotacion',this)">Dotación</div>
       <div class="tab" onclick="switchTab('analisis',this)">Rechazos</div>
       <div class="tab" onclick="switchTab('dropsize',this)">Dropsize</div>
@@ -404,6 +510,108 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box"><div id="tablaHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
   </div>
 
+  <!-- TAB VENTA DIARIA -->
+  <div id="tab-venta-dia" style="display:none">
+    <div class="box" style="margin-bottom:12px">
+      <div class="sec" style="margin-bottom:10px">Filtros de venta diaria</div>
+      <div class="filter-grid vd-filter-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="ventaDiaSucursal" onchange="onVentaDiaSucursalChange()">
+            <option value="TODAS">Todas</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Periodo</label>
+          <select id="ventaDiaPeriodo" onchange="updateVentaDiaPeriodoUI()">
+            <option value="todo">Todo el histórico</option>
+            <option value="mes">Mes</option>
+            <option value="anio">Año</option>
+            <option value="semana">Semana ISO</option>
+            <option value="rango" selected>Rango</option>
+          </select>
+        </div>
+        <div class="filter-field" id="ventaDiaMesField">
+          <label>Mes</label>
+          <input type="month" id="ventaDiaMes" onchange="updateVentaDiaFilterHint()">
+        </div>
+        <div class="filter-field" id="ventaDiaAnioField">
+          <label>Año ISO</label>
+          <input type="number" id="ventaDiaAnio" min="2020" max="2100" onchange="updateVentaDiaFilterHint()">
+        </div>
+        <div class="filter-field" id="ventaDiaSemanaField">
+          <label>Semana ISO</label>
+          <input type="number" id="ventaDiaSemana" min="1" max="53" onchange="updateVentaDiaFilterHint()">
+        </div>
+        <div class="filter-field" id="ventaDiaDesdeField">
+          <label>Desde</label>
+          <input type="date" id="ventaDiaDesde" onchange="updateVentaDiaFilterHint()">
+        </div>
+        <div class="filter-field" id="ventaDiaHastaField">
+          <label>Hasta</label>
+          <input type="date" id="ventaDiaHasta" onchange="updateVentaDiaFilterHint()">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;grid-column:1/-1">
+          <button class="btn primary" onclick="loadVentaDia()">Actualizar</button>
+          <button class="btn" onclick="exportVentaDia('xlsx')" style="border-color:var(--grn);color:var(--grn)" title="Exporta la matriz a Excel">Excel</button>
+          <button class="btn" onclick="exportVentaDia('pdf')" style="border-color:var(--acc);color:var(--acc)" title="Exporta la matriz a PDF">PDF</button>
+        </div>
+      </div>
+      <div id="ventaDiaFilterHint" style="font-size:11px;color:var(--muted);margin-top:8px">Seleccioná un período para ver la ayuda del filtro.</div>
+      <div id="ventaDiaMeta" style="font-size:11px;color:var(--muted);margin-top:10px">Sucursal y período determinan el rango; los mapas de calor de hectolitros, salidas y personas se recalculan con el filtro activo. La distribución por sucursal también responde al filtro.</div>
+    </div>
+    <div class="sec">Matriz acumulada por día de semana</div>
+    <div class="box" id="ventaDiaHectolitros"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="box" id="ventaDiaBultos" style="margin-top:12px"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="box" id="ventaDiaPallets" style="margin-top:12px"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="sec" style="margin-top:16px">Avance vs año anterior</div>
+    <div class="box" id="ventaDiaComparativoKpis" style="margin-top:8px"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="sec" style="margin-top:16px">Distribucion por sucursal</div>
+    <div class="chart-grid vd-donut-grid">
+      <div class="box" id="ventaDiaDistribucionHectolitros"><div class="loading"><div class="spinner"></div></div></div>
+      <div class="box" id="ventaDiaDistribucionBultos"><div class="loading"><div class="spinner"></div></div></div>
+      <div class="box" id="ventaDiaDistribucionPallets"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="sec" style="margin-top:16px">Comparativo semanal ISO del mismo período</div>
+    <div class="chart-grid vd-triplet-grid">
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Hectolitros</div>
+        <div class="chart-wrap"><canvas id="ventaDiaCmpHectolitros"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Bultos</div>
+        <div class="chart-wrap"><canvas id="ventaDiaCmpBultos"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Pallets</div>
+        <div class="chart-wrap"><canvas id="ventaDiaCmpPallets"></canvas></div>
+      </div>
+    </div>
+    <div class="sec" style="margin-top:16px">Evolución semanal del año seleccionado</div>
+    <div class="chart-grid vd-triplet-grid">
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Hectolitros</div>
+        <div class="chart-wrap"><canvas id="ventaDiaEvoHectolitros"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Bultos</div>
+        <div class="chart-wrap"><canvas id="ventaDiaEvoBultos"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Pallets</div>
+        <div class="chart-wrap"><canvas id="ventaDiaEvoPallets"></canvas></div>
+      </div>
+    </div>
+    <div class="sec" style="margin-top:16px">Mapas de calor semana x día del mes</div>
+    <div class="chart-grid vd-heatmap-grid" style="margin-top:8px">
+      <div class="box" id="ventaDiaHeatmapHectolitros"><div class="loading"><div class="spinner"></div></div></div>
+      <div class="box" id="ventaDiaHeatmapSalidas"><div class="loading"><div class="spinner"></div></div></div>
+      <div class="box" id="ventaDiaHeatmapPersonas"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="sec" style="margin-top:16px">Insights automáticos</div>
+    <div class="box" id="ventaDiaInsights" style="margin-top:8px"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <!-- TAB COMPARATIVO ANUAL -->
   <div id="tab-comparativo" style="display:none">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
@@ -422,6 +630,107 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     </div>
     <div id="cmpSucLabel" style="font-size:11px;color:var(--muted);margin-bottom:8px"></div>
     <div id="tablaComparativo"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- TAB EXPERIENCIA CLIENTES -->
+  <div id="tab-experiencia" style="display:none">
+    <div class="box" style="margin-bottom:12px">
+      <div class="sec" style="margin-bottom:10px">Filtros de experiencia clientes</div>
+      <div class="filter-grid exp-filter-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="expSucursal" onchange="onExperienciaSucursalChange()">
+            <option value="TODAS">Todas</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Periodo</label>
+          <input type="month" id="expPeriodo" onchange="onExperienciaPeriodoChange()">
+        </div>
+        <div class="filter-field">
+          <label>Métrica</label>
+          <select id="expMetrica" onchange="loadExperienciaClientes()">
+            <option value="nps" selected>NPS</option>
+            <option value="rmd">RMD</option>
+            <option value="combinado">NPS + RMD</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Localidad</label>
+          <select id="expLocalidad" onchange="loadExperienciaClientes()">
+            <option value="TODAS">Todas</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Canal / tipo negocio</label>
+          <select id="expTipoNegocio" onchange="loadExperienciaClientes()">
+            <option value="TODAS">Todos</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Estado</label>
+          <select id="expEstado" onchange="loadExperienciaClientes()">
+            <option value="TODOS">Todos</option>
+            <option value="malo">Malos</option>
+            <option value="neutro">Neutros</option>
+            <option value="bueno">Buenos</option>
+            <option value="sin_dato">Sin dato</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+          <button class="btn primary" onclick="loadExperienciaClientes()">Actualizar</button>
+          <button class="btn" onclick="limpiarExperienciaFiltros()">Limpiar</button>
+        </div>
+      </div>
+      <div id="expMeta" style="font-size:11px;color:var(--muted);margin-top:10px">Usa el último período mensual disponible y cruza NPS/RMD con GPS por localidad.</div>
+    </div>
+
+    <div class="exp-kpi-grid" id="expKpis" style="margin-bottom:12px">
+      <div class="loading"><div class="spinner"></div>Cargando…</div>
+    </div>
+
+    <div class="exp-map-layout">
+      <div class="box">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="sec" style="margin-bottom:0;flex:1">Mapa GPS por localidad</div>
+          <div class="exp-legend">
+            <span class="exp-legend-item"><span class="exp-dot bueno"></span>Bueno</span>
+            <span class="exp-legend-item"><span class="exp-dot neutro"></span>Neutro</span>
+            <span class="exp-legend-item"><span class="exp-dot malo"></span>Malo</span>
+            <span class="exp-legend-item"><span class="exp-dot sin_dato"></span>Sin dato</span>
+          </div>
+        </div>
+        <div class="exp-map-shell">
+          <div id="expMap" class="exp-map-canvas">
+            <div class="exp-map-empty">Cargando mapa…</div>
+          </div>
+        </div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:10px">Semáforo del período</div>
+        <div id="expSemaforo"><div class="loading"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+
+    <div class="chart-grid exp-chart-grid" style="margin-top:12px">
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Mix de experiencia</div>
+        <div class="chart-wrap"><canvas id="expEstadoChart"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" id="expLocalidadChartTitle" style="margin-bottom:8px">NPS por localidad</div>
+        <div class="chart-wrap"><canvas id="expLocalidadChart"></canvas></div>
+      </div>
+      <div class="box">
+        <div class="sec" id="expTipoChartTitle" style="margin-bottom:8px">NPS por canal</div>
+        <div class="chart-wrap"><canvas id="expTipoChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="sec" style="margin-top:16px">Localidades y experiencia</div>
+    <div class="box" style="margin-top:8px">
+      <div id="expLocalidadTable"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
   </div>
 
   <!-- TAB DOTACIÓN OPERATIVA -->
@@ -1566,7 +1875,8 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="/static/app.js?v=20260602-2"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/static/app.js?v=20260610-10"></script>
 <script src="/static/simulador_logistico.js?v=20260524-1"></script>
 
 </body>
