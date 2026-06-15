@@ -177,7 +177,7 @@ def _num(value) -> float:
 
 def _row_has_business_data(row: dict) -> bool:
     keys = (
-        'Camion', 'CamiÃ³n', 'Chofer / Responsable billetera', 'Chofer',
+        'Camion', 'Camión', 'Chofer / Responsable billetera', 'Chofer',
         'Ayudante1', 'Ayudante 1', 'Ayudante2', 'Ayudante 2',
     )
     return any(str(_get(row, key) or '').strip() for key in keys)
@@ -270,14 +270,14 @@ def _parse_dotacion_items(
         ayudante1 = _get(r, 'Ayudante1', 'Ayudante 1')
         ayudante2 = _get(r, 'Ayudante2', 'Ayudante 2')
         sucursal_id = _get(r, 'sucursal_id', 'Sucursal ID', 'Id Sucursal')
-        nro_camion = _get(r, 'NÂ° Camion', 'Nro Camion', 'Nro. Camion', 'Numero Camion')
+        nro_camion = _get(r, 'N° Camion', 'Nro Camion', 'Nro. Camion', 'Numero Camion')
 
         items.append({
             'tipo': tipo,
             'fecha': fecha,
             'sucursal': sucursal,
             'sucursal_id': sucursal_id,
-            'camion': _get(r, 'Camion', 'CamiÃ³n'),
+            'camion': _get(r, 'Camion', 'Camión'),
             'nro_camion': nro_camion,
             'chofer': chofer,
             'ayudante1': ayudante1,

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import date
 from io import BytesIO
 
 from flask import Blueprint, jsonify, render_template, request, send_file
@@ -64,8 +63,8 @@ def ranking_sucursales():
     try:
         p = _args_period()
         unidad = request.args.get('unidad', 'bultos')
-        p.pop('sucursal', None)
-        return jsonify(_cached('ranking', lambda: dropsize_svc.get_ranking_sucursales(**p, unidad=unidad)))
+        agrupacion = request.args.get('agrupacion', 'sucursal')
+        return jsonify(_cached('ranking', lambda: dropsize_svc.get_ranking_sucursales(**p, unidad=unidad, agrupacion=agrupacion)))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -73,9 +72,8 @@ def ranking_sucursales():
 @bp.get('/api/dropsize/comparativo')
 def comparativo():
     try:
-        sucursal = request.args.get('sucursal', 'TODAS')
-        mes = request.args.get('mes') or date.today().strftime('%Y-%m')
-        return jsonify(_cached('comparativo', lambda: dropsize_svc.get_comparativo(sucursal, mes)))
+        p = _args_period()
+        return jsonify(_cached('comparativo', lambda: dropsize_svc.get_comparativo(**p)))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

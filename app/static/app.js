@@ -24,6 +24,7 @@ let _dropAbort = null;
 let _loadDropSeq = 0;
 let historicoChart = null;
 let historicoPicosChart = null;
+let historicoVolumenChart = null;
 let ventaDiaData = null;
 let ventaDiaCmpCharts = {};
 let ventaDiaEvoCharts = {};
@@ -208,8 +209,8 @@ async function api(path, options = {}) {
   }
 }
 
-function load(id)       { document.getElementById(id).innerHTML = '<div class="loading"><div class="spinner"></div>Cargando…</div>'; }
-function errBox(id, msg){ document.getElementById(id).innerHTML = `<div class="err-box">⚠ ${msg}</div>`; }
+function load(id)       { document.getElementById(id).innerHTML = '<div class="loading"><div class="spinner"></div>Cargando...…</div>'; }
+function errBox(id, msg){ document.getElementById(id).innerHTML = `<div class="err-box">âš  ${msg}</div>`; }
 
 // ─── INIT ────────────────────────────────────────────────────
 function resizeDashboardVisuals() {
@@ -220,7 +221,7 @@ function resizeDashboardVisuals() {
     experienciaCharts,
     planCharts,
   ];
-  const charts = [historicoChart, historicoPicosChart, dropDiarioChart, dropMensualChart];
+  const charts = [historicoChart, historicoPicosChart, historicoVolumenChart, dropDiarioChart, dropMensualChart];
   chartSets.forEach(set => {
     Object.values(set || {}).forEach(chart => {
       if (chart) charts.push(chart);
@@ -506,7 +507,7 @@ async function loadMes() {
     diasData = data.dias || [];
     const diasAnt = data.dias_anterior || [];
     const kAnt    = data.kpis_anterior || null;
-    // Un mes es proyección si no tiene ventas reales (puede tener feriados con bultos=0)
+    // Un mes es proyecci?n si no tiene ventas reales (puede tener feriados con bultos=0)
     const tieneVentas = diasData.some(d => (d.bultos || 0) > 0 || (d.hectolitros || 0) > 0);
     const esProyeccion = !tieneVentas && diasAnt.length > 0;
 
@@ -514,7 +515,7 @@ async function loadMes() {
       // Indexar feriados/eventos del mes actual para superponerlos en el calendario
       const feriadosActuales = {};
       diasData.forEach(d => { if (d.es_feriado || d.es_evento) feriadosActuales[d.fecha] = d; });
-      // Mes futuro sin ventas: usar año anterior como proyección de referencia
+      // Mes futuro sin ventas: usar a?o anterior como proyecci?n de referencia
       diasData = diasAnt.map(d => {
         const fechaActual = d.fecha_ant.replace(/^\d{4}/, String(vY));
         const fer = feriadosActuales[fechaActual] || {};
@@ -580,7 +581,7 @@ async function loadMes() {
     document.getElementById('sClientes').textContent  = (esProyeccion && kAnt)
       ? fmtN(kAnt.clientes ?? 0)
       : fmtN(k.clientes ?? 0);
-    document.getElementById('sAvg').textContent       = data.avg_mes ?? data.avg_hist;
+    // Próximos feriados / eventos
     document.getElementById('sUmbral').textContent    = data.umbral_val;
 
     // Próximos feriados / eventos
@@ -620,7 +621,7 @@ async function loadMes() {
     if (esProyeccion && kAnt) {
       const banner = document.createElement('div');
       banner.style.cssText = 'background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.38);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:11px;color:var(--acc)';
-      banner.textContent = `🔮 Proyección basada en ${MESES[vM]} ${kAnt.anio} — ${kAnt.picos ?? 0} días pico ese año — sin ventas registradas para este mes aún`;
+      banner.textContent = `\u{1f52e} Proyecci\u00f3n basada en ${MESES[vM]} ${anioAnt} y los d\u00edas marcados como PICO lo fueron ese a\u00f1o`;
       const grid = document.getElementById('kpiGrid');
       grid.insertBefore(banner, grid.firstChild);
     }
@@ -632,88 +633,94 @@ async function loadMes() {
   }
 }
 
+function kpiMetricCard(label, value, color = 'grn', badge = '', valueStyle = '') {
+  const styleAttr = valueStyle ? ` style="${valueStyle}"` : '';
+  return `<div class="kpi ${color}"><div class="kpi-lbl">${esc(label)}</div><div class="kpi-val ${color}"${styleAttr}>${value}</div>${badge}</div>`;
+}
+
+function kpiBand(title, tone, cards, spanAll = false) {
+  const items = (cards || []).filter(Boolean);
+  if (!items.length) return '';
+  return `<div class="kpi-band ${tone}${spanAll ? ' span-all' : ''}">
+    <div class="kpi-band-head">
+      <span class="kpi-band-title">${esc(title)}</span>
+      <span class="kpi-band-meta">${items.length} indicadores</span>
+    </div>
+    <div class="kpi-band-grid">${items.join('')}</div>
+  </div>`;
+}
+
+function kpiGroup(title, bands) {
+  const content = (bands || []).filter(Boolean).join('');
+  if (!content) return '';
+  return `<section class="kpi-group">
+    <div class="kpi-section">${esc(title)}</div>
+    <div class="kpi-group-body">${content}</div>
+  </section>`;
+}
+
 function renderKpiGridLegacy(d) {
-  document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi-section">Volumen despachado</div>
-    <!-- BULTOS -->
-    <div class="kpi ora"><div class="kpi-lbl">Bultos despachados</div><div class="kpi-val ora">${fmtN(Math.round(d.bultos ?? 0))}</div></div>
-
-    <!-- HECTOLITROS -->
-    <div class="kpi pur"><div class="kpi-lbl">HL despachados</div><div class="kpi-val pur">${fmtN(Math.round(d.hectolitros ?? 0))}</div></div>
-
-    <!-- PEDIDOS -->
-    <div class="kpi blu"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val blu">${fmtN(d.pedidos ?? 0)}</div></div>
-
-    <!-- PALLETS -->
-    <div class="kpi grn"><div class="kpi-lbl">Pallets</div><div class="kpi-val grn">${fmtN(Math.round(d.pallets ?? 0))}</div></div>
-    <div class="kpi grn"><div class="kpi-lbl">UP</div><div class="kpi-val grn">${fmtN(Math.round(d.up ?? 0))}</div></div>
-    <div class="kpi ora"><div class="kpi-lbl">Importe total</div><div class="kpi-val ora" style="font-size:14px">${fmtM(d.importe)}</div></div>
-
-    <div class="kpi-section">Rechazos sobre volumen despachado</div>
-    <div class="kpi red"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_bultos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_hl ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val red">${fmtN(d.rechazo_pedidos ?? 0)}</div></div>
-    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_parcial ?? 0)}</div></div>
-    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_total ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_parcial ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_total ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_bultos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_bultos)}</div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_hl)}</div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_pedidos ?? 0)}</div></div>
-
-    <div class="kpi-section">Cuenta y orden RMCYO</div>
-    <div class="kpi blu"><div class="kpi-lbl">RMCYO bultos</div><div class="kpi-val blu">${fmtN(Math.round(d.rmcyo_bultos ?? 0))}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(d.rmcyo_hl ?? 0))}</div></div>
-    <div class="kpi blu"><div class="kpi-lbl">RMCYO PDV</div><div class="kpi-val blu">${fmtN(d.rmcyo_pedidos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">RMCYO bultos rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_bultos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_hl ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(d.rmcyo_pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_hl)}</div>
-
-    <div class="kpi-section">Operacion</div>
-    <!-- OTROS -->
-    <div class="kpi pur"><div class="kpi-lbl">PDV únicos</div><div class="kpi-val pur">${fmtN(d.clientes ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">Salidas (camiones)</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
-    <div class="kpi grn"><div class="kpi-lbl">Días con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
-  `;
+  renderKpiGrid(d);
 }
 
 function renderKpiGrid(d) {
-  document.getElementById('kpiGrid').innerHTML = `
-    <div class="kpi-section">Bultos</div>
-    <div class="kpi ora"><div class="kpi-lbl">Bultos despachados</div><div class="kpi-val ora">${fmtN(Math.round(d.bultos ?? 0))}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">Total bultos rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_bultos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_bultos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_bultos)}</div>
-    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo parcial</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_parcial ?? 0)}</div></div>
-    <div class="kpi ora"><div class="kpi-lbl">Bultos rechazo completo</div><div class="kpi-val ora">${fmt1(d.rechazo_bultos_total ?? 0)}</div></div>
-    <div class="kpi ora"><div class="kpi-lbl">RMCYO bultos</div><div class="kpi-val ora">${fmtN(Math.round(d.rmcyo_bultos ?? 0))}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">RMCYO bultos rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_bultos ?? 0)}</div></div>
-
-    <div class="kpi-section">Hectolitros</div>
-    <div class="kpi pur"><div class="kpi-lbl">HL despachados</div><div class="kpi-val pur">${fmtN(Math.round(d.hectolitros ?? 0))}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">Total HL rechazados</div><div class="kpi-val red">${fmt1(d.rechazo_hl ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_hl)}</div>
-    <div class="kpi pur"><div class="kpi-lbl">HL rechazo parcial</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_parcial ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">HL rechazo completo</div><div class="kpi-val pur">${fmt1(d.rechazo_hl_total ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(d.rmcyo_hl ?? 0))}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(d.rmcyo_rechazo_hl ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(d.rmcyo_pct_rechazo_hl ?? 0)}</div>${kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_hl)}</div>
-
-    <div class="kpi-section">Pallets y UP</div>
-    <div class="kpi grn"><div class="kpi-lbl">Pallets</div><div class="kpi-val grn">${fmtN(Math.round(d.pallets ?? 0))}</div></div>
-    <div class="kpi grn"><div class="kpi-lbl">UP</div><div class="kpi-val grn">${fmtN(Math.round(d.up ?? 0))}</div></div>
-
-    <div class="kpi-section">Clientes</div>
-    <div class="kpi blu"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val blu">${fmtN(d.pedidos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">PDV rechazados</div><div class="kpi-val red">${fmtN(d.rechazo_pedidos ?? 0)}</div></div>
-    <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red">${fmtPct1(d.pct_rechazo_pedidos ?? 0)}</div>${kpiGoalBadge(d.objetivos?.pct_rechazo_pedidos)}</div>
-    <div class="kpi blu"><div class="kpi-lbl">RMCYO PDV</div><div class="kpi-val blu">${fmtN(d.rmcyo_pedidos ?? 0)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">PDV unicos</div><div class="kpi-val pur">${fmtN(d.clientes ?? 0)}</div></div>
-
-    <div class="kpi-section">Operacion</div>
-    <div class="kpi ora"><div class="kpi-lbl">Importe total</div><div class="kpi-val ora" style="font-size:14px">${fmtM(d.importe)}</div></div>
-    <div class="kpi pur"><div class="kpi-lbl">Salidas (camiones)</div><div class="kpi-val pur">${fmtN(d.camiones ?? 0)}</div></div>
-    <div class="kpi grn"><div class="kpi-lbl">Dias con datos</div><div class="kpi-val grn">${d.dias ?? 0}</div></div>
-  `;
+  const groups = [
+    kpiGroup('Bultos', [
+      kpiBand('Positivos', 'good', [
+        kpiMetricCard('Bultos despachados', fmtN(Math.round(d.bultos ?? 0)), 'grn'),
+        kpiMetricCard('RMCYO bultos', fmtN(Math.round(d.rmcyo_bultos ?? 0)), 'grn'),
+      ]),
+      kpiBand('Rechazos', 'bad', [
+        kpiMetricCard('Bultos rechazados', fmt1(d.rechazo_bultos ?? 0), 'red'),
+        kpiMetricCard('% rechazo bultos', fmtPct1(d.pct_rechazo_bultos ?? 0), 'red', kpiGoalBadge(d.objetivos?.pct_rechazo_bultos)),
+        kpiMetricCard('Bultos con rechazo parcial', fmt1(d.rechazo_bultos_parcial ?? 0), 'red'),
+        kpiMetricCard('Bultos con rechazo completo', fmt1(d.rechazo_bultos_total ?? 0), 'red'),
+        kpiMetricCard('RMCYO bultos rechazados', fmt1(d.rmcyo_rechazo_bultos ?? 0), 'red'),
+        kpiMetricCard('% RMCYO rechazo bultos', fmtPct1(d.rmcyo_pct_rechazo_bultos ?? 0), 'red', kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_bultos)),
+      ]),
+    ]),
+    kpiGroup('Hectolitros', [
+      kpiBand('Positivos', 'good', [
+        kpiMetricCard('HL despachados', fmtN(Math.round(d.hectolitros ?? 0)), 'grn'),
+        kpiMetricCard('RMCYO HL', fmtN(Math.round(d.rmcyo_hl ?? 0)), 'grn'),
+      ]),
+      kpiBand('Rechazos', 'bad', [
+        kpiMetricCard('HL rechazados', fmt1(d.rechazo_hl ?? 0), 'red'),
+        kpiMetricCard('% rechazo HL', fmtPct1(d.pct_rechazo_hl ?? 0), 'red', kpiGoalBadge(d.objetivos?.pct_rechazo_hl)),
+        kpiMetricCard('HL con rechazo parcial', fmt1(d.rechazo_hl_parcial ?? 0), 'red'),
+        kpiMetricCard('HL con rechazo completo', fmt1(d.rechazo_hl_total ?? 0), 'red'),
+        kpiMetricCard('RMCYO HL rechazados', fmt1(d.rmcyo_rechazo_hl ?? 0), 'red'),
+        kpiMetricCard('% RMCYO rechazo HL', fmtPct1(d.rmcyo_pct_rechazo_hl ?? 0), 'red', kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_hl)),
+      ]),
+    ]),
+    kpiGroup('PDV', [
+      kpiBand('Positivos', 'good', [
+        kpiMetricCard('PDV atendidos', fmtN(d.pedidos ?? 0), 'grn'),
+        kpiMetricCard('PDV únicos', fmtN(d.clientes ?? 0), 'grn'),
+        kpiMetricCard('RMCYO PDV', fmtN(d.rmcyo_pedidos ?? 0), 'grn'),
+      ]),
+      kpiBand('Rechazos', 'bad', [
+        kpiMetricCard('PDV rechazados', fmtN(d.rechazo_pedidos ?? 0), 'red'),
+        kpiMetricCard('% rechazo PDV', fmtPct1(d.pct_rechazo_pedidos ?? 0), 'red', kpiGoalBadge(d.objetivos?.pct_rechazo_pedidos)),
+        kpiMetricCard('RMCYO PDV rechazados', fmtN(d.rmcyo_rechazo_pedidos ?? 0), 'red'),
+        kpiMetricCard('% RMCYO rechazo PDV', fmtPct1(d.rmcyo_pct_rechazo_pedidos ?? 0), 'red', kpiGoalBadge(d.objetivos?.rmcyo_pct_rechazo_pedidos)),
+      ]),
+    ]),
+    kpiGroup('Pallets y UP', [
+      kpiBand('Positivos', 'good', [
+        kpiMetricCard('Pallets', fmtN(Math.round(d.pallets ?? 0)), 'grn'),
+        kpiMetricCard('UP', fmtN(Math.round(d.up ?? 0)), 'grn'),
+      ], true),
+    ]),
+    kpiGroup('Operación', [
+      kpiBand('Positivos', 'good', [
+        kpiMetricCard('Importe total', fmtM(d.importe), 'grn', '', 'font-size:15px'),
+        kpiMetricCard('Salidas de camiones', fmtN(d.camiones ?? 0), 'grn'),
+        kpiMetricCard('Días con datos', fmtN(d.dias ?? 0), 'grn'),
+      ], true),
+    ]),
+  ];
+  document.getElementById('kpiGrid').innerHTML = groups.join('');
 }
 
 function _renderTablaDiasProyeccion() {
@@ -722,7 +729,7 @@ function _renderTablaDiasProyeccion() {
   const totalHl     = diasData.reduce((s, d) => s + (d.hectolitros || 0), 0);
   const totalPicos  = diasData.filter(d => d.es_pico).length;
   let html = `<div style="background:rgba(245,166,35,.12);border:1px solid rgba(245,166,35,.38);border-radius:6px;padding:8px 12px;margin-bottom:10px;font-size:12px;color:var(--acc)">
-    🔮 Proyección basada en <strong>${MESES[vM]} ${anioAnt}</strong> — los días marcados como PICO lo fueron ese año
+    🔮 Proyección basada en <strong>${MESES[vM]} ${anioAnt}</strong> y los días marcados como PICO lo fueron ese año
   </div>
   <div style="overflow-x:auto"><table class="rtbl"><thead><tr>
     <th>Fecha ${vY}</th>
@@ -782,10 +789,10 @@ function renderTablaDias() {
                     : 'Feriado AR';
           return `<span class="tag fer" title="${d.feriado_desc || ''}">${lbl}</span>`;
         })()
-      : `<span style="color:var(--muted);font-size:11px">—</span>`;
+      : `<span style="color:var(--muted);font-size:11px">?</span>`;
     const tagEvento  = d.es_evento
-      ? `<span class="tag evento" title="${d.evento_desc || ''}">⚡ Evento</span>`
-      : `<span style="color:var(--muted);font-size:11px">—</span>`;
+      ? `<span class="tag evento" title="${d.evento_desc || ''}">? Evento</span>`
+      : `<span style="color:var(--muted);font-size:11px">?</span>`;
     html += `<tr style="cursor:pointer" onclick="selectDay('${d.fecha}')">
       <td style="font-family:var(--mono)">${d.fecha}</td>
       <td style="font-family:var(--mono)">${fmtN(Math.round(d.bultos))}</td>
@@ -800,8 +807,8 @@ function renderTablaDias() {
       <td style="font-family:var(--mono);color:${(d.pct_rechazo_bultos ?? 0) > 5 ? 'var(--red)' : 'var(--grn)'}">${d.pct_rechazo_bultos ?? 0}%</td>
       <td><span class="pct-pill ${(d.pct_rechazo_hl ?? 0) > 5 ? 'bad' : 'ok'}">${fmtPct1(d.pct_rechazo_hl ?? 0)}</span></td>
       <td style="font-family:var(--mono)">${d.dot?.tiene_datos ? d.dot.total_camiones : d.camiones_salidos}</td>
-      <td style="font-family:var(--mono)">${d.dot?.s1 ? `${d.dot.s1.personas}p` : '<span style="color:var(--muted)">—</span>'}</td>
-      <td style="font-family:var(--mono)">${d.dot?.tiene_s2 ? `<span style="color:var(--grn);font-weight:600">${d.dot.s2?.personas ?? 0}p</span>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td style="font-family:var(--mono)">${d.dot?.s1 ? `${d.dot.s1.personas}p` : '<span style="color:var(--muted)">?</span>'}</td>
+      <td style="font-family:var(--mono)">${d.dot?.tiene_s2 ? `<span style="color:var(--grn);font-weight:600">${d.dot.s2?.personas ?? 0}p</span>` : '<span style="color:var(--muted)">?</span>'}</td>
       <td>${tagPico}</td>
       <td>${tagFeriado}</td>
       <td>${tagEvento}</td>
@@ -817,7 +824,7 @@ async function selectDay(k) {
   openDrawer(k);
 }
 
-// ─── HISTÓRICO ────────────────────────────────────────────────
+// // ? HIST?RICO ────────────────────────────────────────────────
 async function loadHistorico() {
   const seq = ++_loadHistSeq;
   if (_histAbort) _histAbort.abort();
@@ -830,6 +837,10 @@ async function loadHistorico() {
   if (historicoPicosChart) {
     historicoPicosChart.destroy();
     historicoPicosChart = null;
+  }
+  if (historicoVolumenChart) {
+    historicoVolumenChart.destroy();
+    historicoVolumenChart = null;
   }
   load('barHistorico'); load('picosAnualHistorico'); load('tablaHistorico');
   const nValue = document.getElementById('selPeriodoHist').value;
@@ -847,6 +858,7 @@ async function loadHistorico() {
       document.getElementById('barHistorico').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin datos históricos</div>';
       document.getElementById('tablaHistorico').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin datos para la tabla</div>';
       await loadHistoricoPicosAnual(seq, suc, m, u, meses);
+      await loadHistoricoVolumenAnual(seq, suc, m, u, meses);
       return;
     }
     document.getElementById('barHistorico').innerHTML = '<div class="chart-wrap" style="height:280px"><canvas id="histChart"></canvas></div>';
@@ -857,13 +869,14 @@ async function loadHistorico() {
       visibles.map(x => Number(x.dias_pico || 0))
     );
     await loadHistoricoPicosAnual(seq, suc, m, u, meses);
+    await loadHistoricoVolumenAnual(seq, suc, m, u, meses);
 
     let html = `<table class="rtbl"><thead><tr>
       <th>Mes</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>UP</th><th>PDV atendidos</th><th>PDV únicos</th>
       <th>% rechazo PDV</th><th>% rechazo blt.</th><th>% rechazo HL</th><th>Salidas</th><th>Días</th><th>Días pico</th>
     </tr></thead><tbody>`;
     visibles.forEach(x => {
-      const picoTitle = `Metrica: ${metricSummaryLabel(x.metrica_pico || m)} | Prom.: ${fmtN(Math.round(x.promedio_pico || 0))} | Umbral: ${fmtN(Math.round(x.umbral_pico || 0))}`;
+      const picoTitle = `Métrica: ${metricSummaryLabel(x.metrica_pico || m)} | Prom.: ${fmtN(Math.round(x.promedio_pico || 0))} | Umbral: ${fmtN(Math.round(x.umbral_pico || 0))}`;
       html += `<tr>
         <td style="font-family:var(--mono)">${x.mes}</td>
         <td style="font-family:var(--mono)">${fmtN(Math.round(x.bultos))}</td>
@@ -943,7 +956,7 @@ function renderHistoricoChart(labels, values, metric, picos = []) {
         tooltip: {
           callbacks: {
             label: ctx => ctx.dataset.yAxisID === 'yPicos'
-              ? `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} días`
+              ? `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} d?as`
               : `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))}`,
           },
         },
@@ -996,6 +1009,126 @@ async function loadHistoricoPicosAnual(seq, suc, metric, umbralValue, mesesBase 
   }
 }
 
+function buildHistoricoAnualComparison(meses, metric) {
+  const years = [...new Set((meses || []).map(x => Number(String(x.mes).slice(0, 4))).filter(Boolean))].sort((a, b) => a - b);
+  if (years.length < 2) return null;
+  const anioActual = years[years.length - 1];
+  const anioAnterior = years.includes(anioActual - 1) ? anioActual - 1 : years[years.length - 2];
+  const prev = Array(12).fill(null);
+  const curr = Array(12).fill(null);
+
+  (meses || []).forEach(x => {
+    const [yy, mm] = String(x.mes || '').split('-').map(Number);
+    if (!yy || !mm || mm < 1 || mm > 12) return;
+    const value = Number(x[metric] || 0);
+    if (yy === anioAnterior) prev[mm - 1] = value;
+    if (yy === anioActual) curr[mm - 1] = value;
+  });
+
+  return { anioAnterior, anioActual, prev, curr };
+}
+
+async function loadHistoricoVolumenAnual(seq, suc, metric, umbralValue, mesesBase = null) {
+  const cont = document.getElementById('volumenAnualHistorico');
+  if (!cont) return;
+  const meta = document.getElementById('volumenAnualMeta');
+  if (meta) meta.textContent = `Métrica: ${metricSummaryLabel(metric)}`;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando... comparación anual...</div>';
+  try {
+    const meses = Array.isArray(mesesBase)
+      ? mesesBase
+      : (await api(
+          `/api/picos/historico?sucursal=${encodeURIComponent(suc)}&meses=24&umbral=${umbralValue}&metrica=${metric}`,
+          { signal: _histAbort.signal }
+        )).meses || [];
+    if (
+      seq !== _loadHistSeq ||
+      suc !== getSuc() ||
+      metric !== document.getElementById('selMetrica').value ||
+      umbralValue !== document.getElementById('sliderUmbral').value
+    ) return;
+    const comp = buildHistoricoAnualComparison(meses, metric);
+    if (!comp) {
+      cont.innerHTML = '<div class="empty"><div class="icon">📈</div>Sin datos suficientes para comparar años</div>';
+      return;
+    }
+    cont.innerHTML = '<div class="chart-wrap" style="height:260px"><canvas id="histVolumenChart"></canvas></div>';
+    historicoVolumenChart = renderHistoricoVolumenAnualChart(comp, metric);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    errBox('volumenAnualHistorico', 'Error al cargar comparación anual: ' + e.message);
+  }
+}
+
+function renderHistoricoVolumenAnualChart(comp, metric) {
+  if (!window.Chart) return historicoVolumenChart;
+  const el = document.getElementById('histVolumenChart');
+  if (!el) return historicoVolumenChart;
+  if (historicoVolumenChart) historicoVolumenChart.destroy();
+
+  const maxVal = Math.max(5, ...comp.prev.filter(v => v != null), ...comp.curr.filter(v => v != null));
+  const metricLabel = metricSummaryLabel(metric);
+
+  return new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: MES_CORTO,
+      datasets: [{
+        label: `${metricLabel} ${comp.anioAnterior}`,
+        data: comp.prev,
+        borderColor: '#5b8dee',
+        backgroundColor: 'rgba(91,141,238,.15)',
+        pointBackgroundColor: '#5b8dee',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#8fb3ff',
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
+      }, {
+        label: `${metricLabel} ${comp.anioActual}`,
+        data: comp.curr,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,.16)',
+        pointBackgroundColor: '#f5a623',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#f5a623',
+        valueFormatter: raw => fmtN(Math.round(raw || 0)),
+      }],
+    },
+    plugins: [chartValueLabels],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: {
+          beginAtZero: true,
+          suggestedMax: maxVal + 1,
+          ticks: { color: '#6b7080', callback: value => fmtN(Math.round(value)) },
+          grid: { color: 'rgba(42,46,58,.35)' },
+        },
+      },
+    },
+  });
+}
+
 function renderHistoricoPicosAnualChart(meses) {
   if (!window.Chart) return historicoPicosChart;
   const el = document.getElementById('histPicosChart');
@@ -1024,7 +1157,7 @@ function renderHistoricoPicosAnualChart(meses) {
     data: {
       labels,
       datasets: [{
-        label: `Días pico año anterior (${anioAnterior})`,
+        label: `Días pico a?o anterior (${anioAnterior})`,
         data: prev,
         borderColor: '#5b8dee',
         backgroundColor: 'rgba(91,141,238,.15)',
@@ -1037,7 +1170,7 @@ function renderHistoricoPicosAnualChart(meses) {
         labelColor: '#8fb3ff',
         valueFormatter: raw => fmtN(Math.round(raw || 0)),
       }, {
-        label: `Días pico año actual (${anioActual})`,
+        label: `Días pico a?o actual (${anioActual})`,
         data: curr,
         borderColor: '#f5a623',
         backgroundColor: 'rgba(245,166,35,.16)',
@@ -1062,7 +1195,7 @@ function renderHistoricoPicosAnualChart(meses) {
         chartValueLabels: { hideZero: false },
         tooltip: {
           callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} días`,
+            label: ctx => `${ctx.dataset.label}: ${fmtN(Math.round(ctx.parsed.y || 0))} d?as`,
           },
         },
       },
@@ -1080,10 +1213,15 @@ function renderHistoricoPicosAnualChart(meses) {
 }
 
 function ventaDiaFormat(metric, value) {
-  if (value == null || Number.isNaN(Number(value))) return '—';
+  if (value == null || Number.isNaN(Number(value))) return '?';
   if (metric === 'pallets') return fmtDrop(value);
   if (metric === 'hectolitros') return fmt1(value);
   if (metric === 'salidas') return fmtN(Math.round(value));
+  return fmtN(Math.round(value));
+}
+
+function ventaDiaHeatmapIntFormat(value) {
+  if (value == null || Number.isNaN(Number(value))) return '?';
   return fmtN(Math.round(value));
 }
 
@@ -1163,14 +1301,29 @@ function updateVentaDiaFilterHint() {
     : 'mes seleccionado';
   const fmtHintDate = value => value ? value.split('-').reverse().join('/') : 'sin definir';
   const labels = {
-    todo: 'Todo el hist?rico: usa el mes con mayor acumulado dentro del filtro activo.',
-    mes: `Mes ${mesLabel}: usa el mes seleccionado y no necesita a?o separado.`,
-    anio: `A?o ISO ${anio}: compara el a?o completo y toma el mes con mayor acumulado para el heatmap.`,
-    semana: `Semana ISO ${semana}: cruza la semana seleccionada con el a?o ISO ${anio}.`,
+    todo: 'Todo el histórico: usa el mes con mayor acumulado dentro del filtro activo.',
+    mes: `Mes ${mesLabel}: usa el mes seleccionado y no necesita año separado.`,
+    anio: `Año ISO ${anio}: compara el año completo y toma el mes con mayor acumulado para el mapa de calor.`,
+    semana: `Semana ISO ${semana}: cruza la semana seleccionada con el año ISO ${anio}.`,
     rango: `Rango ${fmtHintDate(desde)} a ${fmtHintDate(hasta)}: toma el mes con mayor acumulado dentro del rango.`,
   };
 
   box.textContent = labels[tipo] || labels.todo;
+}
+
+function reloadVentaDiaIfVisible() {
+  if (!isTabVisible('tab-venta-dia')) return;
+  const periodo = document.getElementById('ventaDiaPeriodo')?.value || 'todo';
+  const anio = document.getElementById('ventaDiaAnio')?.value || '';
+  const semana = document.getElementById('ventaDiaSemana')?.value || '';
+  const desde = document.getElementById('ventaDiaDesde')?.value || '';
+  const hasta = document.getElementById('ventaDiaHasta')?.value || '';
+
+  if (periodo === 'anio' && !anio) return;
+  if (periodo === 'semana' && (!anio || !semana)) return;
+  if (periodo === 'rango' && (!desde || !hasta)) return;
+
+  loadVentaDia();
 }
 
 function updateVentaDiaPeriodoUI() {
@@ -1202,6 +1355,16 @@ function updateVentaDiaPeriodoUI() {
   }
 
   updateVentaDiaFilterHint();
+}
+
+function onVentaDiaPeriodoChange() {
+  updateVentaDiaPeriodoUI();
+  reloadVentaDiaIfVisible();
+}
+
+function onVentaDiaFilterChange() {
+  updateVentaDiaFilterHint();
+  reloadVentaDiaIfVisible();
 }
 
 function ventaDiaQueryParams(extra = {}) {
@@ -1322,7 +1485,7 @@ function ventaDiaMetricBreakdown(metricData) {
   const rows = (metricData?.filas || []).filter(row => !row.es_total);
   const items = rows
     .map(row => ({
-      label: row.sucursal || row.sucursal_id || '—',
+      label: row.sucursal || row.sucursal_id || '?',
       value: Number(row.total || 0),
     }))
     .filter(item => item.value > 0)
@@ -1437,7 +1600,7 @@ function renderVentaDiaTable(metricKey, metricLabel, metricData) {
 
   filas.forEach(row => {
     html += `<tr>
-      <td>${esc(row.sucursal || row.sucursal_id || '—')}</td>
+      <td>${esc(row.sucursal || row.sucursal_id || '?')}</td>
       ${(row.dias || []).map(v => `<td style="font-family:var(--mono);text-align:right">${ventaDiaFormat(metricKey, v)}</td>`).join('')}
       <td style="font-family:var(--mono);text-align:right;font-weight:600">${ventaDiaFormat(metricKey, row.total)}</td>
     </tr>`;
@@ -1459,8 +1622,8 @@ function renderVentaDiaCharts(data) {
   const comp = data?.comparativo_semanal || {};
   const metricas = comp.metricas || {};
   const semanas = (comp.semanas || []).map(s => String(s));
-  const yearLabel = comp.anio ? String(comp.anio) : 'Año seleccionado';
-  const prevLabel = comp.anio_anterior ? String(comp.anio_anterior) : 'Año anterior';
+  const yearLabel = comp.anio ? String(comp.anio) : 'Anio seleccionado';
+  const prevLabel = comp.anio_anterior ? String(comp.anio_anterior) : 'Anio anterior';
   const metrics = [
     ['hectolitros', 'Hectolitros'],
     ['bultos', 'Bultos'],
@@ -1541,8 +1704,8 @@ function renderVentaDiaComparativoKpis(data) {
 
   const comp = data?.comparativo_semanal || {};
   const metricas = comp.metricas || {};
-  const yearLabel = comp.anio ? String(comp.anio) : 'Año seleccionado';
-  const prevLabel = comp.anio_anterior ? String(comp.anio_anterior) : 'Año anterior';
+  const yearLabel = comp.anio ? String(comp.anio) : 'Anio seleccionado';
+  const prevLabel = comp.anio_anterior ? String(comp.anio_anterior) : 'Anio anterior';
   const metrics = [
     ['hectolitros', 'Hectolitros', 'pur'],
     ['bultos', 'Bultos', 'blu'],
@@ -1561,7 +1724,7 @@ function renderVentaDiaComparativoKpis(data) {
     const anterior = m.total_anterior;
     const varPct = m.variacion_pct;
     const trendColor = varPct == null ? 'var(--muted)' : (varPct >= 0 ? 'var(--grn)' : 'var(--red)');
-    const trendIcon = varPct == null ? '•' : (varPct >= 0 ? '▲' : '▼');
+    const trendText = varPct == null ? 'n/d' : fmtDelta(varPct);
     html += `
       <div class="kpi ${colorClass}" style="min-height:110px">
         <div class="kpi-lbl">${esc(metricLabel)}</div>
@@ -1569,7 +1732,7 @@ function renderVentaDiaComparativoKpis(data) {
         <div style="margin-top:6px;font-size:11px;color:var(--muted);line-height:1.35">
           ${esc(yearLabel)}: <span style="color:var(--txt);font-weight:600">${ventaDiaFormat(metricKey, actual)}</span><br>
           ${esc(prevLabel)}: <span style="color:var(--txt);font-weight:600">${ventaDiaFormat(metricKey, anterior)}</span><br>
-          <span style="color:${trendColor};font-weight:700">${trendIcon} ${varPct == null ? 'n/d' : `${fmtPct(varPct)}`}</span>
+          <span style="color:${trendColor};font-weight:700">Cambio: ${trendText}</span>
         </div>
       </div>
     `;
@@ -1668,7 +1831,7 @@ function renderVentaDiaHeatmapBox(boxId, heatmap) {
         <span class="vd-heatmap-scale-label">Bajo</span>
         <span class="vd-heatmap-scale-bar"></span>
         <span class="vd-heatmap-scale-label">Alto</span>
-        <span class="vd-heatmap-scale-label">Escala: ${ventaDiaFormat(metric, minVal)} - ${ventaDiaFormat(metric, maxVal)}</span>
+        <span class="vd-heatmap-scale-label">Escala: ${ventaDiaHeatmapIntFormat(minVal)} - ${ventaDiaHeatmapIntFormat(maxVal)}</span>
       </div>
     </div>
     <div class="vd-heatmap-shell">
@@ -1696,7 +1859,7 @@ function renderVentaDiaHeatmapBox(boxId, heatmap) {
       html += `
         <td class="vd-heatmap-cell ${paint.zero ? 'vd-heatmap-zero' : ''}">
           <div class="vd-heatmap-value" title="${esc(title)}" style="background:${paint.bg};color:${paint.fg};border-color:${paint.border}">
-            ${ventaDiaFormat(metric, num)}
+            ${ventaDiaHeatmapIntFormat(num)}
           </div>
         </td>`;
     });
@@ -1796,7 +1959,7 @@ async function loadVentaDia() {
     const heatmapPeriod = heatmapHectolitros.periodo_label || heatmapSalidas.periodo_label || heatmapPersonas.periodo_label || 'sin mes';
     const meta = document.getElementById('ventaDiaMeta');
     if (meta) {
-      meta.textContent = `Sucursal: ${filtros.sucursal_label || getSuc()} | Período: ${data.periodo || 'Todo el histórico'} | Comparativo ISO: ${comp.anio || filtros.anio || '—'} vs ${comp.anio_anterior || '—'} | Mapas de calor: ${heatmapPeriod} | Hectolitros, Salidas y Personas con el mismo filtro.`;
+      meta.textContent = `Sucursal: ${filtros.sucursal_label || getSuc()} | Período: ${data.periodo || 'Todo el histórico'} | Comparativo ISO: ${comp.anio || filtros.anio || '?'} vs ${comp.anio_anterior || '?'} | Mapas de calor: ${heatmapPeriod} | Hectolitros, Salidas y Personas con el mismo filtro.`;
     }
 
     const metricas = data.metricas || {};
@@ -1934,9 +2097,9 @@ function experienciaFilterLabelText(filtros = {}, periodoLabel = null) {
   const metric = filtros.metrica || document.getElementById('expMetrica')?.value || 'nps';
   const estado = filtros.estado || document.getElementById('expEstado')?.value || 'TODOS';
   return [
-    `Periodo: ${periodoLabel || document.getElementById('expPeriodo')?.value || '-'}`,
+    `Período: ${periodoLabel || document.getElementById('expPeriodo')?.value || '-'}`,
     `Sucursal: ${selectedOptionText('expSucursal', filtros.sucursal || 'TODAS')}`,
-    `Metrica: ${experienciaMetricLabel(metric)}`,
+    `Métrica: ${experienciaMetricLabel(metric)}`,
     `Localidad: ${filtros.localidad && filtros.localidad !== 'TODAS' ? filtros.localidad : selectedOptionText('expLocalidad', 'Todas')}`,
     `Canal: ${filtros.tipo_negocio && filtros.tipo_negocio !== 'TODAS' ? filtros.tipo_negocio : selectedOptionText('expTipoNegocio', 'Todos')}`,
     `Estado: ${estado === 'TODOS' ? 'Todos' : experienciaStateLabel(estado)}`,
@@ -2053,7 +2216,7 @@ function resetExperienciaLeafletMap() {
 
 function experienciaClientePopupRows(clientes) {
   const rows = clientes || [];
-  if (!rows.length) return '<div style="color:#7f8aa3;font-size:11px;margin-top:6px">Sin clientes evaluados para esta metrica.</div>';
+  if (!rows.length) return '<div style="color:#7f8aa3;font-size:11px;margin-top:6px">Sin clientes evaluados para esta métrica.</div>';
   return `
     <div style="margin-top:8px;max-height:240px;overflow:auto;border:1px solid rgba(91,141,238,.18);border-radius:10px">
       <table style="width:100%;border-collapse:collapse;font-size:10.5px">
@@ -2407,13 +2570,13 @@ async function loadExperienciaClientes() {
   const ids = ['expKpis', 'expSemaforo', 'expLocalidadTable'];
   ids.forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando...</div>';
+    if (el) el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando......</div>';
   });
   const map = document.getElementById('expMap');
   resetExperienciaLeafletMap();
   if (map) {
     map.classList.remove('leaflet-ready');
-    map.innerHTML = '<div class="exp-map-empty">Cargando mapa...</div>';
+    map.innerHTML = '<div class="exp-map-empty">Cargando... mapa...</div>';
   }
   destroyExperienciaCharts();
   const meta = document.getElementById('expMeta');
@@ -2523,8 +2686,8 @@ async function loadAnalisisHl() {
       <div class="kpi pur"><div class="kpi-lbl">RMCYO HL</div><div class="kpi-val pur">${fmtN(Math.round(tot.rmcyo_hl || 0))}</div></div>
       <div class="kpi red"><div class="kpi-lbl">RMCYO HL rechazados</div><div class="kpi-val red">${fmt1(tot.rmcyo_rechazo_hl || 0)}</div></div>
       <div class="kpi red"><div class="kpi-lbl">% RMCYO rechazo HL</div><div class="kpi-val red">${fmtPct1(tot.rmcyo_pct_rechazo_hl || 0)}</div></div>
-      <div class="kpi ora"><div class="kpi-lbl">Peor mes</div><div class="kpi-val ora" style="font-size:18px">${tot.peor_mes || '—'} ${fmtPct(tot.peor_pct_rechazo_hl || 0)}</div></div>
-      <div class="kpi blu"><div class="kpi-lbl">Mejor mes</div><div class="kpi-val blu" style="font-size:18px">${tot.mejor_mes || '—'} ${fmtPct(tot.mejor_pct_rechazo_hl || 0)}</div></div>
+      <div class="kpi ora"><div class="kpi-lbl">Peor mes</div><div class="kpi-val ora" style="font-size:18px">${tot.peor_mes || '?'} ${fmtPct(tot.peor_pct_rechazo_hl || 0)}</div></div>
+      <div class="kpi blu"><div class="kpi-lbl">Mejor mes</div><div class="kpi-val blu" style="font-size:18px">${tot.mejor_mes || '?'} ${fmtPct(tot.mejor_pct_rechazo_hl || 0)}</div></div>
     `;
 
     const maxHl = Math.max(...meses.map(x => x.hl_total || 0), 1);
@@ -2560,7 +2723,7 @@ async function loadAnalisisHl() {
     let table = `<table class="rtbl"><thead><tr>
       <th>Mes</th><th>HL desp.</th><th>Total HL rechazados</th><th>HL rechazo parcial</th><th>HL rechazo completo</th><th>% rechazo HL</th>
       <th>Bultos desp.</th><th>Total bultos rechazados</th><th>Bultos rechazo parcial</th><th>Bultos rechazo completo</th><th>% rechazo bultos</th>
-      <th>RMCYO HL</th><th>RMCYO HL rechazados</th><th>PDV rechazados</th><th>Salidas</th><th>Dias</th>
+      <th>RMCYO HL</th><th>RMCYO HL rechazados</th><th>PDV rechazados</th><th>Salidas</th><th>Días</th>
     </tr></thead><tbody>`;
     meses.forEach(x => {
       table += `<tr>
@@ -2587,7 +2750,7 @@ async function loadAnalisisHl() {
 
     const motivos = data.motivos || [];
     if (!motivos.length) {
-      document.getElementById('analisisHlMotivos').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin rechazos tomados para el periodo</div>';
+      document.getElementById('analisisHlMotivos').innerHTML = '<div class="empty"><div class="icon">📋</div>Sin rechazos tomados para el período</div>';
       return;
     }
     let mot = `<table class="rtbl"><thead><tr>
@@ -2669,7 +2832,7 @@ function kpiGoalBadge(item) {
   const signo = obj.direccion === 'max' ? '<=' : '>=';
   const alerta = obj.alerta == null ? '' : ` / alerta ${fmtDrop(obj.alerta)}${obj.unidad || ''}`;
   const txt = `${obj.nombre}: ${signo} ${fmtDrop(obj.objetivo)}${obj.unidad || ''}${alerta}`;
-  return `<div style="margin-top:6px"><span class="traffic ${item.estado}" title="${esc(txt)}">${item.label}</span></div>`;
+  return `<div class="kpi-goal"><span class="traffic ${item.estado}" title="${esc(txt)}">${item.label}</span></div>`;
 }
 
 function dropDeltaColor(v) {
@@ -2680,7 +2843,7 @@ function dropDeltaColor(v) {
 function renderDropsizeKpis(d) {
   document.getElementById('dropKpis').innerHTML = `
     <div class="kpi-section">Clientes</div>
-    <div class="kpi blu"><div class="kpi-lbl">Clientes entregados</div><div class="kpi-val blu">${fmtN(d.clientes_entregados || 0)}</div></div>
+    <div class="kpi blu"><div class="kpi-lbl">Entregas consolidadas</div><div class="kpi-val blu">${fmtN(d.entregas_consolidadas || d.clientes_entregados || 0)}</div></div>
 
     <div class="kpi-section">Bultos</div>
     <div class="kpi ora"><div class="kpi-lbl">Total bultos</div><div class="kpi-val ora">${fmtN(Math.round(d.total_bultos || 0))}</div></div>
@@ -2744,7 +2907,7 @@ function renderDropsizeDiaria(data) {
     return;
   }
   let html = `<table class="rtbl"><thead><tr>
-    <th>Fecha</th><th>Clientes</th><th>Bultos</th><th>HL</th><th>Pallets</th>
+    <th>Fecha</th><th>Entregas</th><th>Bultos</th><th>HL</th><th>Pallets</th>
     <th>Drop bultos</th><th>Drop HL</th><th>Drop pallets</th>
   </tr></thead><tbody>`;
   dias.forEach(x => {
@@ -2774,18 +2937,21 @@ function renderDropsizeMensual(data) {
 
 function renderDropsizeRanking(data) {
   const rows = data.ranking || [];
+  const agrupacionLabel = data.agrupacion_label || 'Agrupación';
   if (!rows.length) {
     document.getElementById('dropRanking').innerHTML = '<div class="empty"><div class="icon">📊</div>Sin ranking</div>';
     return;
   }
   let html = `<table class="rtbl"><thead><tr>
-    <th>#</th><th>Sucursal</th><th>Clientes</th><th>Drop bultos</th><th>Drop HL</th><th>Drop pallets</th>
+    <th>#</th><th>${esc(agrupacionLabel)}</th><th>Entregas</th><th>Drop bultos</th><th>Drop HL</th><th>Drop pallets</th>
   </tr></thead><tbody>`;
   rows.forEach(x => {
+    const grupo = x.grupo || x.sucursal || x.grupo_id || '';
+    const entregas = x.entregas_consolidadas || x.clientes_entregados || 0;
     html += `<tr>
       <td style="font-family:var(--mono)">${x.ranking}</td>
-      <td>${esc(x.sucursal)}</td>
-      <td style="font-family:var(--mono)">${fmtN(x.clientes_entregados || 0)}</td>
+      <td>${esc(grupo)}</td>
+      <td style="font-family:var(--mono)">${fmtN(entregas)}</td>
       <td style="font-family:var(--mono);color:var(--acc)">${fmtDrop(x.dropsize_bultos || 0)}</td>
       <td style="font-family:var(--mono);color:var(--pur)">${fmtDrop(x.dropsize_hl || 0)}</td>
       <td style="font-family:var(--mono);color:var(--grn)">${fmtDrop(x.dropsize_pallets || 0)}</td>
@@ -2799,8 +2965,12 @@ function renderDropsizeComparativo(data) {
   const actual = data.actual || {};
   const prev = data.mes_anterior || {};
   const aa = data.anio_anterior || {};
+  const actualRange = data?.periodo_actual?.fecha_desde && data?.periodo_actual?.fecha_hasta
+    ? `${data.periodo_actual.fecha_desde} al ${data.periodo_actual.fecha_hasta}`
+    : 'rango actual';
+  const actualDays = data?.periodo_actual?.dias ? `${data.periodo_actual.dias} días` : 'mismo número de días';
   const rows = [
-    ['Clientes', 'clientes_entregados', v => fmtN(v || 0)],
+    ['Entregas', 'clientes_entregados', v => fmtN(v || 0)],
     ['Bultos', 'total_bultos', v => fmtN(Math.round(v || 0))],
     ['HL', 'total_hl', v => fmtN(Math.round(v || 0))],
     ['Pallets', 'total_pallets', v => fmtDrop(v || 0)],
@@ -2808,8 +2978,11 @@ function renderDropsizeComparativo(data) {
     ['Drop HL', 'dropsize_hl', v => fmtDrop(v || 0)],
     ['Drop pallets', 'dropsize_pallets', v => fmtDrop(v || 0)],
   ];
-  let html = `<table class="rtbl"><thead><tr>
-    <th>Indicador</th><th>Actual</th><th>Mes ant.</th><th>Var.</th><th>Año ant.</th><th>Var.</th>
+  let html = `<div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.4">
+    Compara ${esc(actualRange)} (${actualDays}) contra la ventana equivalente del período anterior y del año anterior.
+  </div>`;
+  html += `<table class="rtbl"><thead><tr>
+    <th>Indicador</th><th>Actual</th><th>Ventana ant.</th><th>Var.</th><th>Año ant.</th><th>Var.</th>
   </tr></thead><tbody>`;
   rows.forEach(([label, key, fmt]) => {
     const vm = prev.variacion_pct?.[key];
@@ -2833,7 +3006,7 @@ function renderDropsizePicos(data) {
     document.getElementById('dropPicos').innerHTML = '<div class="empty"><div class="icon">📈</div>Sin días pico en el período</div>';
     return;
   }
-  let html = `<table class="rtbl"><thead><tr><th>Fecha</th><th>Motivo</th><th>Clientes</th><th>Bultos</th><th>HL</th><th>Pallets</th></tr></thead><tbody>`;
+  let html = `<table class="rtbl"><thead><tr><th>Fecha</th><th>Motivo</th><th>Entregas</th><th>Bultos</th><th>HL</th><th>Pallets</th></tr></thead><tbody>`;
   rows.forEach(x => {
     html += `<tr>
       <td style="font-family:var(--mono)">${x.fecha}</td>
@@ -2855,7 +3028,7 @@ function renderDropsizeObjetivos(rows) {
     return;
   }
   let html = `<table class="rtbl"><thead><tr>
-    <th>Sucursal</th><th>Unidad</th><th>Mínimo</th><th>Ideal</th><th>Desde</th><th>Hasta</th><th>Estado</th><th></th>
+    <th>Sucursal</th><th>Unidad</th><th>M?nimo</th><th>Ideal</th><th>Desde</th><th>Hasta</th><th>Estado</th><th></th>
   </tr></thead><tbody>`;
   dropsizeObjetivos.forEach(x => {
     html += `<tr>
@@ -2864,7 +3037,7 @@ function renderDropsizeObjetivos(rows) {
       <td style="font-family:var(--mono)">${fmtDrop(x.objetivo_minimo)}</td>
       <td style="font-family:var(--mono)">${fmtDrop(x.objetivo_ideal)}</td>
       <td style="font-family:var(--mono)">${x.fecha_desde}</td>
-      <td style="font-family:var(--mono)">${x.fecha_hasta || '—'}</td>
+      <td style="font-family:var(--mono)">${x.fecha_hasta || '?'}</td>
       <td>${x.activo ? '<span class="tag ok">Activo</span>' : '<span class="tag err">Inactivo</span>'}</td>
       <td style="display:flex;gap:4px"><button class="btn sm" onclick="editDropsizeObjetivo(${x.id})">Editar</button><button class="btn sm danger" onclick="deleteDropsizeObjetivo(${x.id})">Eliminar</button></td>
     </tr>`;
@@ -2891,7 +3064,9 @@ async function loadDropsize() {
   ['dropKpis', 'dropRanking', 'dropComparativo', 'dropTabla', 'dropPicos'].forEach(load);
   const q = dropsizeQuery();
   const monthlyQ = new URLSearchParams({ sucursal: getDropSuc(), mes: document.getElementById('dropMes')?.value || mesPad(), meses: document.getElementById('selPeriodoHist').value || '12' });
-  const rankQ = dropsizeQuery({ unidad: document.getElementById('dropRankingUnidad').value });
+  const rankUnidad = document.getElementById('dropRankingUnidad')?.value || 'bultos';
+  const rankAgrupacion = document.getElementById('dropRankingAgrupacion')?.value || 'sucursal';
+  const rankQ = dropsizeQuery({ unidad: rankUnidad, agrupacion: rankAgrupacion });
 
   try {
     const [resumen, diaria, mensual, ranking, comparativo, picos] = await Promise.all([
@@ -2899,7 +3074,7 @@ async function loadDropsize() {
       api(`/api/dropsize/evolucion_diaria?${q}`, { signal: _dropAbort.signal }),
       api(`/api/dropsize/evolucion_mensual?${monthlyQ.toString()}`, { signal: _dropAbort.signal }),
       api(`/api/dropsize/ranking_sucursales?${rankQ}`, { signal: _dropAbort.signal }),
-      api(`/api/dropsize/comparativo?sucursal=${getDropSuc()}&mes=${document.getElementById('dropMes')?.value || mesPad()}`, { signal: _dropAbort.signal }),
+      api(`/api/dropsize/comparativo?${dropsizeQuery()}`, { signal: _dropAbort.signal }),
       api(`/api/dropsize/dias_pico?${dropsizeQuery({ metrica: document.getElementById('dropPicoMetrica').value })}`, { signal: _dropAbort.signal }),
     ]);
     if (seq !== _loadDropSeq) return;
@@ -2986,7 +3161,7 @@ async function saveDropsizeObjetivo() {
 async function recalcularDropsize() {
   const msg = document.getElementById('dropObjMsg');
   msg.style.color = 'var(--muted)';
-  msg.textContent = 'Recalculando historico...';
+  msg.textContent = 'Recalculando histórico...';
   try {
     const r = await fetch(API + '/api/dropsize/recalcular', {
       method: 'POST',
@@ -3001,7 +3176,7 @@ async function recalcularDropsize() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error || 'Error');
     msg.style.color = 'var(--grn)';
-    msg.textContent = `Historico recalculado: ${fmtN(data.registros || 0)} filas`;
+    msg.textContent = `Histórico recalculado: ${fmtN(data.registros || 0)} filas`;
     await loadDropsize();
   } catch (e) {
     msg.style.color = 'var(--red)';
@@ -3052,9 +3227,9 @@ async function loadDayDetail(fecha) {
 
     if (di.es_evento && di.evento_desc) {
       html += `<div style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.45);border-radius:6px;padding:10px 14px;font-size:12px">
-        <span style="font-weight:600;color:var(--red)">⚡ Evento especial</span>
+        <span style="font-weight:600;color:var(--red)">âš¡ Evento especial</span>
         <span style="color:var(--muted);margin-left:8px">${di.evento_desc}</span>
-        <div style="margin-top:4px;font-size:11px;color:var(--muted)">La venta de este día se distribuye antes o después.</div>
+        <div style="margin-top:4px;font-size:11px;color:var(--muted)">La venta de este d?a se distribuye antes o despu?s.</div>
       </div>`;
     }
     if (di.es_feriado && di.feriado_desc) {
@@ -3069,7 +3244,7 @@ async function loadDayDetail(fecha) {
         <div class="kpi ora"><div class="kpi-lbl">Bultos desp.</div><div class="kpi-val ora" style="font-size:18px">${fmtN(Math.round(di.bultos))}</div></div>
         <div class="kpi pur"><div class="kpi-lbl">HL desp.</div><div class="kpi-val pur" style="font-size:18px">${fmtN(Math.round(di.hectolitros))}</div></div>
         <div class="kpi grn"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val grn" style="font-size:18px">${fmtN(di.pedidos || 0)}</div></div>
-        <div class="kpi pur"><div class="kpi-lbl">Clientes únicos</div><div class="kpi-val pur" style="font-size:18px">${fmtN(d?.clientes_unicos || di.clientes_unicos || 0)}</div></div>
+        <div class="kpi pur"><div class="kpi-lbl">Clientes ?nicos</div><div class="kpi-val pur" style="font-size:18px">${fmtN(d?.clientes_unicos || di.clientes_unicos || 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_pedidos ?? 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_bultos ?? 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_hl ?? 0)}</div></div>
@@ -3089,22 +3264,22 @@ async function loadDayDetail(fecha) {
       html += `<div class="sec">Disponibilidad</div>`;
       disp.forEach(r => {
         html += `<div class="box" style="padding:10px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div><div style="font-size:9px;color:var(--muted)">CAMIONES DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--grn)">${r.camiones_disponibles || '—'}</div></div>
-          <div><div style="font-size:9px;color:var(--muted)">EN TALLER</div><div style="font-family:var(--mono);font-size:18px;color:var(--red)">${r.camiones_en_taller || '—'}</div></div>
-          <div><div style="font-size:9px;color:var(--muted)">PERSONAS DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--blu)">${r.personas_disponibles || '—'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">CAMIONES DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--grn)">${r.camiones_disponibles || '?'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">EN TALLER</div><div style="font-family:var(--mono);font-size:18px;color:var(--red)">${r.camiones_en_taller || '?'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">PERSONAS DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--blu)">${r.personas_disponibles || '?'}</div></div>
         </div>`;
       });
     }
 
     if (d?.planillas?.length) {
-      html += `<div class="sec">Salidas únicas (${d.salidas_unicas || d.planillas.length})</div>`;
+      html += `<div class="sec">Salidas ?nicas (${d.salidas_unicas || d.planillas.length})</div>`;
       let t = `<table class="rtbl"><thead><tr><th>Camión</th><th>Patente</th><th>Bultos</th><th>Pallets</th><th>Salida</th></tr></thead><tbody>`;
       d.planillas.forEach(p => {
-        const sal    = p.fecha_salida ? String(p.fecha_salida).slice(11, 16) : '—';
-        const camion = p.transporte || p.camion_key || '—';
+        const sal    = p.fecha_salida ? String(p.fecha_salida).slice(11, 16) : '?';
+        const camion = p.transporte || p.camion_key || '?';
         t += `<tr>
           <td style="font-family:var(--mono)">${camion}</td>
-          <td style="font-family:var(--mono)">${p.patente || '—'}</td>
+          <td style="font-family:var(--mono)">${p.patente || '?'}</td>
           <td style="font-family:var(--mono)">${fmtN(Math.round(p.bultos_totales || 0))}</td>
           <td style="font-family:var(--mono)">${Math.round(p.pallets || 0)}</td>
           <td style="font-family:var(--mono)">${sal}</td>
@@ -3116,7 +3291,7 @@ async function loadDayDetail(fecha) {
 
     if (d?.clientes_por_sucursal?.length) {
       html += `<div class="sec">Clientes por sucursal</div>
-        <table class="rtbl"><thead><tr><th>Sucursal</th><th>Clientes únicos</th></tr></thead><tbody>`;
+        <table class="rtbl"><thead><tr><th>Sucursal</th><th>Clientes ?nicos</th></tr></thead><tbody>`;
       d.clientes_por_sucursal.forEach(r => {
         html += `<tr><td>${r.sucursal || 'SIN SUCURSAL'}</td><td style="font-family:var(--mono)">${fmtN(r.clientes_unicos || 0)}</td></tr>`;
       });
@@ -3124,13 +3299,13 @@ async function loadDayDetail(fecha) {
     }
 
     if (d?.clientes?.length) {
-      html += `<div class="sec">Clientes únicos</div>
+      html += `<div class="sec">Clientes ?nicos</div>
         <table class="rtbl"><thead><tr><th>ID cliente</th><th>Cliente</th><th>Sucursal</th></tr></thead><tbody>`;
       d.clientes.slice(0, 100).forEach(c => {
         html += `<tr>
-          <td style="font-family:var(--mono)">${c.id_cliente || '—'}</td>
-          <td>${c.nombre_cliente || '—'}</td>
-          <td>${c.sucursal || '—'}</td>
+          <td style="font-family:var(--mono)">${c.id_cliente || '?'}</td>
+          <td>${c.nombre_cliente || '?'}</td>
+          <td>${c.sucursal || '?'}</td>
         </tr>`;
       });
       if (d.clientes.length > 100) {
@@ -3144,12 +3319,12 @@ async function loadDayDetail(fecha) {
       eq.forEach(r => {
         const ok = r.cargado_tiempo?.toLowerCase().includes('si') || r.cargado_tiempo === '1';
         html += `<div class="box" style="padding:10px 14px">
-          <div style="font-size:13px;font-weight:600">${r.chofer || '—'}</div>
+          <div style="font-size:13px;font-weight:600">${r.chofer || '?'}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:3px">
             🚛 ${r.camion || '?'} ${r.nro_camion ? '#' + r.nro_camion : ''}
-            ${r.ayudante1 ? ' · ' + r.ayudante1 : ''}${r.ayudante2 ? ' · ' + r.ayudante2 : ''}
-            · ${r.personas || '?'} pers. · ${r.pallets || '?'} pallets
-            ${r.kms ? ' · ' + r.kms + ' km' : ''}${r.horas ? ' · ' + r.horas + ' hs' : ''}
+            ${r.ayudante1 ? ' ? ' + r.ayudante1 : ''}${r.ayudante2 ? ' ? ' + r.ayudante2 : ''}
+            ? ${r.personas || '?'} pers. ? ${r.pallets || '?'} pallets
+            ${r.kms ? ' ? ' + r.kms + ' km' : ''}${r.horas ? ' ? ' + r.horas + ' hs' : ''}
           </div>
           ${r.cargado_tiempo ? `<div style="margin-top:5px"><span class="tag ${ok ? 'ok' : 'err'}">${ok ? '✓ A tiempo' : '✗ Tarde'}</span></div>` : ''}
         </div>`;
@@ -3157,11 +3332,11 @@ async function loadDayDetail(fecha) {
     }
 
     if (d?.top_articulos?.length) {
-      html += `<div class="sec">Top artículos</div>
-        <table class="rtbl"><thead><tr><th>Artículo</th><th>Bultos</th><th>HL</th><th>Bultos rechazados</th><th>HL rechazados</th><th>PDV rechazados</th></tr></thead><tbody>`;
+      html += `<div class="sec">Top art?culos</div>
+        <table class="rtbl"><thead><tr><th>Art?culo</th><th>Bultos</th><th>HL</th><th>Bultos rechazados</th><th>HL rechazados</th><th>PDV rechazados</th></tr></thead><tbody>`;
       d.top_articulos.slice(0, 15).forEach(a => {
         html += `<tr>
-          <td>${a.descripcion_articulo || '—'}</td>
+          <td>${a.descripcion_articulo || '?'}</td>
           <td style="font-family:var(--mono)">${Math.round(a.bultos || 0)}</td>
           <td style="font-family:var(--mono)">${Math.round(a.hl || 0)}</td>
           <td style="font-family:var(--mono);color:${a.b_rec > 0 ? 'var(--red)' : 'var(--muted)'}">${Math.round(a.b_rec || 0)}</td>
@@ -3190,7 +3365,7 @@ async function loadDayDetail(fecha) {
       html += '</tbody></table>';
     }
 
-    if (!html) html = '<div class="empty"><div class="icon">📋</div>Sin datos para este día</div>';
+    if (!html) html = '<div class="empty"><div class="icon">📋</div>Sin datos para este d?a</div>';
     body.innerHTML = html;
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -3265,7 +3440,7 @@ let uploadOpen = true;
 function toggleUpload() {
   uploadOpen = !uploadOpen;
   document.getElementById('uploadBody').style.display  = uploadOpen ? '' : 'none';
-  document.getElementById('uploadToggleIcon').textContent = uploadOpen ? '▾' : '▸';
+  document.getElementById('uploadToggleIcon').textContent = uploadOpen ? 'â–¾' : 'â–¸';
 }
 
 async function loadArticulosCount() {
@@ -3328,7 +3503,7 @@ async function uploadFile(tipo, force = false) {
     if (!suc) { st.textContent = 'Elegí sucursal'; st.className = 'upload-status err'; return; }
     fd.append('sucursal', suc);
   }
-  st.textContent = 'Subiendo…'; st.className = 'upload-status';
+  st.textContent = 'Subiendo?'; st.className = 'upload-status';
   try {
     const endpoint = tipo === 'ventasDetalle' ? 'ventas-detalle' : tipo;
     const r = await fetch(`${API}/api/upload/${endpoint}`, { method: 'POST', body: fd });
@@ -3371,7 +3546,7 @@ async function syncFeriados() {
   } catch (e) {
     clearTimeout(timer);
     st.style.color = 'var(--red)';
-    st.textContent = e.name === 'AbortError' ? 'Tiempo agotado (30s). Verificá la URL.' : 'Error: ' + e.message;
+    st.textContent = e.name === 'AbortError' ? 'Tiempo agotado (30s). Verific? la URL.' : 'Error: ' + e.message;
   }
 }
 
@@ -3397,11 +3572,11 @@ async function loadFeriados() {
     const mesHeader = delMes.length
       ? `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
            <span style="font-size:11px;color:var(--muted)">${delMes.length} feriado${delMes.length !== 1 ? 's' : ''} en ${mesNombre}</span>
-           ${delMes.length > 2
-             ? `<button class="btn sm danger" onclick="limpiarFeriadosMes()" title="Elimina todos los feriados de ${mesNombre}">Limpiar ${MESES[vM]}</button>`
-             : ''}
+            ${delMes.length > 2
+              ? `<button class="btn sm danger" onclick="limpiarFeriadosMes()" title="Elimina todos los feriados de ${mesNombre}">Limpiar ${MESES[vM]}</button>`
+              : ''}
          </div>`
-      : `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sin feriados en ${mesNombre}. Mostrando otros del año.</div>`;
+      : `<div style="font-size:11px;color:var(--muted);margin-bottom:6px">Sin feriados en ${mesNombre}. Mostrando otros del a?o.</div>`;
 
     if (!data.length) {
       el.innerHTML = `<div style="font-size:11px;color:var(--muted);padding:4px 0">Sin feriados registrados para ${vY}.</div>`;
@@ -3419,7 +3594,7 @@ async function loadFeriados() {
       </div>`).join('');
 
     const extra = otros.length && delMes.length
-      ? `<div style="font-size:11px;color:var(--muted);padding:4px 0;margin-top:4px">${otros.length} feriado${otros.length !== 1 ? 's' : ''} más en ${vY}</div>`
+      ? `<div style="font-size:11px;color:var(--muted);padding:4px 0;margin-top:4px">${otros.length} feriado${otros.length !== 1 ? 's' : ''} m?s en ${vY}</div>`
       : '';
 
     el.innerHTML = mesHeader + rows + extra;
@@ -3440,7 +3615,7 @@ async function limpiarAnio() {
   const st = document.getElementById('stFeriados');
   if (!confirm(`¿Eliminar TODOS los feriados de ${vY}? Luego podés volver a sincronizar desde el Sheet.`)) return;
   st.style.color = 'var(--muted)';
-  st.textContent = 'Limpiando…';
+  st.textContent = 'Limpiando?';
   try {
     const r = await fetch(`${API}/api/feriados/anio/${vY}`, { method: 'DELETE' });
     const d = await r.json();
@@ -3536,11 +3711,11 @@ async function loadRechazos() {
 function renderRechazosTable(rows) {
   if (!rows.length) {
     document.getElementById('rechazosGrid').innerHTML =
-      '<div class="empty"><div class="icon">📋</div>Sin motivos registrados. Sincronizá desde el detalle.</div>';
+      '<div class="empty"><div class="icon">📋</div>Sin motivos registrados. Sincroniz? desde el detalle.</div>';
     return;
   }
   let html = `<table class="rtbl"><thead><tr>
-    <th>Motivo</th><th>Filas en DB</th><th>Bultos</th><th>¿Contar?</th>
+    <th>Motivo</th><th>Filas en DB</th><th>Bultos</th><th>?Contar?</th>
   </tr></thead><tbody>`;
   for (const r of rows) {
     html += `<tr>
@@ -3666,9 +3841,9 @@ function renderKpiObjetivos(rows) {
       <td>${esc(x.sucursal || 'Todas')}</td>
       <td>${esc(x.nombre)}</td>
       <td style="font-family:var(--mono)">${signo} ${fmtDrop(x.objetivo)}${x.unidad || ''}</td>
-      <td style="font-family:var(--mono)">${x.alerta == null ? '—' : fmtDrop(x.alerta) + (x.unidad || '')}</td>
+      <td style="font-family:var(--mono)">${x.alerta == null ? '?' : fmtDrop(x.alerta) + (x.unidad || '')}</td>
       <td style="font-family:var(--mono)">${x.fecha_desde}</td>
-      <td style="font-family:var(--mono)">${x.fecha_hasta || '—'}</td>
+      <td style="font-family:var(--mono)">${x.fecha_hasta || '?'}</td>
       <td>${x.activo ? '<span class="tag ok">Activo</span>' : '<span class="tag err">Inactivo</span>'}</td>
       <td style="display:flex;gap:4px"><button class="btn sm" onclick="editKpiObjetivo(${x.id})">Editar</button><button class="btn sm danger" onclick="deleteKpiObjetivo(${x.id})">Eliminar</button></td>
     </tr>`;
@@ -3761,7 +3936,7 @@ async function saveKpiObjetivo() {
   }
 }
 
-// â”€â”€â”€ PLANIFICACION PICOS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── PLANIFICACION PICOS ────────────────────────────
 function setPlanMsg(msg, isErr = false) {
   const el = document.getElementById('planMsg');
   if (!el) return;
@@ -3826,7 +4001,7 @@ function _showPlanEmpty() {
 async function loadPlanificacion() {
   const p = planPayload();
   const kpiEl = document.getElementById('planKpis');
-  if (kpiEl) kpiEl.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando plan… (primera vez puede demorar hasta 90s mientras se prepara la base de datos)</div>';
+  if (kpiEl) kpiEl.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando planificación… (la primera vez puede demorar hasta 90 s mientras se prepara la base de datos)</div>';
   try {
     const qs = new URLSearchParams({
       empresa_id: p.empresa_id,
@@ -3848,7 +4023,7 @@ async function loadPlanificacion() {
 
 function renderPlanificacion(data) {
   const plan = data.plan;
-  planActualId = plan?.id || null;
+  planActualId = plan.id || null;
   planEscenarioActivoId = data.escenario_activo?.id || data.plan_comparativo?.escenario_id || null;
   if (!plan) {
     const mes = MESES[Number(document.getElementById('planMes')?.value || 0) - 1] || '';
@@ -3875,7 +4050,7 @@ function renderPlanificacion(data) {
   document.getElementById('planAlertas').innerHTML = renderPlanAlertas(data.alertas || []);
   renderPlanCapacidad(data.capacidad || {});
   renderPlanCharts(data);
-  setPlanMsg(`Planificación #${plan.id} cargada`);
+  setPlanMsg(`Planificaci?n #${plan.id} cargada`);
 }
 
 function kpiCard(label, value, color = 'ora', badge = '') {
@@ -3891,7 +4066,7 @@ function renderPlanKpis(data) {
     ${kpiCard('HL plan', fmtN(Math.round(p.hl_plan || 0)), 'pur')}
     ${kpiCard('HL real', r.hl_real == null ? '—' : fmtN(Math.round(r.hl_real || 0)), 'pur')}
     ${kpiCard('Desvío HL', r.desvio_hl_pct == null ? '—' : fmtPct1(r.desvio_hl_pct), 'red', badge)}
-    ${kpiCard('Días pico plan', fmtN(Math.round(p.dias_pico_plan || 0)), 'ora')}
+    ${kpiCard('Días pico del plan', fmtN(Math.round(p.dias_pico_plan || 0)), 'ora')}
     ${kpiCard('Días pico real', r.dias_pico_real == null ? '—' : fmtN(Math.round(r.dias_pico_real || 0)), 'ora')}
     ${kpiCard('ICM', `${fmt1(icm.valor || 0)}`, icm.estado === 'CRITICO' ? 'red' : icm.estado === 'ALERTA' ? 'ora' : 'grn', `<span class="tag ${estadoClass(icm.estado)}">${icm.estado || 'NORMAL'}</span>`)}
     ${kpiCard('Salidas plan', fmtN(Math.round(p.salidas_plan || 0)), 'blu')}
@@ -3907,7 +4082,7 @@ function renderPlanResumenTabla(data) {
   const r = data.real || {};
   const rows = [
     ['HL', base.hl_base, p.hl_plan, r.hl_real, r.desvio_hl_pct],
-    ['Dias pico', base.dias_pico_base, p.dias_pico_plan, r.dias_pico_real, r.desvio_dias_pico_pct],
+    ['Días pico', base.dias_pico_base, p.dias_pico_plan, r.dias_pico_real, r.desvio_dias_pico_pct],
     ['Rechazos %', base.rechazos_pct_base, p.rechazos_pct_plan, r.rechazos_pct_real, r.desvio_rechazos_pct],
     ['Salidas', base.salidas_base, p.salidas_plan, r.salidas_real, r.desvio_salidas_pct],
     ['PDV', base.pdv_unicos_base, p.pdv_unicos_plan, r.pdv_unicos_real, r.desvio_pdv_pct],
@@ -3919,10 +4094,10 @@ function renderPlanResumenTabla(data) {
   rows.forEach(x => {
     html += `<tr>
       <td>${x[0]}</td>
-      <td style="font-family:var(--mono)">${x[1] == null ? '—' : fmtN(Math.round(x[1]))}</td>
-      <td style="font-family:var(--mono);color:var(--acc)">${x[2] == null ? '—' : fmtN(Math.round(x[2]))}</td>
-      <td style="font-family:var(--mono)">${x[3] == null ? '—' : fmtN(Math.round(x[3]))}</td>
-      <td><span class="pct-pill ${Math.abs(Number(x[4] || 0)) > 15 ? 'bad' : 'ok'}">${x[4] == null ? '—' : fmtPct1(x[4])}</span></td>
+      <td style="font-family:var(--mono)">${x[1] == null ? '?' : fmtN(Math.round(x[1]))}</td>
+      <td style="font-family:var(--mono);color:var(--acc)">${x[2] == null ? '?' : fmtN(Math.round(x[2]))}</td>
+      <td style="font-family:var(--mono)">${x[3] == null ? '?' : fmtN(Math.round(x[3]))}</td>
+      <td><span class="pct-pill ${Math.abs(Number(x[4] || 0)) > 15 ? 'bad' : 'ok'}">${x[4] == null ? '?' : fmtPct1(x[4])}</span></td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -3996,7 +4171,7 @@ function renderPlanEscenarios(data) {
 }
 
 function fmtPlanVarValue(value, unidad) {
-  if (value == null || value === '') return '<span style="color:var(--muted)">SIN INFORMACION</span>';
+  if (value == null || value === '') return '<span style="color:var(--muted)">SIN INFORMACI?N</span>';
   if (String(unidad || '').toUpperCase() === 'PCT') return fmtPct1(value);
   return fmtN(Math.round(Number(value || 0)));
 }
@@ -4033,9 +4208,9 @@ function renderPlanVariables(data) {
       <td style="font-family:var(--mono)">${fmtPlanVarValue(v.valor_base, v.unidad)}</td>
       <td style="font-family:var(--mono);color:var(--acc)">${fmtPlanVarValue(v.valor_plan, v.unidad)}</td>
       <td style="font-family:var(--mono)">${fmtPlanVarValue(v.valor_real, v.unidad)}</td>
-      <td>${v.desvio == null ? '<span style="color:var(--muted)">SIN INFORMACION</span>' : `<span class="pct-pill ${Math.abs(Number(v.desvio || 0)) > 15 ? 'bad' : 'ok'}">${fmtPct1(v.desvio)}</span>`}</td>
-      <td style="font-family:var(--mono)">${v.impacto == null ? '<span style="color:var(--muted)">SIN INFORMACION</span>' : fmtPct1(v.impacto)}</td>
-      <td>${hasInfo ? '<span class="tag ok">OK</span>' : '<span class="tag pico">SIN INFORMACION</span>'}</td>
+      <td>${v.desvio == null ? '<span style="color:var(--muted)">SIN INFORMACI?N</span>' : `<span class="pct-pill ${Math.abs(Number(v.desvio || 0)) > 15 ? 'bad' : 'ok'}">${fmtPct1(v.desvio)}</span>`}</td>
+      <td style="font-family:var(--mono)">${v.impacto == null ? '<span style="color:var(--muted)">SIN INFORMACI?N</span>' : fmtPct1(v.impacto)}</td>
+      <td>${hasInfo ? '<span class="tag ok">OK</span>' : '<span class="tag pico">SIN INFORMACI?N</span>'}</td>
     </tr>`;
   });
   html += '</tbody></table>';
@@ -4055,7 +4230,7 @@ function renderPlanAlertas(alertas) {
 function renderPlanCapacidad(cap) {
   const rows = cap.items || [];
   if (!cap.disponible) {
-    document.getElementById('planCapacidadTabla').innerHTML = `<div class="empty"><div class="icon">⚙</div>${cap.mensaje || 'Sin capacidad cargada'}</div>`;
+    document.getElementById('planCapacidadTabla').innerHTML = `<div class="empty"><div class="icon">âš™</div>${cap.mensaje || 'Sin capacidad cargada'}</div>`;
     return;
   }
   let html = `<table class="rtbl"><thead><tr><th>Fecha</th><th>HL plan</th><th>Capacidad HL</th><th>Faltante HL</th><th>Camiones</th><th>Empleados</th><th>Estado</th></tr></thead><tbody>`;
@@ -4078,7 +4253,7 @@ async function loadDotacionExternaPlanificacion() {
   const el = document.getElementById('planDotacionExterna');
   if (!el) return;
   const p = planPayload();
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando dotacion externa...</div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando... dotacion externa...</div>';
   try {
     const qs = new URLSearchParams({
       empresa_id: p.empresa_id,
@@ -4121,7 +4296,7 @@ async function loadDotacionEntregaRealPlanificacion() {
   const el = document.getElementById('planDotacionEntregaReal');
   if (!el) return;
   const p = planPayload();
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando dotacion real de entrega...</div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando... dotacion real de entrega...</div>';
   try {
     const qs = new URLSearchParams({
       mes: `${p.anio_plan}-${String(p.mes_plan).padStart(2, '0')}`,
@@ -4203,7 +4378,7 @@ async function loadFlotaPlanificacion() {
   const el = document.getElementById('planFlotaOperativa');
   if (!el) return;
   const p = planPayload();
-  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando flota operativa...</div>';
+  el.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando... flota operativa...</div>';
   try {
     const qs = new URLSearchParams({
       empresa_id: p.empresa_id,
@@ -4395,7 +4570,7 @@ function planEscenarioPayload() {
 }
 
 async function guardarEscenarioPlanificacion() {
-  if (!planActualId) return setPlanMsg('Primero generÃ¡ o cargÃ¡ una planificaciÃ³n.', true);
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
   setPlanMsg('Guardando escenario...');
   try {
     const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/escenarios`, {
@@ -4409,9 +4584,9 @@ async function guardarEscenarioPlanificacion() {
 }
 
 async function activarEscenarioPlanificacion() {
-  if (!planActualId) return setPlanMsg('Primero generÃ¡ o cargÃ¡ una planificaciÃ³n.', true);
+  if (!planActualId) return setPlanMsg('Primero generá o cargá una planificación.', true);
   const escenarioId = document.getElementById('planEscenarioSelect')?.value;
-  if (!escenarioId) return setPlanMsg('SeleccionÃ¡ un escenario.', true);
+  if (!escenarioId) return setPlanMsg('Seleccioná un escenario.', true);
   setPlanMsg('Activando escenario...');
   try {
     const data = await fetchPlanJson(`/api/planificacion_picos/${planActualId}/escenarios/${escenarioId}/activar`, {
@@ -4491,7 +4666,7 @@ async function guardarConfigPlanificacion() {
       }),
     });
     msg.style.color = 'var(--grn)';
-    msg.textContent = 'Configuración guardada';
+    msg.textContent = 'Configuraci?n guardada';
     if (isTabVisible('tab-planificacion')) await loadPlanificacion();
     else await loadConfigPlanificacion();
   } catch (e) {
@@ -4566,13 +4741,13 @@ function switchTab(t, el) {
   if (t === 'upload')    { loadArticulosCount(); loadEventos(); loadFeriados(); }
   if (t === 'config')    { initAusentismoDefaults(); loadAusentismoMensual(); loadSucursalesConfig(); loadRechazos(); loadKpiObjetivos(); loadDropsizeObjetivos(); }
   if (t === 'planificacion') {
-    // Sync mes/año con el calendario principal
+    // Sync mes/a?o con el calendario principal
     const anioEl = document.getElementById('planAnio');
     const mesEl  = document.getElementById('planMes');
     if (anioEl) anioEl.value = vY;
     if (mesEl)  mesEl.value  = vM + 1;
     if (document.getElementById('planSucursal')) document.getElementById('planSucursal').value = getSuc();
-    // No auto-cargar: mostrar estado vacío para evitar esperas largas
+    // No auto-cargar: mostrar estado vac?o para evitar esperas largas
     _showPlanEmpty();
   }
   if (t === 'operaciones') {
@@ -4590,7 +4765,7 @@ async function loadCamiones() {
   const tbody = document.getElementById('camionesTbody');
   if (!tbody) return;
   const incluirAnulados = document.getElementById('camMostrarAnulados')?.checked ? '1' : '0';
-  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando?</td></tr>';
   try {
     const data = await api(`/api/flota/vehiculos?incluir_anulados=${incluirAnulados}`);
     _camionesTodos = data.vehiculos || [];
@@ -4598,7 +4773,7 @@ async function loadCamiones() {
     filtrarCamiones();
     _populateCamSucursal();
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="color:var(--red);text-align:center;padding:16px">? ${e.message}</td></tr>`;
   }
 }
 
@@ -4627,11 +4802,11 @@ function _renderCamionesTbody(rows) {
     return `<tr style="${anulado ? 'opacity:.5' : ''}">
       <td style="font-family:var(--mono);font-size:11px">${esc(v.codigo)}</td>
       <td style="font-size:12px">${esc(v.descripcion)}</td>
-      <td style="font-family:var(--mono);font-size:11px">${esc(v.placa||'—')}</td>
+      <td style="font-family:var(--mono);font-size:11px">${esc(v.placa||'?')}</td>
       <td style="font-size:11px">${esc(v.sucursal||v.sucursal_id)}</td>
-      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up??'—'}</td>
-      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.carga_maxima_kg??'—'}</td>
-      <td style="font-size:11px;text-align:center">${v.propio ? '✓' : '—'}</td>
+      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up ?? '?'}</td>
+      <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.carga_maxima_kg ?? '?'}</td>
+      <td style="font-size:11px;text-align:center">${v.propio ? '✓' : '?'}</td>
       <td style="font-size:11px;text-align:center;color:${base?'var(--grn)':'var(--red)'}">${base?'Activo':'Inactivo'}</td>
       <td>
         <div style="display:flex;gap:4px">
@@ -4674,7 +4849,7 @@ function _populateCamSucursal() {
   api('/api/sucursales').then(list => {
     list.forEach(s => {
       const opt = document.createElement('option');
-      opt.value = s.value; opt.textContent = `${s.value} — ${s.label}`;
+      opt.value = s.value; opt.textContent = `${s.value} - ${s.label}`;
       sel.appendChild(opt);
     });
   }).catch(() => {});
@@ -4698,7 +4873,7 @@ function editarCamion(id) {
   document.getElementById('camDepositoId').value     = v.deposito_default_id || '';
   document.getElementById('camDepositoNombre').value = v.deposito_default_nombre || '';
   document.getElementById('camObservaciones').value  = v.observaciones || '';
-  document.getElementById('camionFormTitulo').textContent = `Editando: ${v.codigo} — ${v.descripcion}`;
+  document.getElementById('camionFormTitulo').textContent = `Editando: ${v.codigo} - ${v.descripcion}`;
   document.getElementById('camionMsg').textContent = '';
   document.getElementById('camCodigo').scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
@@ -4723,7 +4898,7 @@ async function guardarCamion() {
   const sucursal= document.getElementById('camSucursal').value.trim();
   if (!codigo) { msg.textContent='⚠ Código requerido'; msg.style.color='var(--red)'; return; }
   if (!desc)   { msg.textContent='⚠ Descripción requerida'; msg.style.color='var(--red)'; return; }
-  if (!sucursal){ msg.textContent='⚠ Sucursal requerida'; msg.style.color='var(--red)'; return; }
+  if (!sucursal){ msg.textContent='? Sucursal requerida'; msg.style.color='var(--red)'; return; }
 
   const payload = {
     empresa_id:             '1',
@@ -4744,7 +4919,7 @@ async function guardarCamion() {
     fuente:                 'MANUAL',
   };
 
-  msg.textContent = 'Guardando…'; msg.style.color = 'var(--muted)';
+  msg.textContent = 'Guardando?'; msg.style.color = 'var(--muted)';
   try {
     await api('/api/flota/vehiculos', {
       method: 'POST',
@@ -4756,7 +4931,7 @@ async function guardarCamion() {
     limpiarFormCamion();
     await loadCamiones();
   } catch(e) {
-    msg.textContent = '⚠ ' + e.message;
+    msg.textContent = '? ' + e.message;
     msg.style.color = 'var(--red)';
   }
 }
@@ -4824,7 +4999,7 @@ async function guardarSucursal() {
     await loadSucursalesConfig();
     await loadSucursales();
   } catch(e) {
-    msg.textContent = '⚠ ' + e.message;
+    msg.textContent = '? ' + e.message;
     msg.style.color = 'var(--red)';
   }
 }
@@ -4839,7 +5014,7 @@ async function loadAusentismoMensual() {
   const msg = document.getElementById('ausMsg');
   const resumen = document.getElementById('ausResumen');
   if (!anio || !mes) return;
-  if (msg) { msg.textContent = 'Cargando...'; msg.style.color = 'var(--muted)'; }
+  if (msg) { msg.textContent = 'Cargando......'; msg.style.color = 'var(--muted)'; }
   try {
     const qs = new URLSearchParams({ empresa_id: '1', sucursal_id: sucursal, anio: String(anio) });
     const data = await api('/api/picos/ausentismo-mensual?' + qs.toString());
@@ -4981,7 +5156,7 @@ function initFlotaSelects() {
       list.forEach(s => {
         if (sucEl.querySelector(`option[value="${s.value}"]`)) return;
         const opt = document.createElement('option');
-        opt.value = s.value; opt.textContent = `${s.value} — ${s.label}`;
+        opt.value = s.value; opt.textContent = `${s.value} - ${s.label}`;
         sucEl.appendChild(opt);
       });
     }).catch(() => {});
@@ -5017,7 +5192,7 @@ async function loadFlota() {
   const suc  = document.getElementById('flotaSucursal')?.value;
   const tbody = document.getElementById('flotaTbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px"><div class="spinner" style="display:inline-block"></div> Cargando?</td></tr>';
 
   try {
     let path = `/api/flota/vehiculos?anio=${anio||''}&mes=${mes||''}&incluir_anulados=0`;
@@ -5026,7 +5201,7 @@ async function loadFlota() {
     _flotaData = data.vehiculos || [];
     renderFlotaTabla(_flotaFiltrada(), data.resumen);
   } catch(e) {
-    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);text-align:center;padding:16px">⚠ ${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="color:var(--red);text-align:center;padding:16px">? ${e.message}</td></tr>`;
   }
 }
 
@@ -5058,9 +5233,9 @@ function renderFlotaTabla(vehiculos, resumen) {
       <tr id="flotaRow${v.id}">
         <td style="font-family:var(--mono);font-size:11px">${v.codigo}</td>
         <td style="font-size:12px">${v.descripcion || ''}</td>
-        <td style="font-family:var(--mono);font-size:11px">${v.placa || '—'}</td>
+        <td style="font-family:var(--mono);font-size:11px">${v.placa || '?'}</td>
         <td style="font-size:11px">${v.sucursal || v.sucursal_id}</td>
-        <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up != null ? v.capacidad_up : '—'}</td>
+        <td style="font-family:var(--mono);font-size:11px;text-align:right">${v.capacidad_up != null ? v.capacidad_up : '?'}</td>
         <td>${_flotaToggleBtn(v.id, activo, idx)}</td>
         <td>
           <input type="text" id="flotaMotivo${v.id}" value="${v.motivo_mes || ''}"
@@ -5126,7 +5301,7 @@ async function guardarDisponibilidadFlota(vehiculoId, idx, estadoAnterior) {
       _flotaData[idx].activo_mes = estadoAnterior;
       _actualizarToggle(vehiculoId, estadoAnterior, idx);
     }
-    if (msgEl) { msgEl.textContent = '⚠ ' + e.message; msgEl.style.color = 'var(--red)'; }
+    if (msgEl) { msgEl.textContent = '? ' + e.message; msgEl.style.color = 'var(--red)'; }
   }
 }
 
@@ -5147,7 +5322,7 @@ async function syncFlotaDesdeTransportes() {
     msg.style.color = 'var(--grn)';
     await loadFlota();
   } catch(e) {
-    msg.textContent = '⚠ Error: ' + e.message;
+    msg.textContent = '? Error: ' + e.message;
     msg.style.color = 'var(--red)';
   } finally {
     btn.disabled = false;
@@ -5239,7 +5414,7 @@ async function cargarPlanillaOperativa() {
   const mes  = document.getElementById('planillaMes')?.value;
   const cont = document.getElementById('planillaContenido');
   if (!anio || !mes) return;
-  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando…</div>';
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando?</div>';
   try {
     const resp = await fetch(`${API}/api/sync/operacion-camiones/mensual?empresa_id=1&sucursal_id=TODAS&anio=${anio}&mes=${mes}`);
     const data = await resp.json();
@@ -5282,21 +5457,21 @@ async function syncDotacionConfig() {
 
     if (msgEl) {
       msgEl.textContent = errs.length
-        ? `Completado con ${errs.length} error(es) — ${n} registros`
-        : `Completado en ${secs}s — ${n} registros sincronizados`;
+        ? `Completado con ${errs.length} error(es) - ${n} registros`
+        : `Completado en ${secs}s - ${n} registros sincronizados`;
       msgEl.style.color = errs.length ? 'var(--acc)' : 'var(--grn)';
     }
     if (detEl) {
       detEl.innerHTML = det.map(d => d.error
-        ? `<div style="color:var(--red)">⚠ ${escHtml(d.url_tag)}: ${escHtml(d.error)}</div>`
+        ? `<div style="color:var(--red)">? ${escHtml(d.url_tag)}: ${escHtml(d.error)}</div>`
         : `<div>✓ ${escHtml(d.url_tag)}: ${d.filas_csv} filas → ${d.filas_parseadas} parseadas → ${d.upsertados} insertadas</div>`
       ).join('');
     }
   } catch (e) {
     clearTimeout(timeoutId); clearInterval(timer);
-    const msg = e.name === 'AbortError' ? 'Tiempo de espera agotado (90s). Intentá de nuevo.' : e.message;
-    if (msgEl) { msgEl.textContent = '⚠ ' + msg; msgEl.style.color = 'var(--red)'; }
-  } finally {
+    const msg = e.name === 'AbortError'
+      ? '? Tiempo de espera agotado (90s). Intent? de nuevo.'
+      : '? ' + (e.message || 'Error desconocido');
     if (btn) btn.disabled = false;
   }
 }
@@ -5334,7 +5509,7 @@ async function syncYCargarPlanilla() {
     const errs = data.errores ?? [];
     const det  = data.detalle ?? [];
     let resumen = det.map(d => d.error
-      ? `⚠ ${esc(d.url_tag)}: ${esc(d.error)}`
+      ? `? ${esc(d.url_tag)}: ${esc(d.error)}`
       : `✓ Tab ${esc(d.url_tag)}: ${d.filas_csv} filas CSV → ${d.filas_parseadas} parseadas`
     ).join('<br>');
     const color = errs.length ? 'var(--acc)' : 'var(--grn)';
@@ -5360,8 +5535,8 @@ async function syncYCargarPlanilla() {
     clearTimeout(timeoutId);
     clearInterval(timer);
     const msg = e.name === 'AbortError'
-      ? '⏱ Tiempo de espera agotado (90s). Intentá de nuevo.'
-      : '⚠ ' + (e.message || 'Error desconocido');
+      ? '? Tiempo de espera agotado (90s). Intent? de nuevo.'
+      : '? ' + (e.message || 'Error desconocido');
     if (msgEl) { msgEl.textContent = msg; msgEl.style.color = 'var(--red)'; }
     if (cont)  cont.innerHTML = '';
   } finally {
@@ -5374,8 +5549,8 @@ function _renderPlanilla(filas, anio, mes) {
   if (!filas.length) {
     cont.innerHTML = `<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px">
       Sin datos para <strong>${esc(MESES_PLANILLA[mes])} ${anio}</strong>.<br>
-      <span style="font-size:11px">Si ya sincronizaste, verificá el año y mes — los datos en la planilla pueden ser de otro período.<br>
-      También podés usar <strong>"↻ Sincronizar y cargar"</strong> para importar y auto-seleccionar el período correcto.</span>
+      <span style="font-size:11px">Si ya sincronizaste, verific? el a?o y mes - los datos en la planilla pueden ser de otro per?odo.<br>
+      Tambi?n pod?s usar <strong>"↻ Sincronizar y cargar"</strong> para importar y auto-seleccionar el per?odo correcto.</span>
     </div>`;
     return;
   }
@@ -5420,14 +5595,14 @@ function _renderPlanilla(filas, anio, mes) {
 
       tbody += `<tr>
         <td style="font-size:11px;white-space:nowrap">${esc(dLabel)}</td>
-        <td style="text-align:center">${s1.camiones||'—'}</td>
-        <td style="text-align:center">${s1.choferes||'—'}</td>
-        <td style="text-align:center">${s1.ayudantes||'—'}</td>
-        <td style="text-align:center;color:var(--muted)">${s1.personas||'—'}</td>
-        <td style="text-align:center">${s2.camiones||'—'}</td>
-        <td style="text-align:center">${s2.choferes||'—'}</td>
-        <td style="text-align:center">${s2.ayudantes||'—'}</td>
-        <td style="text-align:center;color:var(--muted)">${s2.personas||'—'}</td>
+        <td style="text-align:center">${s1.camiones||'?'}</td>
+        <td style="text-align:center">${s1.choferes||'?'}</td>
+        <td style="text-align:center">${s1.ayudantes||'?'}</td>
+        <td style="text-align:center;color:var(--muted)">${s1.personas||'?'}</td>
+        <td style="text-align:center">${s2.camiones||'?'}</td>
+        <td style="text-align:center">${s2.choferes||'?'}</td>
+        <td style="text-align:center">${s2.ayudantes||'?'}</td>
+        <td style="text-align:center;color:var(--muted)">${s2.personas||'?'}</td>
         <td style="text-align:center;font-weight:600;color:var(--acc)">${totalCam}</td>
         <td style="text-align:center;font-weight:600">${totalPers}</td>
       </tr>`;
@@ -5440,16 +5615,16 @@ function _renderPlanilla(filas, anio, mes) {
       <div style="margin-bottom:18px">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
                     color:var(--acc);margin-bottom:8px;padding:6px 0;border-bottom:2px solid var(--acc)">
-          ${esc(sucLabel)} — ${esc(MESES_PLANILLA[mes])} ${anio}
+          ${esc(sucLabel)} ? ${esc(MESES_PLANILLA[mes])} ${anio}
         </div>
         <div style="overflow-x:auto">
           <table class="rtbl" style="width:100%;font-size:12px">
             <thead>
               <tr>
                 <th rowspan="2" style="min-width:90px">Fecha</th>
-                <th colspan="4" style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.08)">1ª Salida</th>
-                <th colspan="4" style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.08)">2ª Salida</th>
-                <th colspan="2" style="text-align:center;background:rgba(var(--acc-rgb,154,95,5),.08)">Total día</th>
+                <th colspan="4" style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.08)">1? Salida</th>
+                <th colspan="4" style="text-align:center;background:rgba(var(--grn-rgb,12,110,66),.08)">2? Salida</th>
+                <th colspan="2" style="text-align:center;background:rgba(var(--acc-rgb,154,95,5),.08)">Total d?a</th>
               </tr>
               <tr>
                 <th style="text-align:center;background:rgba(var(--blu-rgb,26,95,163),.05)">Cam.</th>
@@ -5495,7 +5670,7 @@ function _renderPlanilla(filas, anio, mes) {
   cont.innerHTML = html;
 }
 
-// ─── PERIODOS CRÍTICOS ────────────────────────────────────────
+// ─── PERÍODOS CRÍTICOS ────────────────────────────────────────
 let _pcAbort = null;
 
 async function loadPeriodosCriticos() {
@@ -5548,7 +5723,7 @@ function _renderAusLineChart(ausMensual, ausMensualAnt, anio) {
     svg += `<text x="${xOf(i)}" y="${H-3}" font-size="8.5" fill="rgba(255,255,255,.45)" text-anchor="middle">${a}</text>`;
   });
 
-  // ── Serie año anterior (punteada gris) ─────────────────────
+  // ── Serie a?o anterior (punteada gris) ─────────────────────
   const ptAnt = ausMensualAnt.filter(m => m.pct_ausentismo != null)
     .map(m => `${xOf(m.mes-1).toFixed(1)},${yOf(m.pct_ausentismo).toFixed(1)}`).join(' ');
   if (ptAnt) {
@@ -5556,14 +5731,14 @@ function _renderAusLineChart(ausMensual, ausMensualAnt, anio) {
     ausMensualAnt.filter(m => m.pct_ausentismo != null).forEach(m => {
       const cx = xOf(m.mes-1), cy = yOf(m.pct_ausentismo);
       const p = m.pct_ausentismo;
-      // Etiqueta debajo del punto (año anterior)
+      // Etiqueta debajo del punto (a?o anterior)
       const ly = cy + 14;
       svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="2.5" fill="rgba(255,255,255,.3)"/>`;
       svg += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="7.5" fill="rgba(255,255,255,.38)" text-anchor="middle">${fmtP(p)}</text>`;
     });
   }
 
-  // ── Serie año actual (sólida, coloreada por umbral) ────────
+  // ── Serie a?o actual (s?lida, coloreada por umbral) ────────
   const ptAct = ausMensual.filter(m => m.pct_ausentismo != null)
     .map(m => `${xOf(m.mes-1).toFixed(1)},${yOf(m.pct_ausentismo).toFixed(1)}`).join(' ');
   if (ptAct) {
@@ -5572,7 +5747,7 @@ function _renderAusLineChart(ausMensual, ausMensualAnt, anio) {
       const p = m.pct_ausentismo;
       const cx = xOf(m.mes-1), cy = yOf(p);
       const col = p >= 10 ? 'var(--red)' : p >= 5 ? 'var(--acc)' : 'var(--grn)';
-      // Etiqueta encima del punto; si está cerca del tope la pone debajo
+      // Etiqueta encima del punto; si est? cerca del tope la pone debajo
       const ly = cy <= PT + 14 ? cy + 14 : cy - 7;
       svg += `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.5" fill="${col}" stroke="var(--bg)" stroke-width="1.5"/>`;
       svg += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" font-size="9" fill="${col}" text-anchor="middle" font-weight="600">${fmtP(p)}</text>`;
@@ -5587,7 +5762,7 @@ function _renderAusLineChart(ausMensual, ausMensualAnt, anio) {
     <span><span style="color:var(--acc)">●</span> 5-10% medio</span>
     <span><span style="color:var(--red)">●</span> ≥10% alto</span>
     ${tieneAnt ? `<span style="margin-left:6px;display:inline-flex;align-items:center;gap:5px">
-      <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="rgba(255,255,255,.3)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>${anio-1}
+      <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="rgba(255,255,255,.3)" stroke-width="1.5" stroke-dasharray="4,3"/></svg>${anio - 1}
       &nbsp;
       <svg width="18" height="10"><line x1="0" y1="5" x2="18" y2="5" stroke="var(--acc)" stroke-width="2"/></svg>${anio}
     </span>` : ''}
@@ -5608,17 +5783,17 @@ function renderPeriodosCriticos(data, anio, suc) {
   const ausMensualAnt = data.ausentismo_mensual_anterior || [];
   const cumple        = data.cumple_minimo;
 
-  // ── Gráfico de línea ausentismo ──────────────────────────
+  // ── Gr?fico de l?nea ausentismo ──────────────────────────
   const ausHtml = (ausMensual.length || ausMensualAnt.length)
     ? _renderAusLineChart(ausMensual, ausMensualAnt, anio)
     : '';
 
   let html = ausHtml + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
     <div style="display:flex;align-items:center;gap:8px">
-      <span style="font-size:13px;font-weight:600">Periodos críticos ${anio}</span>
+      <span style="font-size:13px;font-weight:600">Períodos críticos ${anio}</span>
       <span style="font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:12px;${cumple ? 'background:rgba(76,175,130,.2);color:var(--grn)' : 'background:rgba(224,92,92,.2);color:var(--red)'}">${periodos.length} definido${periodos.length !== 1 ? 's' : ''} ${cumple ? '✓' : '— mínimo 3'}</span>
     </div>
-    <button class="btn primary" style="font-size:11px;padding:5px 12px" onclick="abrirFormPeriodo()">+ Agregar periodo</button>
+    <button class="btn primary" style="font-size:11px;padding:5px 12px" onclick="abrirFormPeriodo()">+ Agregar período</button>
   </div>`;
 
   if (periodos.length > 0) {
@@ -5636,7 +5811,7 @@ function renderPeriodosCriticos(data, anio, suc) {
     });
     html += `</div>`;
   } else {
-    html += `<div style="color:var(--muted);font-size:12px;margin-bottom:14px">Sin periodos definidos para ${anio}.</div>`;
+    html += `<div style="color:var(--muted);font-size:12px;margin-bottom:14px">Sin períodos definidos para ${anio}.</div>`;
   }
 
   if (sugeridos.length > 0) {
@@ -5660,7 +5835,7 @@ function renderPeriodosCriticos(data, anio, suc) {
   }
 
   html += `<div id="formPeriodo" style="display:none;margin-top:14px;background:var(--surf2);border:1px solid var(--brd);border-radius:6px;padding:14px">
-    <div style="font-size:12px;font-weight:600;margin-bottom:10px">Nuevo periodo crítico</div>
+    <div style="font-size:12px;font-weight:600;margin-bottom:10px">Nuevo período crítico</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
       <div><label style="font-size:10px;color:var(--muted)">Nombre</label>
         <input id="pcNombre" type="text" placeholder="Ej: Semana Santa" style="width:100%;margin-top:3px"></div>
@@ -5740,7 +5915,7 @@ async function guardarPeriodoCritico() {
 }
 
 async function eliminarPeriodoCritico(id) {
-  if (!confirm('¿Eliminar este periodo crítico?')) return;
+  if (!confirm('¿Eliminar este período crítico?')) return;
   try {
     await fetch(API + `/api/picos/periodos-criticos/${id}`, { method: 'DELETE' });
     await loadPeriodosCriticos();
@@ -5799,12 +5974,12 @@ function renderComparativo(data) {
   if (!cont) return;
   const { anio, anio_base, meses } = data;
 
-  const fHL  = v => v == null ? '—' : fmtN(Math.round(v));
-  const fBlt = v => v == null ? '—' : fmtN(Math.round(v));
-  const fInt = v => v == null ? '—' : String(Math.round(v));
-  const fP1  = v => v == null ? '—' : v.toFixed(1)+'%';
-  const fP2  = v => v == null ? '—' : v.toFixed(2)+'%';
-  const fF1  = v => v == null ? '—' : v.toFixed(1);
+  const fHL  = v => v == null ? '?' : fmtN(Math.round(v));
+  const fBlt = v => v == null ? '?' : fmtN(Math.round(v));
+  const fInt = v => v == null ? '?' : String(Math.round(v));
+  const fP1  = v => v == null ? '?' : v.toFixed(1)+'%';
+  const fP2  = v => v == null ? '?' : v.toFixed(2)+'%';
+  const fF1  = v => v == null ? '?' : v.toFixed(1);
 
   const pct  = (a,b) => (a==null||b==null||b===0)?null:Math.round((a-b)/b*1000)/10;
   const pp   = (a,b) => (a==null||b==null)?null:Math.round((a-b)*100)/100;
@@ -5812,7 +5987,7 @@ function renderComparativo(data) {
   const _sum = arr => arr.reduce((s,v)=>s+(v||0),0);
 
   const dCell = (v, inv=false) => {
-    if (v==null) return '<td class="cmp-d eq">—</td>';
+    if (v==null) return '<td class="cmp-d eq">?</td>';
     const good = inv ? v<0 : v>0;
     const cls  = Math.abs(v)<0.5 ? 'eq' : good ? 'up' : 'dn';
     const icon = v>0.1 ? '▲' : v<-0.1 ? '▼' : '→';
@@ -5823,7 +5998,7 @@ function renderComparativo(data) {
     const a=m.actual, b=m.base; let r=0;
     const nds=a?.nds??b?.nds;
     if (nds!=null) r += nds<90?2:nds<95?1:0;
-    const rec=a?.pct_rec_hl??b?.pct_rec_hl??0;
+    const rec=a?.pct_rec_hl ?? b?.pct_rec_hl ?? 0;
     r += rec>3?2:rec>1?1:0;
     const aus=b?.ausentismo;
     if (aus!=null) r += aus>=10?2:aus>=5?1:0;
@@ -5859,7 +6034,7 @@ function renderComparativo(data) {
       let tds = '<td class="mes-lbl">'+m.nombre+(m.es_futuro?' 🔮':' '+sem(m))+'</td>';
       defs.forEach((d, i) => {
         const vb=d.get(b), va=d.get(a);
-        const fb = vb!=null ? d.fmt(vb) : '—';
+        const fb = vb!=null ? d.fmt(vb) : '?';
         let fa;
         if (va!=null) {
           const col = d.color ? d.color(va) : 'inherit';
@@ -5867,7 +6042,7 @@ function renderComparativo(data) {
         } else if (m.es_futuro && vb!=null) {
           fa = '<span style="color:var(--muted);font-style:italic">'+fb+'</span>';
         } else {
-          fa = '—';
+          fa = '?';
         }
         const cbStyle = styleAttr(i, (vb!=null && d.color) ? 'color:'+d.color(vb) : '');
         tds += '<td'+cbStyle+'>'+fb+'</td><td>'+fa+'</td>';
@@ -5882,8 +6057,8 @@ function renderComparativo(data) {
     defs.forEach((d, i) => {
       const sb = d.sumFn ? d.sumFn(mRealB) : null;
       const sa = d.sumFn ? d.sumFn(mRealA) : null;
-      stds += '<td'+styleAttr(i)+'>'+(sb!=null?d.fmt(sb):'—')+'</td>'
-            + '<td style="color:var(--acc)">'+(sa!=null?d.fmt(sa):'—')+'</td>';
+      stds += '<td'+styleAttr(i)+'>'+(sb!=null?d.fmt(sb):'?')+'</td>'
+            + '<td style="color:var(--acc)">'+(sa!=null?d.fmt(sa):'?')+'</td>';
       if (d.deltaFn) stds += dCell(sb!=null&&sa!=null?d.deltaFn(sa,sb):null, d.inv);
     });
     body += '<tr class="summary">'+stds+'</tr>';
@@ -5911,7 +6086,7 @@ function renderComparativo(data) {
     {label:'PDV únicos',get:d=>d?.pdv_unicos,fmt:fInt,deltaFn:pct,inv:false,
       sumFn:arr=>{const v=arr.filter(d=>d?.pdv_unicos);return v.length?Math.round(_avg(v.map(d=>d.pdv_unicos))):null;}},
     {label:'Salidas',
-      get:d=>d?.salidas_sheets>0?d.salidas_sheets:d?.salidas??null,
+      get:d=>d?.salidas_sheets > 0 ? d.salidas_sheets : d?.salidas ?? null,
       fmt:fInt,deltaFn:pct,inv:false,
       sumFn:arr=>{
         const v=arr.filter(d=>(d?.salidas_sheets||0)>0);
@@ -5936,7 +6111,7 @@ function renderComparativo(data) {
       sumFn:arr=>{const v=arr.filter(d=>d?.ausentismo!=null);return v.length?Math.round(_avg(v.map(d=>d.ausentismo))*10)/10:null;}},
   ]);
 
-  // Clave de dotacion según sucursal seleccionada en el comparativo
+  // Clave de dotaci?n seg?n sucursal seleccionada en el comparativo
   const dotKey = _cmpSuc === '1' ? 'cc' : _cmpSuc === '2' ? 'dl' : 'total';
   const gDot   = d => d?.dotacion?.[dotKey] || {};
   const gS1    = d => gDot(d)?.s1 || {};
@@ -5973,10 +6148,10 @@ function renderComparativo(data) {
       fmt:fF1,deltaFn:pct,inv:false,sumFn:null},
     ...(_cmpSuc === 'TODAS' ? [
       {label:'CC S1/S2',
-        get:d=>{const cc=d?.dotacion?.cc;if(!cc?.tiene_datos)return null;const s1=cc.s1?.tiene_datos?cc.s1.avg_chof+'':'-';const s2=cc.s2?.tiene_datos?cc.s2.avg_chof:'—';return s1+'/'+s2;},
+        get:d=>{const cc=d?.dotacion?.cc;if(!cc?.tiene_datos)return null;const s1=cc.s1?.tiene_datos?cc.s1.avg_chof+'':'-';const s2=cc.s2?.tiene_datos?cc.s2.avg_chof:'?';return s1+'/'+s2;},
         fmt:v=>v,deltaFn:null,sumFn:null},
       {label:'DL S1/S2',
-        get:d=>{const dl=d?.dotacion?.dl;if(!dl?.tiene_datos)return null;const s1=dl.s1?.tiene_datos?dl.s1.avg_chof+'':'-';const s2=dl.s2?.tiene_datos?dl.s2.avg_chof:'—';return s1+'/'+s2;},
+        get:d=>{const dl=d?.dotacion?.dl;if(!dl?.tiene_datos)return null;const s1=dl.s1?.tiene_datos?dl.s1.avg_chof+'':'-';const s2=dl.s2?.tiene_datos?dl.s2.avg_chof:'?';return s1+'/'+s2;},
         fmt:v=>v,deltaFn:null,sumFn:null},
     ] : []),
   ]);
@@ -6011,7 +6186,7 @@ function _initDotFechas() {
 
 async function loadDotacion() {
   _initDotFechas();
-  // Inicializar selector de cobertura con el mes actual si está vacío
+  // Inicializar selector de cobertura con el mes actual si est? vac?o
   const cobMesEl = document.getElementById('cobPicoMes');
   if (cobMesEl && !cobMesEl.value) {
     const hoy = new Date();
@@ -6068,9 +6243,9 @@ function renderDotacionPanel(contId, dias, titulo, esTotal = false) {
         <td style="font-weight:600;color:var(--grn)">${d.total_personas}</td>
       </tr>`;
     } else {
-      // Fila cabecera del día
+      // Fila cabecera del d?a
       html += `<tr class="day-header">
-        <td colspan="7" style="padding-left:6px">${fecha} — ${d.n_salidas} salidas · ${d.total_personas} personas</td>
+        <td colspan="7" style="padding-left:6px">${fecha} ? ${d.n_salidas} salidas ? ${d.total_personas} personas</td>
       </tr>`;
       // Detalle por salida
       (d.detalle || []).forEach(s => {
@@ -6084,9 +6259,9 @@ function renderDotacionPanel(contId, dias, titulo, esTotal = false) {
           <td style="color:var(--grn);font-weight:600">${s.personas}</td>
         </tr>`;
       });
-      // Fila resumen del día
+      // Fila resumen del d?a
       html += `<tr class="day-total">
-        <td colspan="5" style="text-align:right;padding-right:8px">Totales día:</td>
+        <td colspan="5" style="text-align:right;padding-right:8px">Totales d?a:</td>
         <td>${d.n_salidas}</td><td>${d.n_choferes}</td>
         <td>${d.n_ayudante1}</td><td>${d.n_ayudante2}</td>
         <td style="font-weight:700;color:var(--grn)">${d.total_personas}</td>
@@ -6135,7 +6310,7 @@ function renderCoberturaPicos(data) {
     <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:${pctColor}">${pctS2}%</div><div class="klbl">Con doble salida</div></div>
     <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--grn)">${resumen.con_s2}</div><div class="klbl">2 salidas ●</div></div>
     <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--acc)">${resumen.sin_s2 ?? 0}</div><div class="klbl">Solo 1 salida ◐</div></div>
-    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--red)">${resumen.sin_datos}</div><div class="klbl">Sin datos ○</div></div>
+    <div class="kpi-card" style="min-width:110px"><div class="kv" style="color:var(--red)">${resumen.sin_datos}</div><div class="klbl">Sin datos â—‹</div></div>
     <div class="kpi-card" style="min-width:110px"><div class="kv">${resumen.avg_personas}</div><div class="klbl">Pers/día pico (prom)</div></div>
   </div>`;
 
@@ -6150,21 +6325,22 @@ function renderCoberturaPicos(data) {
     const s2  = dot.s2;
     const sem = p.semaforo;
     const semLabel = sem === 'verde' ? 'Completo' : sem === 'amarillo' ? '1 salida' : 'Sin datos';
-    const s1txt = s1 ? `${s1.personas}p · ${s1.camiones} cam.` : '—';
+    const s1txt = s1 ? `${s1.personas}p · ${s1.camiones} cam.` : '?';
     const s2txt = s2
       ? `<span style="color:var(--grn);font-weight:600">${s2.personas}p · ${s2.camiones} cam.</span>`
       : `<span style="color:var(--muted)">No registrada</span>`;
-    const ndsColor = (p.nds ?? 100) < 85 ? 'var(--red)' : (p.nds ?? 100) < 95 ? 'var(--acc)' : 'var(--grn)';
+    const ndsValue = p.nds ?? 100;
+    const ndsColor = ndsValue < 85 ? 'var(--red)' : ndsValue < 95 ? 'var(--acc)' : 'var(--grn)';
 
     html += `<tr>
       <td><span class="cob-sem ${sem}">${semLabel}</span></td>
       <td>${p.fecha}</td>
       <td>${fmtN(Math.round(p.bultos))}</td>
       <td>${fmtN(Math.round(p.hectolitros))}</td>
-      <td style="color:${ndsColor}">${p.nds ?? 100}%</td>
+      <td style="color:${ndsColor}">${ndsValue}%</td>
       <td>${s1txt}</td>
       <td>${s2txt}</td>
-      <td style="font-weight:600">${dot.tiene_datos ? dot.total_personas : '—'}</td>
+      <td style="font-weight:600">${dot.tiene_datos ? dot.total_personas : '?'}</td>
     </tr>`;
   });
 
@@ -6266,4 +6442,3 @@ function renderCalibres(data, medida) {
 
   cont.innerHTML = html;
 }
-

@@ -182,7 +182,7 @@ def articulo_clientes_export(codigo_articulo: str):
             ])
         filename = f'{codigo_articulo}_{tipo}.csv'
         return Response(
-            '﻿' + output.getvalue(),
+            '' + output.getvalue(),
             mimetype='text/csv; charset=utf-8',
             headers={'Content-Disposition': f'attachment; filename="{filename}"'},
         )

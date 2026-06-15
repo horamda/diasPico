@@ -1,14 +1,14 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Días Pico — Operaciones</title>
+<title>Días Pico · Operaciones</title>
 {% include 'partials/head_icons.html' %}
 <link rel="stylesheet" href="/static/design-system.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <style>
-/* layout overrides — design-system.css handles reset, typography, base components */
+/* layout overrides - design-system.css handles reset, typography, base components */
 body{display:flex;flex-direction:column;}
 /* ── TOP BAR ── */
 .topbar h1{font-size:14px;font-weight:600;}
@@ -123,6 +123,26 @@ input[type=range]{flex:1;accent-color:var(--acc);}
 .kpi-val.ora{color:var(--acc);} .kpi-val.red{color:var(--red);}
 .kpi-val.grn{color:var(--grn);} .kpi-val.blu{color:var(--blu);}
 .kpi-val.pur{color:var(--pur);}
+#tab-kpis .kpi-grid-stack{display:flex;flex-direction:column;gap:10px;}
+#tab-kpis .kpi-group{display:flex;flex-direction:column;gap:8px;}
+#tab-kpis .kpi-group-body{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:start;}
+#tab-kpis .kpi-band{display:flex;flex-direction:column;gap:5px;padding:6px 8px;border:1px solid var(--brd);border-radius:8px;background:rgba(255,255,255,.015);}
+#tab-kpis .kpi-band.span-all{grid-column:1/-1;}
+#tab-kpis .kpi-band.good{border-color:rgba(76,175,130,.24);}
+#tab-kpis .kpi-band.bad{border-color:rgba(224,92,92,.24);}
+#tab-kpis .kpi-band-head{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--mono);font-size:7px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);}
+#tab-kpis .kpi-band-title{font-weight:700;}
+#tab-kpis .kpi-band.good .kpi-band-title{color:var(--grn);}
+#tab-kpis .kpi-band.bad .kpi-band-title{color:var(--red);}
+#tab-kpis .kpi-band-meta{color:var(--muted);}
+#tab-kpis .kpi-band-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;}
+#tab-kpis .kpi{padding:6px 7px;min-height:50px;border-radius:6px;}
+#tab-kpis .kpi.grn{background:linear-gradient(180deg,rgba(76,175,130,.08),rgba(23,28,39,.98));}
+#tab-kpis .kpi.red{background:linear-gradient(180deg,rgba(224,92,92,.08),rgba(23,28,39,.98));}
+#tab-kpis .kpi-lbl{font-size:7px;line-height:1.05;min-height:15px;margin-bottom:2px;letter-spacing:.2px;}
+#tab-kpis .kpi-val{font-size:15px;}
+#tab-kpis .kpi-goal{margin-top:3px;display:flex;justify-content:center;}
+#tab-kpis .kpi-goal .traffic{font-size:7px;padding:2px 4px;}
 /* ── SEC TITLE ── */
 .sec{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;display:flex;align-items:center;gap:8px;}
 .sec::after{content:'';flex:1;height:1px;background:var(--brd);}
@@ -342,6 +362,8 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   .drawer{width:100%;right:-100%;}
   .drawer-body{padding:12px;}
   .rtbl{min-width:720px;}
+  #tab-kpis .kpi-group-body{grid-template-columns:1fr;}
+  #tab-kpis .kpi-band-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 @media (max-width:560px){
   .topbar h1{width:100%;}
@@ -362,6 +384,10 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   .vd-heatmap-week-full{display:none;}
   .vd-heatmap-week-short{display:inline;}
   .vd-heatmap-value{min-height:28px;font-size:9px;padding:2px 2px;border-radius:10px;}
+  #tab-kpis .kpi-group-body{grid-template-columns:1fr;}
+  #tab-kpis .kpi-band-grid{grid-template-columns:1fr;}
+  #tab-kpis .kpi{min-height:52px;padding:7px 8px;}
+  #tab-kpis .kpi-val{font-size:15px;}
 }
 </style>
 </head>
@@ -436,7 +462,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 
   <!-- UMBRAL CONTROL -->
   <div class="ctrl-block">
-    <label>Umbral pico — % sobre promedio</label>
+    <label>Umbral pico · % sobre promedio</label>
     <div class="ctrl-row">
       <input type="range" id="sliderUmbral" min="1.05" max="2.0" step="0.05" value="1.20" oninput="onUmbralChange(this.value)" onchange="loadMes(); loadHistorico(); if (isTabVisible('tab-venta-dia')) loadVentaDia()">
       <span class="val-badge" id="lblUmbral">+20%</span>
@@ -462,7 +488,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div class="tab" onclick="switchTab('historico',this)">Histórico</div>
       <div class="tab" onclick="switchTab('venta-dia',this)">Venta diaria</div>
       <div class="tab" onclick="switchTab('comparativo',this)">Comparativo</div>
-      <div class="tab" onclick="switchTab('experiencia',this)">Experiencia clientes</div>
+      <div class="tab" onclick="switchTab('experiencia',this)">Experiencia de clientes</div>
       <div class="tab" onclick="switchTab('dotacion',this)">Dotación</div>
       <div class="tab" onclick="switchTab('analisis',this)">Rechazos</div>
       <div class="tab" onclick="switchTab('dropsize',this)">Dropsize</div>
@@ -488,15 +514,15 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   <div id="tab-kpis">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
       <div class="sec" style="margin-bottom:0">Indicadores del mes seleccionado</div>
-      <button class="btn" onclick="abrirReportePicos()" style="font-size:11px;padding:4px 12px;border-color:var(--acc);color:var(--acc)" title="Abrir reporte de días pico para presentación PPT">🖨 Reporte PPT</button>
+      <button class="btn" onclick="abrirReportePicos()" style="font-size:11px;padding:4px 12px;border-color:var(--acc);color:var(--acc)" title="Abrir el reporte de días pico para una presentación PPT">🖨 Reporte PPT</button>
     </div>
-    <div class="kpi-grid" id="kpiGrid"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
+    <div class="kpi-grid kpi-grid-stack" id="kpiGrid"><div class="loading"><div class="spinner"></div>Cargando…</div></div>
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:8px;flex-wrap:wrap">
-      <div class="sec" style="margin:0">Días del mes — detalle</div>
-      <button class="btn" onclick="exportDiasDetalle()" style="font-size:11px;padding:4px 12px;border-color:var(--grn);color:var(--grn)" title="Exporta el detalle diario de todos los meses desde enero 2025 hasta el mes seleccionado">Excel desde ene 2025</button>
+      <div class="sec" style="margin:0">Detalle diario del mes</div>
+      <button class="btn" onclick="exportDiasDetalle()" style="font-size:11px;padding:4px 12px;border-color:var(--grn);color:var(--grn)" title="Exportar el detalle diario de todos los meses desde enero de 2025 hasta el mes seleccionado">Exportar a Excel desde ene-2025</button>
     </div>
     <div class="box"><div id="tablaDias"><div class="loading"><div class="spinner"></div></div></div></div>
-    <div class="sec" style="margin-top:16px">Periodos críticos — R3.4.1</div>
+    <div class="sec" style="margin-top:16px">Períodos críticos — R3.4.1</div>
     <div class="box" id="periodosCriticos"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
@@ -506,6 +532,9 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" id="barHistorico"><div class="loading"><div class="spinner"></div></div></div>
     <div class="sec" style="margin-top:12px">Días pico anual</div>
     <div class="box" id="picosAnualHistorico"><div class="loading"><div class="spinner"></div></div></div>
+    <div class="sec" style="margin-top:12px">Volumen mes a mes año vs año</div>
+    <div id="volumenAnualMeta" style="font-size:11px;color:var(--muted);margin-top:4px;margin-bottom:8px">Métrica: Bultos desp.</div>
+    <div class="box" id="volumenAnualHistorico"><div class="loading"><div class="spinner"></div></div></div>
     <div class="sec" style="margin-top:8px">Tabla resumen</div>
     <div class="box"><div id="tablaHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
   </div>
@@ -522,8 +551,8 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
           </select>
         </div>
         <div class="filter-field">
-          <label>Periodo</label>
-          <select id="ventaDiaPeriodo" onchange="updateVentaDiaPeriodoUI()">
+          <label>Período</label>
+          <select id="ventaDiaPeriodo" onchange="onVentaDiaPeriodoChange()">
             <option value="todo">Todo el histórico</option>
             <option value="mes">Mes</option>
             <option value="anio">Año</option>
@@ -533,23 +562,23 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
         </div>
         <div class="filter-field" id="ventaDiaMesField">
           <label>Mes</label>
-          <input type="month" id="ventaDiaMes" onchange="updateVentaDiaFilterHint()">
+          <input type="month" id="ventaDiaMes" onchange="onVentaDiaFilterChange()">
         </div>
         <div class="filter-field" id="ventaDiaAnioField">
           <label>Año ISO</label>
-          <input type="number" id="ventaDiaAnio" min="2020" max="2100" onchange="updateVentaDiaFilterHint()">
+          <input type="number" id="ventaDiaAnio" min="2020" max="2100" onchange="onVentaDiaFilterChange()">
         </div>
         <div class="filter-field" id="ventaDiaSemanaField">
           <label>Semana ISO</label>
-          <input type="number" id="ventaDiaSemana" min="1" max="53" onchange="updateVentaDiaFilterHint()">
+          <input type="number" id="ventaDiaSemana" min="1" max="53" onchange="onVentaDiaFilterChange()">
         </div>
         <div class="filter-field" id="ventaDiaDesdeField">
           <label>Desde</label>
-          <input type="date" id="ventaDiaDesde" onchange="updateVentaDiaFilterHint()">
+          <input type="date" id="ventaDiaDesde" onchange="onVentaDiaFilterChange()">
         </div>
         <div class="filter-field" id="ventaDiaHastaField">
           <label>Hasta</label>
-          <input type="date" id="ventaDiaHasta" onchange="updateVentaDiaFilterHint()">
+          <input type="date" id="ventaDiaHasta" onchange="onVentaDiaFilterChange()">
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end;grid-column:1/-1">
           <button class="btn primary" onclick="loadVentaDia()">Actualizar</button>
@@ -564,9 +593,9 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" id="ventaDiaHectolitros"><div class="loading"><div class="spinner"></div></div></div>
     <div class="box" id="ventaDiaBultos" style="margin-top:12px"><div class="loading"><div class="spinner"></div></div></div>
     <div class="box" id="ventaDiaPallets" style="margin-top:12px"><div class="loading"><div class="spinner"></div></div></div>
-    <div class="sec" style="margin-top:16px">Avance vs año anterior</div>
+    <div class="sec" style="margin-top:16px">Avance vs. año anterior</div>
     <div class="box" id="ventaDiaComparativoKpis" style="margin-top:8px"><div class="loading"><div class="spinner"></div></div></div>
-    <div class="sec" style="margin-top:16px">Distribucion por sucursal</div>
+    <div class="sec" style="margin-top:16px">Distribución por sucursal</div>
     <div class="chart-grid vd-donut-grid">
       <div class="box" id="ventaDiaDistribucionHectolitros"><div class="loading"><div class="spinner"></div></div></div>
       <div class="box" id="ventaDiaDistribucionBultos"><div class="loading"><div class="spinner"></div></div></div>
@@ -644,7 +673,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
           </select>
         </div>
         <div class="filter-field">
-          <label>Periodo</label>
+          <label>Período</label>
           <input type="month" id="expPeriodo" onchange="onExperienciaPeriodoChange()">
         </div>
         <div class="filter-field">
@@ -821,13 +850,25 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
         </div>
         <div class="filter-field">
           <label>Ranking</label>
+          <select id="dropRankingAgrupacion" onchange="loadDropsize()">
+            <option value="sucursal">Sucursal</option>
+            <option value="segmento">Segmento</option>
+            <option value="localidad">Localidad</option>
+            <option value="canal">Canal</option>
+            <option value="vendedor">Vendedor</option>
+            <option value="ruta">Ruta</option>
+            <option value="chofer">Chofer</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Unidad</label>
           <select id="dropRankingUnidad" onchange="loadDropsize()">
             <option value="bultos">Bultos</option>
             <option value="hl">HL</option>
             <option value="pallets">Pallets</option>
           </select>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;grid-column:1/-1">
           <button class="btn primary" onclick="loadDropsize()">Aplicar</button>
           <button class="btn" onclick="exportDropsizeExcel()">Excel</button>
           <button class="btn" onclick="recalcularDropsize()">Recalcular</button>
@@ -851,7 +892,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 
     <div class="drop-two" style="margin-top:12px">
       <div>
-        <div class="sec" style="margin-bottom:8px">Ranking de sucursales</div>
+        <div class="sec" style="margin-bottom:8px">Ranking por sucursal / segmento</div>
         <div class="box"><div id="dropRanking"><div class="loading"><div class="spinner"></div></div></div></div>
       </div>
       <div>
@@ -889,17 +930,17 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px">
         <select id="planEmpresa" onchange="loadCatalogoSucursalesPlanificacion()" title="Empresa"><option value="1">Empresa 1</option></select>
         <select id="planSucursal" title="Sucursal"><option value="TODAS">Todas las sucursales</option></select>
-        <input type="number" id="planAnio" min="2020" max="2100" style="width:72px" title="Año plan">
-        <select id="planMes" title="Mes plan">
+        <input type="number" id="planAnio" min="2020" max="2100" style="width:72px" title="Año del plan">
+        <select id="planMes" title="Mes del plan">
           <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
           <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
           <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
           <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
         </select>
-        <button class="btn sm" onclick="loadPlanificacion()" title="Buscar plan existente para el mes seleccionado">↻ Buscar</button>
-        <button class="btn primary sm" onclick="generarPlanificacion()">Generar</button>
+        <button class="btn sm" onclick="loadPlanificacion()" title="Buscar el plan existente del mes seleccionado">↻ Buscar</button>
+        <button class="btn primary sm" onclick="generarPlanificacion()">Generar plan</button>
         <button class="btn sm" onclick="actualizarRealPlanificacion()">Actualizar real</button>
-        <button class="btn sm" onclick="recalcularPlanificacion()">Recalcular</button>
+        <button class="btn sm" onclick="recalcularPlanificacion()">Recalcular plan</button>
         <span style="color:var(--brd);padding:0 2px">|</span>
         <button class="btn sm" onclick="exportPlanificacion('xlsx')">Excel</button>
         <button class="btn sm" onclick="exportPlanificacion('csv')">CSV</button>
@@ -1095,7 +1136,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
         </div>
         <div style="font-size:11px;color:var(--muted);padding:6px 0;line-height:1.6">
           <strong style="color:var(--acc)">Nota de seguridad:</strong> El botón <strong>Subir</strong> reemplaza solo el mes en curso.
-          El botón <strong>Force</strong> reemplaza también meses históricos — usar con cuidado.
+          El botón <strong>Force</strong> reemplaza también meses históricos; usar con cuidado.
         </div>
       </div>
     </div>
@@ -1120,7 +1161,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" style="margin-top:14px">
       <div class="sec" style="margin-bottom:12px">Feriados</div>
 
-      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Importar desde Google Sheets (columnas: Fecha, Descripcion, Tipo)</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Importar desde Google Sheets (columnas: Fecha, Descripción, Tipo)</div>
       <div style="display:flex;gap:8px">
         <input type="text" id="inputFeriadosUrl" placeholder="URL del Google Sheet de feriados" style="flex:1">
         <button class="btn primary" onclick="syncFeriados()">Sincronizar</button>
@@ -1244,7 +1285,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
             <div class="sec" style="margin:0">Lista de camiones</div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-              <input type="text" id="camBuscar" placeholder="Buscar código, descripción o placa…" oninput="filtrarCamiones()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt);width:260px">
+              <input type="text" id="camBuscar" placeholder="Buscar código, descripción o placa" oninput="filtrarCamiones()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt);width:260px">
               <select id="camFiltroEstado" onchange="filtrarCamiones()" style="font-size:12px;padding:4px 8px;border-radius:4px;border:1px solid var(--brd);background:var(--surf2);color:var(--txt)">
                 <option value="todos">Todos</option>
                 <option value="activos">Activos</option>
@@ -1345,7 +1386,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" style="margin-bottom:14px">
       <div class="sec" style="margin-bottom:12px">Ausentismo mensual</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Cargá el porcentaje mensual para que impacte en el dashboard general, el histórico y la planificación de días pico. Si se carga en <strong>Todas</strong>, se usa como fallback para las sucursales sin dato propio.
+        Cargá el porcentaje mensual para que impacte en el dashboard general, el histórico y la planificación de días pico. Si se carga en <strong>Todas</strong>, se usa como respaldo para las sucursales sin dato propio.
       </div>
       <div class="objective-grid">
         <div class="filter-field">
@@ -1435,7 +1476,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.6">
         Importa los datos de choferes y ayudantes desde las 4 pestañas de Google Sheets
         (CC reparto, DOL reparto, CC recargas, DOL recargas).<br>
-        <strong>Cada sync reemplaza completamente los datos anteriores</strong> — lo que queda en la base es exactamente lo que está en los sheets.
+        <strong>Cada sync reemplaza completamente los datos anteriores</strong>. Lo que queda en la base es exactamente lo que está en los sheets.
       </div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
         <button class="btn primary" onclick="syncDotacionConfig()" id="cfgBtnSyncDot" style="padding:6px 18px">
@@ -1477,7 +1518,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" style="margin-top:14px">
       <div class="sec" style="margin-bottom:14px">Objetivos KPI</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">
-        Para rechazos usá objetivos de máximo permitido. Ejemplo: <strong style="color:var(--grn)">% rechazo HL objetivo 2</strong> para marcar cumplimiento cuando el valor sea menor o igual a 2%.
+        Para los rechazos, usá objetivos de máximo permitido. Ejemplo: <strong style="color:var(--grn)">% rechazo HL objetivo 2</strong> para marcar cumplimiento cuando el valor sea menor o igual a 2%.
       </div>
       <input type="hidden" id="kpiObjId">
       <div class="objective-grid">
@@ -1562,42 +1603,42 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box">
       <div class="sec" style="margin-bottom:10px">Flujo recomendado</div>
       <table class="rtbl">
-        <thead><tr><th>Paso</th><th>Accion</th><th>Resultado esperado</th></tr></thead>
+        <thead><tr><th>Paso</th><th>Acción</th><th>Resultado esperado</th></tr></thead>
         <tbody>
-          <tr><td>1</td><td>Elegir mes, sucursal y metrica desde el panel lateral.</td><td>El dashboard carga KPIs, calendario y detalle diario.</td></tr>
-          <tr><td>2</td><td>Revisar KPIs y dias del mes.</td><td>Se identifican picos, feriados, eventos y volumen operativo.</td></tr>
-          <tr><td>3</td><td>Usar Historico, Rechazos y Dropsize para analizar tendencia.</td><td>Se compara desempeno mensual y calidad de entrega.</td></tr>
-          <tr><td>4</td><td>Entrar a Planificacion Picos y generar el plan del mes.</td><td>Se crea plan mensual, detalle diario, alertas y escenario automatico.</td></tr>
-          <tr><td>5</td><td>Actualizar real cuando ya existan datos cargados del mes.</td><td>Se calcula Plan vigente vs Real con desvios y semaforos.</td></tr>
+          <tr><td>1</td><td>Elegir mes, sucursal y métrica desde el panel lateral.</td><td>El dashboard carga KPIs, calendario y detalle diario.</td></tr>
+          <tr><td>2</td><td>Revisar KPIs y días del mes.</td><td>Se identifican picos, feriados, eventos y volumen operativo.</td></tr>
+          <tr><td>3</td><td>Usar Histórico, Rechazos y Dropsize para analizar la tendencia.</td><td>Se compara el desempeño mensual y la calidad de entrega.</td></tr>
+          <tr><td>4</td><td>Entrar a Planificación de picos y generar el plan del mes.</td><td>Se crea el plan mensual, el detalle diario, alertas y escenario automático.</td></tr>
+          <tr><td>5</td><td>Actualizar real cuando ya existan datos cargados del mes.</td><td>Se calcula Plan vigente vs Real con desvíos y semáforos.</td></tr>
         </tbody>
       </table>
     </div>
 
     <div class="chart-grid" style="margin-top:12px">
       <div class="box">
-        <div class="sec" style="margin-bottom:10px">Pestanas principales</div>
+        <div class="sec" style="margin-bottom:10px">Pestañas principales</div>
         <table class="rtbl">
-          <thead><tr><th>Pestana</th><th>Para que sirve</th></tr></thead>
+          <thead><tr><th>Pestaña</th><th>Para qué sirve</th></tr></thead>
           <tbody>
-            <tr><td>KPIs</td><td>Resumen del mes, calendario y detalle por dia.</td></tr>
-            <tr><td>Historico</td><td>Evolucion mensual y tabla comparativa de volumen, PDV, rechazos y salidas.</td></tr>
-            <tr><td>Rechazos</td><td>Analisis de HL entregados, HL rechazados y calidad de entrega.</td></tr>
-            <tr><td>Dropsize</td><td>Seguimiento de volumen promedio por entrega, objetivos y evolucion.</td></tr>
-            <tr><td>Planificacion Picos</td><td>Plan operativo mensual, dias pico, simulador, capacidad y alertas.</td></tr>
+            <tr><td>KPIs</td><td>Resumen del mes, calendario y detalle por día.</td></tr>
+            <tr><td>Histórico</td><td>Evolución mensual y tabla comparativa de volumen, PDV, rechazos y salidas.</td></tr>
+            <tr><td>Rechazos</td><td>Análisis de HL entregados, HL rechazados y calidad de entrega.</td></tr>
+            <tr><td>Dropsize</td><td>Seguimiento de volumen promedio por entrega, objetivos y evolución.</td></tr>
+            <tr><td>Planificación de picos</td><td>Plan operativo mensual, días pico, simulador, capacidad y alertas.</td></tr>
             <tr><td>Cargar datos</td><td>Carga de articulos, feriados y archivos necesarios para alimentar el sistema.</td></tr>
-            <tr><td>Configuracion</td><td>Parametros, objetivos y tablas de soporte operativo.</td></tr>
+            <tr><td>Configuración</td><td>Parámetros, objetivos y tablas de soporte operativo.</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="box">
-        <div class="sec" style="margin-bottom:10px">Planificacion Picos</div>
+        <div class="sec" style="margin-bottom:10px">Planificación de picos</div>
         <table class="rtbl">
-          <thead><tr><th>Boton</th><th>Uso</th></tr></thead>
+          <thead><tr><th>Botón</th><th>Uso</th></tr></thead>
           <tbody>
-            <tr><td>Generar planificacion</td><td>Crea o actualiza el plan usando el mismo mes del ano base historico.</td></tr>
-            <tr><td>Actualizar real</td><td>Toma los datos reales cargados y calcula desvios contra el plan vigente.</td></tr>
-            <tr><td>Recalcular</td><td>Regenera el plan si cambiaron factores, historico o configuracion.</td></tr>
+            <tr><td>Generar planificación</td><td>Crea o actualiza el plan usando el mismo mes del año base histórico.</td></tr>
+            <tr><td>Actualizar real</td><td>Toma los datos reales cargados y calcula desvíos contra el plan vigente.</td></tr>
+            <tr><td>Recalcular</td><td>Regenera el plan si cambiaron factores, histórico o configuración.</td></tr>
             <tr><td>Simular</td><td>Prueba escenarios sin guardar cambios sobre el plan.</td></tr>
             <tr><td>Excel / CSV</td><td>Exporta el reporte Plan vs Real.</td></tr>
           </tbody>
@@ -1609,12 +1650,12 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div class="box">
         <div class="sec" style="margin-bottom:10px">Escenarios manuales</div>
         <table class="rtbl">
-          <thead><tr><th>Concepto</th><th>Descripcion</th></tr></thead>
+          <thead><tr><th>Concepto</th><th>Descripción</th></tr></thead>
           <tbody>
             <tr><td>AUTO calendario operativo</td><td>Escenario generado por el sistema, asignando dias por equivalencia operativa.</td></tr>
             <tr><td>Ajuste manual</td><td>Permite modificar HL, picos, salidas, PDV, camiones y empleados.</td></tr>
             <tr><td>Plan vigente</td><td>Escenario activo usado para comparar contra el real.</td></tr>
-            <tr><td>Comparacion sin recalcular</td><td>Activar otro escenario cambia los desvios contra el real guardado sin recalcular el historico.</td></tr>
+            <tr><td>Comparación sin recalcular</td><td>Activar otro escenario cambia los desvíos contra el real guardado sin recalcular el histórico.</td></tr>
           </tbody>
         </table>
       </div>
@@ -1638,7 +1679,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" style="margin-top:12px">
       <div class="sec" style="margin-bottom:10px">Lectura de estados</div>
       <table class="rtbl">
-        <thead><tr><th>Estado</th><th>Criterio general</th><th>Accion sugerida</th></tr></thead>
+        <thead><tr><th>Estado</th><th>Criterio general</th><th>Acción sugerida</th></tr></thead>
         <tbody>
           <tr><td><span class="tag ok">NORMAL</span></td><td>El real esta dentro del plan o sin exceso relevante.</td><td>Monitorear.</td></tr>
           <tr><td><span class="tag pico">ALERTA</span></td><td>El real supera el plan dentro del umbral configurado.</td><td>Revisar capacidad y causas del desvio.</td></tr>
@@ -1853,7 +1894,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 
       <!-- Bloque de comparación por período -->
       <div id="simlComparacion" style="display:none">
-        <div class="sec" style="margin-bottom:8px">Comparación por sucursal — mismo período</div>
+        <div class="sec" style="margin-bottom:8px">Comparación por sucursal · mismo período</div>
         <div class="box">
           <div id="simlComparacionTabla"></div>
         </div>

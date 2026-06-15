@@ -6,14 +6,15 @@ Business rules match the main peak-day panel:
 - Volume is total dispatched volume, including rejected rows.
 - COMOD/REMIT documents are always excluded.
 - Only articulos.tipo_producto = mercaderia is included.
-- A drop is a delivered customer-day: fecha + idCliente.
+- A drop is a delivered customer-day at branch grain:
+  empresa + sucursal + fecha + cliente.
 """
 
 from __future__ import annotations
 
 import calendar as cal_mod
 import json
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.database import pg_conn, pg_cursor
@@ -23,7 +24,6 @@ from app.services.pico_svc import (
     SUCURSAL_LABELS,
     V_NOT_REMITO,
     V_PALLETS_EXPR,
-    V_PEDIDO_KEY,
     _rango_mes,
     _suc_filter,
     get_params,
@@ -31,7 +31,151 @@ from app.services.pico_svc import (
 
 UNIDADES = {'bultos', 'hl', 'pallets'}
 METRICAS_PICO = {'bultos', 'hl', 'pallets', 'clientes', 'todos'}
+AGRUPACIONES = {'sucursal', 'segmento', 'localidad', 'canal', 'vendedor', 'ruta', 'chofer'}
 _DROPSIZE_TABLES_READY = False
+
+
+def _normalize_agrupacion(value: str | None) -> str:
+    key = str(value or 'sucursal').strip().lower()
+    return key if key in AGRUPACIONES else 'sucursal'
+
+
+def _agrupacion_label(agrupacion: str) -> str:
+    return {
+        'sucursal': 'Sucursal',
+        'segmento': 'Segmento',
+        'localidad': 'Localidad',
+        'canal': 'Canal',
+        'vendedor': 'Vendedor',
+        'ruta': 'Ruta',
+        'chofer': 'Chofer',
+    }.get(agrupacion, 'Sucursal')
+
+
+def _delivery_key(alias: str = 'v') -> str:
+    empresa = f"COALESCE(NULLIF(TRIM({alias}.empresa), ''), '1')"
+    sucursal = f"COALESCE(NULLIF(TRIM({alias}.sucursal), ''), '1')"
+    cliente = f"NULLIF(TRIM({alias}.cliente), '')"
+    return f"{empresa} || '|' || {sucursal} || '|' || {alias}.fecha::text || '|' || {cliente}"
+
+
+def _agrupacion_expr(agrupacion: str, alias: str = 'v') -> tuple[str, str, str]:
+    agr = _normalize_agrupacion(agrupacion)
+    if agr == 'segmento':
+        expr = (
+            "COALESCE("
+            "ch.canal_descripcion, "
+            "NULLIF(TRIM(v.descripcion_canal), ''), "
+            "NULLIF(TRIM(v.descripcion_detallada_canal), ''), "
+            "NULLIF(TRIM(cli.subcanal), ''), "
+            "NULLIF(TRIM(v.canal), ''), "
+            "'Sin segmento'"
+            ")"
+        )
+        join_sql = """
+            LEFT JOIN clientes cli
+              ON cli.cliente = v.cliente
+             AND COALESCE(NULLIF(TRIM(cli.sucursal), ''), '1') = COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
+            LEFT JOIN canales ch
+              ON ch.cliente = v.cliente
+             AND ch.sucursal_id = COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
+        """
+        cte_sql = """
+            canal_raw AS (
+                SELECT
+                    NULLIF(TRIM(v.cliente), '') AS cliente,
+                    COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                    COALESCE(
+                        NULLIF(TRIM(v.descripcion_canal), ''),
+                        NULLIF(TRIM(v.descripcion_detallada_canal), ''),
+                        NULLIF(TRIM(v.canal), ''),
+                        'Sin segmento'
+                    ) AS canal_descripcion,
+                    SUM(COALESCE(v.importe_neto, 0)) AS venta_canal
+                FROM ventas_detalle v
+                WHERE v.fecha BETWEEN %(ini)s AND %(fin)s
+                  AND NULLIF(TRIM(v.cliente), '') IS NOT NULL
+                GROUP BY 1, 2, 3
+            ),
+            canales AS (
+                SELECT DISTINCT ON (cliente, sucursal_id)
+                       cliente,
+                       sucursal_id,
+                       canal_descripcion
+                FROM canal_raw
+                ORDER BY cliente, sucursal_id, venta_canal DESC NULLS LAST, canal_descripcion
+            )
+        """
+        return expr, join_sql, cte_sql
+    if agr == 'localidad':
+        expr = "COALESCE(NULLIF(TRIM(cli.localidad), ''), 'Sin localidad')"
+        join_sql = """
+            LEFT JOIN clientes cli
+              ON cli.cliente = v.cliente
+             AND COALESCE(NULLIF(TRIM(cli.sucursal), ''), '1') = COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
+        """
+        return expr, join_sql, ""
+    if agr == 'canal':
+        expr = (
+            "COALESCE("
+            "ch.canal_descripcion, "
+            "NULLIF(TRIM(v.descripcion_canal), ''), "
+            "NULLIF(TRIM(v.descripcion_detallada_canal), ''), "
+            "NULLIF(TRIM(v.canal), ''), "
+            "'Sin canal'"
+            ")"
+        )
+        join_sql = """
+            LEFT JOIN canales ch
+              ON ch.cliente = v.cliente
+             AND ch.sucursal_id = COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
+        """
+        cte_sql = """
+            canal_raw AS (
+                SELECT
+                    NULLIF(TRIM(v.cliente), '') AS cliente,
+                    COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
+                    COALESCE(
+                        NULLIF(TRIM(v.descripcion_canal), ''),
+                        NULLIF(TRIM(v.descripcion_detallada_canal), ''),
+                        NULLIF(TRIM(v.canal), ''),
+                        'Sin canal'
+                    ) AS canal_descripcion,
+                    SUM(COALESCE(v.importe_neto, 0)) AS venta_canal
+                FROM ventas_detalle v
+                WHERE v.fecha BETWEEN %(ini)s AND %(fin)s
+                  AND NULLIF(TRIM(v.cliente), '') IS NOT NULL
+                GROUP BY 1, 2, 3
+            ),
+            canales AS (
+                SELECT DISTINCT ON (cliente, sucursal_id)
+                       cliente,
+                       sucursal_id,
+                       canal_descripcion
+                FROM canal_raw
+                ORDER BY cliente, sucursal_id, venta_canal DESC NULLS LAST, canal_descripcion
+            )
+        """
+        return expr, join_sql, cte_sql
+    if agr == 'vendedor':
+        return (
+            "COALESCE(NULLIF(TRIM(v.descripcion_vendedor), ''), NULLIF(TRIM(v.vendedor), ''), 'Sin vendedor')",
+            "",
+            "",
+        )
+    if agr == 'ruta':
+        return (
+            "COALESCE(NULLIF(TRIM(v.descripcion_ruta), ''), NULLIF(TRIM(v.ruta), ''), 'Sin ruta')",
+            "",
+            "",
+        )
+    if agr == 'chofer':
+        return (
+            "COALESCE(NULLIF(TRIM(v.descripcion_chofer), ''), NULLIF(TRIM(v.chofer), ''), 'Sin chofer')",
+            "",
+            "",
+        )
+    return ("COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')", "", "")
 
 
 DROPSIZE_OBJETIVOS_DDL = """
@@ -159,6 +303,7 @@ def _source_where(sucursal: str, alias: str = 'v') -> str:
         {_suc_filter(sucursal, alias)}
         AND {V_NOT_REMITO}
         AND {IS_MERCADERIA}
+        AND NULLIF(TRIM(COALESCE({alias}.cliente, '')), '') IS NOT NULL
     """
 
 
@@ -172,6 +317,7 @@ def _format_summary(row: dict | None, fecha_desde: date | None = None, fecha_has
         'fecha_desde': fecha_desde.isoformat() if fecha_desde else None,
         'fecha_hasta': fecha_hasta.isoformat() if fecha_hasta else None,
         'clientes_entregados': clientes,
+        'entregas_consolidadas': clientes,
         'total_bultos': total_bultos,
         'total_hl': total_hl,
         'total_pallets': total_pallets,
@@ -186,7 +332,7 @@ def _aggregate_source(sucursal: str, ini: date, fin: date) -> dict:
     with pg_cursor() as cur:
         cur.execute(f"""
             SELECT
-                COUNT(DISTINCT {V_PEDIDO_KEY}) AS clientes_entregados,
+                COUNT(DISTINCT {_delivery_key()}) AS clientes_entregados,
                 COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
                 COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
                 COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets
@@ -340,8 +486,10 @@ def _evolucion_mensual_historico(sucursal: str, ini: date, fin: date) -> dict | 
     return {'fecha_desde': ini.isoformat(), 'fecha_hasta': fin.isoformat(), 'meses': result}
 
 
-def _ranking_historico(ini: date, fin: date, unidad: str) -> dict | None:
+def _ranking_historico(ini: date, fin: date, unidad: str, sucursal: str = 'TODAS') -> dict | None:
     ensure_dropsize_tables()
+    params = _base_params(sucursal, ini, fin)
+    where = f"fecha BETWEEN %(ini)s AND %(fin)s {_hist_where(sucursal)}"
     with pg_cursor() as cur:
         cur.execute("""
             SELECT
@@ -351,22 +499,77 @@ def _ranking_historico(ini: date, fin: date, unidad: str) -> dict | None:
                 SUM(total_hl) AS total_hl,
                 SUM(total_pallets) AS total_pallets
             FROM dropsize_historico
-            WHERE fecha BETWEEN %(ini)s AND %(fin)s
+            WHERE """ + where + """
             GROUP BY sucursal_id
-        """, _base_params('TODAS', ini, fin))
+        """, params)
         rows = cur.fetchall()
     if not rows:
         return None
     ranking = []
     for r in rows:
         item = _format_summary(r)
+        item['grupo_id'] = r['sucursal_id']
+        item['grupo'] = SUCURSAL_LABELS.get(r['sucursal_id'], r['sucursal_id'])
         item['sucursal_id'] = r['sucursal_id']
-        item['sucursal'] = SUCURSAL_LABELS.get(r['sucursal_id'], r['sucursal_id'])
+        item['sucursal'] = item['grupo']
         ranking.append(item)
     ranking.sort(key=lambda x: x.get(f'dropsize_{unidad}', 0), reverse=True)
     for i, item in enumerate(ranking, 1):
         item['ranking'] = i
-    return {'fecha_desde': ini.isoformat(), 'fecha_hasta': fin.isoformat(), 'unidad': unidad, 'ranking': ranking}
+    return {
+        'fecha_desde': ini.isoformat(),
+        'fecha_hasta': fin.isoformat(),
+        'unidad': unidad,
+        'agrupacion': 'sucursal',
+        'agrupacion_label': _agrupacion_label('sucursal'),
+        'ranking': ranking,
+    }
+
+
+def _ranking_source(ini: date, fin: date, unidad: str, agrupacion: str, sucursal: str = 'TODAS') -> dict | None:
+    agrupacion = _normalize_agrupacion(agrupacion)
+    expr, join_sql, cte_sql = _agrupacion_expr(agrupacion)
+    ensure_dropsize_tables(ensure_source=True)
+    params = _base_params(sucursal, ini, fin)
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            {f'WITH {cte_sql}' if cte_sql else ''}
+            SELECT
+                {expr} AS grupo_id,
+                COUNT(DISTINCT {_delivery_key()}) AS clientes_entregados,
+                COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
+                COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
+                COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            {join_sql}
+            WHERE {_source_where(sucursal)}
+            GROUP BY {expr}
+        """, params)
+        rows = cur.fetchall()
+    if not rows:
+        return None
+
+    ranking = []
+    for r in rows:
+        item = _format_summary(r)
+        grupo_id = str(r.get('grupo_id') or '')
+        item['grupo_id'] = grupo_id
+        item['grupo'] = SUCURSAL_LABELS.get(grupo_id, grupo_id) if agrupacion == 'sucursal' else grupo_id
+        item['sucursal_id'] = grupo_id if agrupacion == 'sucursal' else None
+        item['sucursal'] = item['grupo']
+        ranking.append(item)
+    ranking.sort(key=lambda x: x.get(f'dropsize_{unidad}', 0), reverse=True)
+    for i, item in enumerate(ranking, 1):
+        item['ranking'] = i
+    return {
+        'fecha_desde': ini.isoformat(),
+        'fecha_hasta': fin.isoformat(),
+        'unidad': unidad,
+        'agrupacion': agrupacion,
+        'agrupacion_label': _agrupacion_label(agrupacion),
+        'ranking': ranking,
+    }
 
 
 def _comparativo_historico(
@@ -521,7 +724,7 @@ def get_evolucion_diaria(sucursal: str, fecha_desde: str | None = None, fecha_ha
         cur.execute(f"""
             SELECT
                 v.fecha::date AS fecha,
-                COUNT(DISTINCT {V_PEDIDO_KEY}) AS clientes_entregados,
+                COUNT(DISTINCT {_delivery_key()}) AS clientes_entregados,
                 COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
                 COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
                 COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets
@@ -553,7 +756,7 @@ def get_evolucion_mensual(sucursal: str, meses: int = 12, mes_hasta: str | None 
         cur.execute(f"""
             SELECT
                 TO_CHAR(DATE_TRUNC('month', v.fecha), 'YYYY-MM') AS mes,
-                COUNT(DISTINCT {V_PEDIDO_KEY}) AS clientes_entregados,
+                COUNT(DISTINCT {_delivery_key()}) AS clientes_entregados,
                 COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
                 COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
                 COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets
@@ -572,37 +775,21 @@ def get_evolucion_mensual(sucursal: str, meses: int = 12, mes_hasta: str | None 
     return {'fecha_desde': ini.isoformat(), 'fecha_hasta': fin.isoformat(), 'meses': result}
 
 
-def get_ranking_sucursales(fecha_desde: str | None = None, fecha_hasta: str | None = None, mes: str | None = None, unidad: str = 'bultos') -> dict:
+def get_ranking_sucursales(
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    mes: str | None = None,
+    unidad: str = 'bultos',
+    agrupacion: str = 'sucursal',
+    sucursal: str = 'TODAS',
+) -> dict:
     ini, fin = _period_bounds(fecha_desde, fecha_hasta, mes)
     unidad = unidad if unidad in UNIDADES else 'bultos'
-    historico = _ranking_historico(ini, fin, unidad)
+    agrupacion = _normalize_agrupacion(agrupacion)
+    historico = _ranking_historico(ini, fin, unidad, sucursal) if agrupacion == 'sucursal' else None
     if historico:
         return historico
-    ensure_dropsize_tables(ensure_source=True)
-    with pg_cursor() as cur:
-        cur.execute(f"""
-            SELECT
-                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal_id,
-                COUNT(DISTINCT {V_PEDIDO_KEY}) AS clientes_entregados,
-                COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
-                COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
-                COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets
-            FROM ventas_detalle v
-            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
-            WHERE {_source_where('TODAS')}
-            GROUP BY COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
-        """, _base_params('TODAS', ini, fin))
-        rows = cur.fetchall()
-    ranking = []
-    for r in rows:
-        item = _format_summary(r)
-        item['sucursal_id'] = r['sucursal_id']
-        item['sucursal'] = SUCURSAL_LABELS.get(r['sucursal_id'], r['sucursal_id'])
-        ranking.append(item)
-    ranking.sort(key=lambda x: x.get(f'dropsize_{unidad}', 0), reverse=True)
-    for i, item in enumerate(ranking, 1):
-        item['ranking'] = i
-    return {'fecha_desde': ini.isoformat(), 'fecha_hasta': fin.isoformat(), 'unidad': unidad, 'ranking': ranking}
+    return _ranking_source(ini, fin, unidad, agrupacion, sucursal)
 
 
 def _comparar(actual: dict, base: dict) -> dict:
@@ -613,25 +800,40 @@ def _comparar(actual: dict, base: dict) -> dict:
     return {k: _pct_var(actual.get(k), base.get(k)) for k in keys}
 
 
-def get_comparativo(sucursal: str, mes: str | None = None) -> dict:
-    ini, fin = _month_bounds(mes)
-    prev_ini = _add_months(ini, -1)
-    prev_fin = date(prev_ini.year, prev_ini.month, cal_mod.monthrange(prev_ini.year, prev_ini.month)[1])
-    aa_ini = date(ini.year - 1, ini.month, 1)
-    aa_fin = date(aa_ini.year, aa_ini.month, cal_mod.monthrange(aa_ini.year, aa_ini.month)[1])
+def get_comparativo(
+    sucursal: str,
+    fecha_desde: str | None = None,
+    fecha_hasta: str | None = None,
+    mes: str | None = None,
+) -> dict:
+    ini, fin = _period_bounds(fecha_desde, fecha_hasta, mes)
+    span_days = (fin - ini).days + 1
+    prev_fin = ini - timedelta(days=1)
+    prev_ini = prev_fin - timedelta(days=span_days - 1)
+    aa_ini = _add_months(ini, -12)
+    aa_fin = aa_ini + timedelta(days=span_days - 1)
     historico = _comparativo_historico(sucursal, ini, fin, prev_ini, prev_fin, aa_ini, aa_fin) or {}
     actual = historico.get('actual') or _aggregate(sucursal, ini, fin)
     previo = historico.get('previo') or _aggregate(sucursal, prev_ini, prev_fin)
     anio_anterior = historico.get('anio_anterior') or _aggregate(sucursal, aa_ini, aa_fin)
     return {
         'actual': actual,
+        'periodo_actual': {
+            'fecha_desde': ini.isoformat(),
+            'fecha_hasta': fin.isoformat(),
+            'dias': span_days,
+        },
         'mes_anterior': {
-            'periodo': prev_ini.strftime('%Y-%m'),
+            'periodo': f'{prev_ini.isoformat()} a {prev_fin.isoformat()}',
+            'fecha_desde': prev_ini.isoformat(),
+            'fecha_hasta': prev_fin.isoformat(),
             'resumen': previo,
             'variacion_pct': _comparar(actual, previo),
         },
         'anio_anterior': {
-            'periodo': aa_ini.strftime('%Y-%m'),
+            'periodo': f'{aa_ini.isoformat()} a {aa_fin.isoformat()}',
+            'fecha_desde': aa_ini.isoformat(),
+            'fecha_hasta': aa_fin.isoformat(),
             'resumen': anio_anterior,
             'variacion_pct': _comparar(actual, anio_anterior),
         },
@@ -815,13 +1017,13 @@ def recalcular_historico(sucursal: str = 'TODAS', fecha_desde: str | None = None
                 v.fecha::date AS fecha,
                 EXTRACT(MONTH FROM v.fecha)::smallint AS periodo_mes,
                 EXTRACT(YEAR FROM v.fecha)::smallint AS periodo_anio,
-                COUNT(DISTINCT {V_PEDIDO_KEY}) AS clientes_entregados,
+                COUNT(DISTINCT {_delivery_key()}) AS clientes_entregados,
                 COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS total_bultos,
                 COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) AS total_hl,
                 COALESCE(SUM({V_PALLETS_EXPR}), 0) AS total_pallets,
-                COALESCE(SUM(COALESCE(v.bultos, 0)), 0) / NULLIF(COUNT(DISTINCT {V_PEDIDO_KEY}), 0) AS dropsize_bultos,
-                COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) / NULLIF(COUNT(DISTINCT {V_PEDIDO_KEY}), 0) AS dropsize_hl,
-                COALESCE(SUM({V_PALLETS_EXPR}), 0) / NULLIF(COUNT(DISTINCT {V_PEDIDO_KEY}), 0) AS dropsize_pallets,
+                COALESCE(SUM(COALESCE(v.bultos, 0)), 0) / NULLIF(COUNT(DISTINCT {_delivery_key()}), 0) AS dropsize_bultos,
+                COALESCE(SUM(COALESCE(v.unidad_medida, 0)), 0) / NULLIF(COUNT(DISTINCT {_delivery_key()}), 0) AS dropsize_hl,
+                COALESCE(SUM({V_PALLETS_EXPR}), 0) / NULLIF(COUNT(DISTINCT {_delivery_key()}), 0) AS dropsize_pallets,
                 NOW() AS updated_at
             FROM ventas_detalle v
             LEFT JOIN articulos a ON v.id_articulo = a.id_articulo

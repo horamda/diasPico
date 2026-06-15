@@ -196,7 +196,7 @@ V_IS_RMCYO = (
 )
 V_RECHAZO_TOTAL_FLAG = (
     "LOWER(TRIM(COALESCE(v.rechazo_total, ''))) IN "
-    "('si', 'sí', 'sÃ­', 's', 'yes', 'y', 'true', '1', 'x')"
+    "('si', 'sí', 'sí', 's', 'yes', 'y', 'true', '1', 'x')"
 )
 V_IS_REC_TOTAL = f"({V_IS_REC} AND {V_RECHAZO_TOTAL_FLAG})"
 V_IS_REC_PARCIAL = f"({V_IS_REC} AND NOT {V_RECHAZO_TOTAL_FLAG})"
@@ -1851,7 +1851,7 @@ def _venta_dia_comparativo_rango(
         fin = date.fromisocalendar(anio_ref - 1, semana, 7)
         return ini, fin, anio_ref
 
-    if tipo in {'anio', 'aÃ±o', 'year', 'todo', 'all', 'historico'}:
+    if tipo in {'anio', 'año', 'year', 'todo', 'all', 'historico'}:
         anio_ref = anio or anio_periodo
         ini, fin = _venta_dia_iso_year_range(anio_ref - 1)
         return ini, fin, anio_ref
