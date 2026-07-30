@@ -223,6 +223,11 @@ def _parse_mes_key(value: str, nombre: str) -> tuple[int, int]:
         raise ValueError(f'{nombre} debe tener formato YYYY-MM') from exc
 
 
+def _shift_mes_key(value: str, years: int) -> str:
+    y, m = _parse_mes_key(value, 'mes')
+    return f'{y + years}-{m:02d}'
+
+
 def _iter_meses(desde: str, hasta: str) -> list[str]:
     y0, m0 = _parse_mes_key(desde, 'desde')
     y1, m1 = _parse_mes_key(hasta, 'hasta')
@@ -1706,6 +1711,104 @@ def export_dias_detalle_periodo(
     bio.seek(0)
     filename = f'dias_detalle_{sucursal}_{desde}_a_{hasta}.xlsx'.replace('/', '-')
     return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+
+
+RECHAZOS_DOLORES_HEADERS = [
+    'fecha',
+    'sucursal_id',
+    'sucursal',
+    'pedidos_pdv_atendidos',
+    'pdv_unicos',
+    'rechazo_pedidos',
+    'pct_rechazo_pedidos',
+    'bultos',
+    'rechazo_bultos',
+    'rechazo_bultos_parcial',
+    'rechazo_bultos_total',
+    'pct_rechazo_bultos',
+    'hl',
+    'rechazo_hl',
+    'rechazo_hl_parcial',
+    'rechazo_hl_total',
+    'pct_rechazo_hl',
+    'nds',
+    'salidas',
+    'pico',
+    'feriado',
+    'evento',
+]
+
+
+def get_rechazos_dolores_diario(
+    desde: date | None = None,
+    hasta: date | None = None,
+) -> dict:
+    desde = desde or date(2026, 1, 1)
+    hasta = hasta or date.today()
+    if desde > hasta:
+        raise ValueError('desde no puede ser posterior a hasta')
+
+    meses = _iter_meses(desde.strftime('%Y-%m'), hasta.strftime('%Y-%m'))
+    filas = []
+    for mes_key in meses:
+        cal = get_calendario('2', mes_key, incluir_complementos=False)
+        for d in cal.get('dias') or []:
+            fecha_s = d.get('fecha')
+            if not fecha_s:
+                continue
+            fecha_d = date.fromisoformat(fecha_s)
+            if fecha_d < desde or fecha_d > hasta:
+                continue
+            filas.append({
+                'fecha': fecha_s,
+                'sucursal_id': '2',
+                'sucursal': 'Dolores',
+                'pedidos_pdv_atendidos': int(d.get('pedidos') or 0),
+                'pdv_unicos': int(d.get('clientes_unicos') or 0),
+                'rechazo_pedidos': int(d.get('rechazo_pedidos') or 0),
+                'pct_rechazo_pedidos': float(d.get('pct_rechazo_pedidos') or 0),
+                'bultos': float(d.get('bultos') or 0),
+                'rechazo_bultos': float(d.get('rechazo_bultos') or 0),
+                'rechazo_bultos_parcial': float(d.get('rechazo_bultos_parcial') or 0),
+                'rechazo_bultos_total': float(d.get('rechazo_bultos_total') or 0),
+                'pct_rechazo_bultos': float(d.get('pct_rechazo_bultos') or 0),
+                'hl': float(d.get('hectolitros') or 0),
+                'rechazo_hl': float(d.get('rechazo_hl') or 0),
+                'rechazo_hl_parcial': float(d.get('rechazo_hl_parcial') or 0),
+                'rechazo_hl_total': float(d.get('rechazo_hl_total') or 0),
+                'pct_rechazo_hl': float(d.get('pct_rechazo_hl') or 0),
+                'nds': float(d.get('nds') if d.get('nds') is not None else 100),
+                'salidas': int(d.get('camiones_salidos') or 0),
+                'pico': bool(d.get('es_pico')),
+                'feriado': d.get('feriado_desc') or '',
+                'evento': d.get('evento_desc') or '',
+            })
+
+    return {
+        'sucursal_id': '2',
+        'sucursal': 'Dolores',
+        'desde': desde.isoformat(),
+        'hasta': hasta.isoformat(),
+        'generado': date.today().isoformat(),
+        'total_dias': len(filas),
+        'campos': RECHAZOS_DOLORES_HEADERS,
+        'datos': filas,
+    }
+
+
+def export_rechazos_dolores_diario_csv(
+    desde: date | None = None,
+    hasta: date | None = None,
+) -> tuple[BytesIO, str, str]:
+    data = get_rechazos_dolores_diario(desde, hasta)
+    sio = StringIO()
+    writer = csv.DictWriter(sio, fieldnames=RECHAZOS_DOLORES_HEADERS, extrasaction='ignore')
+    writer.writeheader()
+    writer.writerows(data['datos'])
+    bio = BytesIO(sio.getvalue().encode('utf-8'))
+    bio.seek(0)
+    filename = f"rechazos_dolores_diario_{data['desde']}_a_{data['hasta']}.csv"
+    return bio, filename, 'text/csv; charset=utf-8'
 
 
 def _xml_escape(value: Any) -> str:
@@ -3369,6 +3472,19 @@ def get_detalle_dia(sucursal: str, fecha: date) -> dict:
         """, p)
         planillas = [dict(r) for r in cur.fetchall()]
 
+        def _fmt_hora(value):
+            if not value:
+                return None
+            try:
+                return value.strftime('%H:%M')
+            except Exception:
+                return str(value)
+
+        for row in planillas:
+            row['tiene_hora_salida'] = bool(row.get('fecha_salida'))
+            row['hora_salida_label'] = _fmt_hora(row.get('fecha_salida'))
+            row['hora_llegada_label'] = _fmt_hora(row.get('fecha_llegada'))
+
         cur.execute(f"""
             SELECT COUNT(DISTINCT {V_TRUCK_KEY}) AS salidas_unicas
             FROM ventas_detalle v
@@ -3471,6 +3587,8 @@ def get_detalle_dia(sucursal: str, fecha: date) -> dict:
         'clientes_por_sucursal': clientes_por_sucursal,
         'top_articulos':      top_arts,
         'rechazos':           rechazos,
+        'detalle_fuente':     'ventas_detalle',
+        'detalle_nota':       'La hora de salida no esta disponible en este informe porque se arma desde ventas_detalle. Se muestra "Sin hora".',
     }
 
 
@@ -4364,4 +4482,262 @@ def get_comparativo_anual(sucursal: str, anio: int, anio_base: int) -> dict:
         'anio':      anio,
         'anio_base': anio_base,
         'meses':     meses,
+    }
+
+
+def get_venta_anual(
+    sucursal: str,
+    anio: int,
+    anio_base: int,
+    division: str | None = None,
+    unidad_negocio: str | None = None,
+    metrica: str | None = None,
+    periodo_tipo: str | None = None,
+    mes: str | None = None,
+    desde: str | None = None,
+    hasta: str | None = None,
+) -> dict:
+    """Comparativo de venta actual vs aÃ±o base con filtros por divisiÃ³n y unidad."""
+    ensure_ventas_detalle_table()
+    ensure_articulos_table()
+
+    sucursal = str(sucursal or 'TODAS').strip() or 'TODAS'
+    division = str(division or '').strip() or None
+    unidad_negocio = str(unidad_negocio or '').strip() or None
+    mode = str(periodo_tipo or 'anio').strip().lower() or 'anio'
+    if mode not in {'anio', 'mes', 'rango'}:
+        mode = 'anio'
+    params_db = get_params(sucursal)
+    metrica = (metrica or params_db.get('metrica') or 'bultos').strip().lower()
+
+    metric_expr = {
+        'bultos': 'SUM(COALESCE(v.bultos, 0))',
+        'hectolitros': 'SUM(COALESCE(v.unidad_medida, 0))',
+        'pallets': f'SUM({V_PALLETS_EXPR})',
+        'up': 'SUM(COALESCE(v.unidad_paquete, 0))',
+        'pedidos': f'COUNT(DISTINCT {V_PEDIDO_KEY})',
+        'clientes': f'COUNT(DISTINCT {V_CLIENT_KEY})',
+    }.get(metrica, 'SUM(COALESCE(v.bultos, 0))')
+    metric_label = {
+        'bultos': 'Bultos',
+        'hectolitros': 'Hectolitros',
+        'pallets': 'Pallets',
+        'up': 'UP',
+        'pedidos': 'PDV atendidos',
+        'clientes': 'Clientes',
+    }.get(metrica, metrica.replace('_', ' ').title())
+    swv = _suc_filter(sucursal, 'v')
+    default_base_year = anio - 1
+    params_base: dict[str, Any] = {'s': sucursal}
+    div_filter = ''
+    if division:
+        div_filter = """
+              AND LOWER(TRIM(COALESCE(v.descripcion_division, v.division, ''))) = LOWER(%(division)s)
+        """
+        params_base['division'] = division
+
+    uni_filter = ''
+    if unidad_negocio:
+        uni_filter = """
+              AND LOWER(TRIM(COALESCE(v.descripcion_unidad_negocio, v.unidad_negocio, ''))) = LOWER(%(unidad_negocio)s)
+        """
+        params_base['unidad_negocio'] = unidad_negocio
+
+    def _query_series(cur, ini: date, fin: date, group_expr: str) -> dict[str, float]:
+        if ini > fin:
+            return {}
+        params = dict(params_base)
+        params.update({'ini': ini, 'fin': fin})
+        cur.execute(f"""
+            SELECT
+                {group_expr} AS periodo,
+                {metric_expr} AS metrica_val
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
+              AND {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+              {div_filter}
+              {uni_filter}
+            GROUP BY 1
+            ORDER BY 1
+        """, params)
+        return {str(r['periodo']): float(r.get('metrica_val') or 0) for r in cur.fetchall()}
+
+    descriptors: list[dict[str, str]] = []
+    actual_ini: date
+    actual_fin: date
+    base_ini: date
+    base_fin: date
+    period_label = ''
+    base_period_label = ''
+    granularity = 'month'
+    period_actual_year = anio
+    period_base_year = anio_base if anio_base else default_base_year
+
+    if mode == 'mes':
+        mes_key = mes or f'{anio:04d}-{date.today().month:02d}'
+        sel_year, sel_month = _parse_mes_key(mes_key, 'mes')
+        actual_ini, actual_fin = _rango_mes(sel_year, sel_month)
+        if anio_base and anio_base != default_base_year:
+            base_year = anio_base
+        else:
+            base_year = sel_year - 1
+        base_ini, base_fin = _rango_mes(base_year, sel_month)
+        dias_mes = cal_mod.monthrange(sel_year, sel_month)[1]
+        descriptors = [
+            {'key_actual': str(d), 'key_base': str(d), 'label': str(d)}
+            for d in range(1, dias_mes + 1)
+        ]
+        period_label = f'{MESES_ES[sel_month - 1]} {sel_year}'
+        base_period_label = f'{MESES_ES[sel_month - 1]} {base_year}'
+        period_actual_year = sel_year
+        period_base_year = base_year
+        granularity = 'day'
+    elif mode == 'rango':
+        desde_key = desde or f'{anio:04d}-01'
+        hasta_key = hasta or f'{anio:04d}-12'
+        actual_keys = _iter_meses(desde_key, hasta_key)
+        actual_ref_year, actual_ref_month = _parse_mes_key(actual_keys[0], 'desde')
+        if anio_base and anio_base != default_base_year:
+            shift_years = anio_base - actual_ref_year
+        else:
+            shift_years = -1
+        base_keys = [_shift_mes_key(k, shift_years) for k in actual_keys]
+        y0, m0 = actual_ref_year, actual_ref_month
+        y1, m1 = _parse_mes_key(actual_keys[-1], 'hasta')
+        actual_ini, _ = _rango_mes(y0, m0)
+        _, actual_fin = _rango_mes(y1, m1)
+        by0, bm0 = _parse_mes_key(base_keys[0], 'desde')
+        by1, bm1 = _parse_mes_key(base_keys[-1], 'hasta')
+        base_ini, _ = _rango_mes(by0, bm0)
+        _, base_fin = _rango_mes(by1, bm1)
+        descriptors = []
+        for ak, bk in zip(actual_keys, base_keys):
+            ay, am = _parse_mes_key(ak, 'mes')
+            descriptors.append({
+                'key_actual': ak,
+                'key_base': bk,
+                'label': f'{MESES_ES[am - 1]} {ay}',
+            })
+        period_label = f"{descriptors[0]['label']} - {descriptors[-1]['label']}" if len(descriptors) > 1 else descriptors[0]['label']
+        base_period_label = f"{MESES_ES[bm0 - 1]} {by0} - {MESES_ES[bm1 - 1]} {by1}" if len(descriptors) > 1 else f"{MESES_ES[bm0 - 1]} {by0}"
+        period_actual_year = y0
+        period_base_year = by0
+        granularity = 'month'
+    else:
+        actual_ini = date(anio, 1, 1)
+        actual_fin = date(anio, 12, 31)
+        base_ini = date(period_base_year, 1, 1)
+        base_fin = date(period_base_year, 12, 31)
+        descriptors = [
+            {'key_actual': str(m), 'key_base': str(m), 'label': MESES_ES[m - 1]}
+            for m in range(1, 13)
+        ]
+        period_label = f'Año {anio}'
+        base_period_label = f'Año {period_base_year}'
+        period_actual_year = anio
+        granularity = 'month'
+
+    with pg_cursor() as cur:
+        actual_map = _query_series(
+            cur,
+            actual_ini,
+            actual_fin,
+            "EXTRACT(DAY FROM v.fecha)::int" if granularity == 'day' else "TO_CHAR(v.fecha, 'YYYY-MM')" if mode == 'rango' else "EXTRACT(MONTH FROM v.fecha)::int",
+        )
+        base_map = _query_series(
+            cur,
+            base_ini,
+            base_fin,
+            "EXTRACT(DAY FROM v.fecha)::int" if granularity == 'day' else "TO_CHAR(v.fecha, 'YYYY-MM')" if mode == 'rango' else "EXTRACT(MONTH FROM v.fecha)::int",
+        )
+
+        cur.execute(f"""
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(v.descripcion_division), ''), NULLIF(TRIM(v.division), '')) AS division
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
+              AND {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+              AND COALESCE(NULLIF(TRIM(v.descripcion_division), ''), NULLIF(TRIM(v.division), '')) IS NOT NULL
+              {div_filter}
+              {uni_filter}
+            ORDER BY 1
+        """, {'ini': actual_ini, 'fin': actual_fin, **params_base})
+        divisiones = [r['division'] for r in cur.fetchall() if r.get('division')]
+
+        cur.execute(f"""
+            SELECT DISTINCT COALESCE(NULLIF(TRIM(v.descripcion_unidad_negocio), ''), NULLIF(TRIM(v.unidad_negocio), '')) AS unidad_negocio
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE v.fecha BETWEEN %(ini)s AND %(fin)s {swv}
+              AND {IS_MERCADERIA}
+              AND {V_NOT_REMITO}
+              AND COALESCE(NULLIF(TRIM(v.descripcion_unidad_negocio), ''), NULLIF(TRIM(v.unidad_negocio), '')) IS NOT NULL
+              {div_filter}
+              {uni_filter}
+            ORDER BY 1
+        """, {'ini': actual_ini, 'fin': actual_fin, **params_base})
+        unidades = [r['unidad_negocio'] for r in cur.fetchall() if r.get('unidad_negocio')]
+
+    puntos = []
+    total_actual_raw = 0.0
+    total_base_raw = 0.0
+    for item in descriptors:
+        actual_raw = float(actual_map.get(item['key_actual'], 0) or 0)
+        base_raw = float(base_map.get(item['key_base'], 0) or 0)
+        total_actual_raw += actual_raw
+        total_base_raw += base_raw
+        delta_raw = actual_raw - base_raw
+        puntos.append({
+            'key': item['key_actual'],
+            'label': item['label'],
+            'actual': _venta_dia_value(metrica, actual_raw),
+            'base': _venta_dia_value(metrica, base_raw),
+            'delta': _venta_dia_value(metrica, delta_raw),
+            'delta_pct': round(delta_raw / base_raw * 100, 1) if base_raw else None,
+        })
+
+    total_delta_raw = total_actual_raw - total_base_raw
+    sucursal_label = 'Todas' if sucursal == 'TODAS' else SUCURSAL_LABELS.get(sucursal, sucursal)
+
+    return {
+        'sucursal': sucursal,
+        'sucursal_label': sucursal_label,
+        'anio': period_actual_year,
+        'anio_base': period_base_year,
+        'periodo_tipo': mode,
+        'periodo_label': period_label,
+        'periodo_base_label': base_period_label,
+        'granularidad': granularity,
+        'metrica': metrica,
+        'metrica_label': metric_label,
+        'filtros': {
+            'sucursal': sucursal,
+            'sucursal_label': sucursal_label,
+            'periodo_tipo': mode,
+            'periodo_label': period_label,
+            'periodo_base_label': base_period_label,
+            'mes': mes or '',
+            'desde': desde or '',
+            'hasta': hasta or '',
+            'division': division or '',
+            'division_label': division or 'Todas las divisiones',
+            'unidad_negocio': unidad_negocio or '',
+            'unidad_negocio_label': unidad_negocio or 'Todas las unidades de negocio',
+        },
+        'opciones': {
+            'divisiones': divisiones,
+            'unidades_negocio': unidades,
+        },
+        'resumen': {
+            'actual': _venta_dia_value(metrica, total_actual_raw),
+            'base': _venta_dia_value(metrica, total_base_raw),
+            'delta': _venta_dia_value(metrica, total_delta_raw),
+            'delta_pct': round(total_delta_raw / total_base_raw * 100, 1) if total_base_raw else None,
+        },
+        'labels': [p['label'] for p in puntos],
+        'puntos': puntos,
+        'meses': puntos,
     }

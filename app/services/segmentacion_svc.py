@@ -3376,7 +3376,7 @@ def bulk_upsert_nps_detallado(registros: list[dict], fuente: str = 'nps_detallad
             'periodo_anio': fecha.year,
             'periodo_mes': fecha.month,
             'score': score,
-            'categoria_nps': _nps_category(score),
+            'categoria_nps': str(row.get('categoria_nps') or '').strip() or _nps_category(score),
             'comentario': str(row.get('comentario') or '').strip() or None,
             'cod_cliente_distribuidor': str(row.get('cod_cliente_distribuidor') or '').strip() or None,
             'nombre_cliente': str(row.get('nombre_cliente') or '').strip() or None,
@@ -6378,6 +6378,124 @@ def get_cliente_nps_detalle(cliente: str, limit: int = 200) -> dict:
         if row.get('fecha_encuesta'):
             row['fecha_encuesta'] = _iso_dt(row.get('fecha_encuesta'))
     return {'resumen': resumen, 'mensual': mensual, 'evaluaciones': evaluaciones}
+
+
+def get_nps_resumen_anual(sucursal: str | None = None, cluster: str | None = None, limit: int = 12) -> dict:
+    """Resumen anual de NPS con rankings de drivers y subdrivers."""
+    ensure_tables()
+    limit = max(3, min(int(limit or 12), 30))
+    filters = []
+    params: dict[str, Any] = {'limit': limit}
+    if sucursal and str(sucursal).strip().upper() != 'TODAS':
+        filters.append("COALESCE(c.sucursal, m.sucursal) = %(sucursal)s")
+        params['sucursal'] = str(sucursal).strip()
+    if cluster and str(cluster).strip().upper() != 'TODOS':
+        filters.append("m.cluster_dpo = %(cluster)s")
+        params['cluster'] = str(cluster).strip()
+    where = f"WHERE {' AND '.join(filters)}" if filters else ""
+
+    with pg_cursor() as cur:
+        cur.execute(
+            f"""
+            WITH scoped AS (
+                SELECT DISTINCT e.id, e.cliente, e.periodo_anio, e.score
+                FROM seg_cliente_nps_encuestas e
+                LEFT JOIN seg_cliente_dpo_cache m ON m.cliente = e.cliente
+                LEFT JOIN clientes c ON c.cliente = e.cliente
+                {where}
+            )
+            SELECT
+                periodo_anio,
+                COUNT(*) AS respuestas,
+                COUNT(DISTINCT cliente) AS clientes,
+                ROUND(AVG(score)::NUMERIC, 2) AS score_promedio,
+                COUNT(*) FILTER (WHERE score >= 9) AS promotores,
+                COUNT(*) FILTER (WHERE score >= 7 AND score < 9) AS pasivos,
+                COUNT(*) FILTER (WHERE score <= 6) AS detractores,
+                ROUND(((COUNT(*) FILTER (WHERE score >= 9) - COUNT(*) FILTER (WHERE score <= 6))::NUMERIC / NULLIF(COUNT(*),0) * 100), 2) AS nps_indice
+            FROM scoped
+            GROUP BY periodo_anio
+            ORDER BY periodo_anio
+            """,
+            params,
+        )
+        anual = _dict_rows(cur)
+
+        cur.execute(
+            f"""
+            WITH scoped AS (
+                SELECT DISTINCT e.id, e.cliente, e.periodo_anio
+                FROM seg_cliente_nps_encuestas e
+                LEFT JOIN seg_cliente_dpo_cache m ON m.cliente = e.cliente
+                LEFT JOIN clientes c ON c.cliente = e.cliente
+                {where}
+            ),
+            ranked AS (
+                SELECT
+                    s.periodo_anio,
+                    COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver') AS driver,
+                    COUNT(DISTINCT s.id) AS respuestas,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY s.periodo_anio
+                        ORDER BY COUNT(DISTINCT s.id) DESC, COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver')
+                    ) AS rn
+                FROM scoped s
+                JOIN seg_cliente_nps_drivers d ON d.encuesta_id = s.id
+                GROUP BY s.periodo_anio, driver
+            )
+            SELECT periodo_anio, driver, respuestas
+            FROM ranked
+            WHERE rn <= %(limit)s
+            ORDER BY periodo_anio, respuestas DESC, driver
+            """,
+            params,
+        )
+        drivers = _dict_rows(cur)
+
+        cur.execute(
+            f"""
+            WITH scoped AS (
+                SELECT DISTINCT e.id, e.cliente, e.periodo_anio
+                FROM seg_cliente_nps_encuestas e
+                LEFT JOIN seg_cliente_dpo_cache m ON m.cliente = e.cliente
+                LEFT JOIN clientes c ON c.cliente = e.cliente
+                {where}
+            ),
+            ranked AS (
+                SELECT
+                    s.periodo_anio,
+                    COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver') AS driver,
+                    COALESCE(NULLIF(TRIM(d.driver_secundario),''), 'Ninguno') AS subdriver,
+                    COUNT(DISTINCT s.id) AS respuestas,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY s.periodo_anio
+                        ORDER BY COUNT(DISTINCT s.id) DESC,
+                                 COALESCE(NULLIF(TRIM(d.driver_primario),''), 'Sin driver'),
+                                 COALESCE(NULLIF(TRIM(d.driver_secundario),''), 'Ninguno')
+                    ) AS rn
+                FROM scoped s
+                JOIN seg_cliente_nps_drivers d ON d.encuesta_id = s.id
+                GROUP BY s.periodo_anio, driver, subdriver
+            )
+            SELECT periodo_anio, driver, subdriver, respuestas
+            FROM ranked
+            WHERE rn <= %(limit)s
+            ORDER BY periodo_anio, respuestas DESC, driver, subdriver
+            """,
+            params,
+        )
+        subdrivers = _dict_rows(cur)
+
+    return {
+        'anual': anual,
+        'drivers': drivers,
+        'subdrivers': subdrivers,
+        'filtros': {
+            'sucursal': sucursal or 'TODAS',
+            'cluster': cluster or 'TODOS',
+            'limit': limit,
+        },
+    }
 
 
 _CLIENT_REPORT_LABELS = {

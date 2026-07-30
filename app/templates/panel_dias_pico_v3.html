@@ -487,6 +487,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div class="tab active" onclick="switchTab('kpis',this)">KPIs</div>
       <div class="tab" onclick="switchTab('historico',this)">Histórico</div>
       <div class="tab" onclick="switchTab('venta-dia',this)">Venta diaria</div>
+      <div class="tab" onclick="switchTab('venta-anual',this)">Venta vs año anterior</div>
       <div class="tab" onclick="switchTab('comparativo',this)">Comparativo</div>
       <div class="tab" onclick="switchTab('experiencia',this)">Experiencia de clientes</div>
       <div class="tab" onclick="switchTab('dotacion',this)">Dotación</div>
@@ -537,6 +538,79 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
     <div class="box" id="volumenAnualHistorico"><div class="loading"><div class="spinner"></div></div></div>
     <div class="sec" style="margin-top:8px">Tabla resumen</div>
     <div class="box"><div id="tablaHistorico"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
+  <!-- TAB VENTA VS AÃ‘O ANTERIOR -->
+  <div id="tab-venta-anual" style="display:none">
+    <div class="box" style="margin-bottom:12px">
+      <div class="sec" style="margin-bottom:10px">Venta vs año anterior</div>
+      <div class="filter-grid vd-filter-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="ventaAnualSucursal" onchange="onVentaAnualSucursalChange()">
+            <option value="TODAS">Todas</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Período</label>
+          <select id="ventaAnualPeriodo" onchange="onVentaAnualPeriodoChange()">
+            <option value="anio">Año</option>
+            <option value="mes">Mes</option>
+            <option value="rango">Período</option>
+          </select>
+        </div>
+        <div class="filter-field" id="ventaAnualAnioField">
+          <label>Año actual</label>
+          <input type="number" id="ventaAnualAnio" min="2020" max="2035" onchange="loadVentaAnual()">
+        </div>
+        <div class="filter-field" id="ventaAnualAnioBaseField">
+          <label>Año base</label>
+          <input type="number" id="ventaAnualAnioBase" min="2020" max="2035" onchange="loadVentaAnual()">
+        </div>
+        <div class="filter-field" id="ventaAnualMesField">
+          <label>Mes</label>
+          <input type="month" id="ventaAnualMes" onchange="loadVentaAnual()">
+        </div>
+        <div class="filter-field" id="ventaAnualDesdeField">
+          <label>Desde</label>
+          <input type="month" id="ventaAnualDesde" onchange="loadVentaAnual()">
+        </div>
+        <div class="filter-field" id="ventaAnualHastaField">
+          <label>Hasta</label>
+          <input type="month" id="ventaAnualHasta" onchange="loadVentaAnual()">
+        </div>
+        <div class="filter-field">
+          <label>División</label>
+          <select id="ventaAnualDivision" onchange="loadVentaAnual()">
+            <option value="">Todas las divisiones</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Unidad de negocio</label>
+          <select id="ventaAnualUnidadNegocio" onchange="loadVentaAnual()">
+            <option value="">Todas las unidades de negocio</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:end">
+          <button class="btn primary" onclick="loadVentaAnual()">Actualizar</button>
+        </div>
+      </div>
+      <div id="ventaAnualMeta" style="font-size:11px;color:var(--muted);margin-top:10px">Compara ventas del período actual contra el mismo período del año base, con sucursal, división y unidad de negocio.</div>
+    </div>
+
+    <div class="kpi-grid" id="ventaAnualKpis" style="margin-bottom:12px">
+      <div class="loading"><div class="spinner"></div>Cargando…</div>
+    </div>
+
+    <div class="box">
+      <div class="sec" style="margin-bottom:8px">Evolución del período</div>
+      <div class="chart-wrap" style="height:300px"><canvas id="ventaAnualChart"></canvas></div>
+    </div>
+
+    <div class="sec" style="margin-top:16px">Tabla resumen</div>
+    <div class="box" style="margin-top:8px">
+      <div id="ventaAnualTabla"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
   </div>
 
   <!-- TAB VENTA DIARIA -->
@@ -1622,6 +1696,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
           <tbody>
             <tr><td>KPIs</td><td>Resumen del mes, calendario y detalle por día.</td></tr>
             <tr><td>Histórico</td><td>Evolución mensual y tabla comparativa de volumen, PDV, rechazos y salidas.</td></tr>
+            <tr><td>Venta vs año anterior</td><td>Comparación mensual de la métrica actual contra el año base, con filtros por división y unidad de negocio.</td></tr>
             <tr><td>Rechazos</td><td>Análisis de HL entregados, HL rechazados y calidad de entrega.</td></tr>
             <tr><td>Dropsize</td><td>Seguimiento de volumen promedio por entrega, objetivos y evolución.</td></tr>
             <tr><td>Planificación de picos</td><td>Plan operativo mensual, días pico, simulador, capacidad y alertas.</td></tr>
@@ -1917,7 +1992,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/static/app.js?v=20260610-10"></script>
+<script src="/static/app.js?v=20260717-1"></script>
 <script src="/static/simulador_logistico.js?v=20260524-1"></script>
 
 </body>

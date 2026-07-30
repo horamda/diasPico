@@ -16,6 +16,8 @@ let _histAbort = null;
 let _loadHistSeq = 0;
 let _ventaDiaAbort = null;
 let _loadVentaDiaSeq = 0;
+let _ventaAnualAbort = null;
+let _loadVentaAnualSeq = 0;
 let _expAbort = null;
 let _loadExpSeq = 0;
 let _hlAbort = null;
@@ -25,6 +27,7 @@ let _loadDropSeq = 0;
 let historicoChart = null;
 let historicoPicosChart = null;
 let historicoVolumenChart = null;
+let ventaAnualChart = null;
 let ventaDiaData = null;
 let ventaDiaCmpCharts = {};
 let ventaDiaEvoCharts = {};
@@ -56,6 +59,21 @@ const fmt1 = v => Number(v || 0).toLocaleString('es-AR', { minimumFractionDigits
 const fmtPct1 = v => `${fmt1(v)}%`;
 const fmtDelta = v => v == null ? '—' : `${v > 0 ? '+' : ''}${fmtPct(v)}`;
 const MES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+function dayDetailText(value, fallback = 'Sin dato') {
+  if (value === null || value === undefined) return fallback;
+  const s = String(value).trim();
+  if (!s || s === '?' || s === '¿') return fallback;
+  return s ? esc(s) : fallback;
+}
+
+function dayDetailTime(value, fallback = 'Sin hora') {
+  if (value === null || value === undefined) return fallback;
+  const s = String(value).trim();
+  if (!s || s === '?' || s === '¿') return fallback;
+  const m = s.match(/\b(\d{2}:\d{2})(?::\d{2})?\b/);
+  return esc(m ? m[1] : s);
+}
 
 const chartValueLabels = {
   id: 'chartValueLabels',
@@ -141,6 +159,7 @@ async function refreshPicoDependentViews() {
   await loadMes();
   loadHistorico();
   if (isTabVisible('tab-venta-dia')) loadVentaDia();
+  if (isTabVisible('tab-venta-anual')) loadVentaAnual();
   if (isTabVisible('tab-comparativo')) loadComparativo();
   if (isTabVisible('tab-experiencia')) loadExperienciaClientes();
   if (isTabVisible('tab-dotacion')) loadDotacion();
@@ -221,7 +240,7 @@ function resizeDashboardVisuals() {
     experienciaCharts,
     planCharts,
   ];
-  const charts = [historicoChart, historicoPicosChart, historicoVolumenChart, dropDiarioChart, dropMensualChart];
+  const charts = [historicoChart, historicoPicosChart, historicoVolumenChart, ventaAnualChart, dropDiarioChart, dropMensualChart];
   chartSets.forEach(set => {
     Object.values(set || {}).forEach(chart => {
       if (chart) charts.push(chart);
@@ -266,6 +285,7 @@ window.onload = async () => {
   restoreConfig();
   initDropsizeFilters();
   initVentaDiaFilters();
+  initVentaAnualDefaults();
   initKpiObjetivosDefaults();
   initPlanificacionDefaults();
   initAusentismoDefaults();
@@ -317,6 +337,7 @@ async function loadSucursales() {
   const selUp  = document.getElementById('uploadSucursal');
   const sel    = document.getElementById('selSucursal');
   const selVentaDia = document.getElementById('ventaDiaSucursal');
+  const selVentaAnual = document.getElementById('ventaAnualSucursal');
   const selExp = document.getElementById('expSucursal');
   const selCfg = document.getElementById('cfgSucursal');
   const selEv  = document.getElementById('evSucursal');
@@ -332,6 +353,7 @@ async function loadSucursales() {
       selUp.add(new Option(txt, value));
       sel.add(new Option(txt, value));
       if (selVentaDia && !selVentaDia.querySelector(`option[value="${value}"]`)) selVentaDia.add(new Option(txt, value));
+      if (selVentaAnual && !selVentaAnual.querySelector(`option[value="${value}"]`)) selVentaAnual.add(new Option(txt, value));
       if (selExp && !selExp.querySelector(`option[value="${value}"]`)) selExp.add(new Option(txt, value));
       selCfg.add(new Option(txt, value));
       selEv.add(new Option(txt, value));
@@ -345,6 +367,7 @@ async function loadSucursales() {
     });
   } catch (e) {}
   if (selVentaDia && sel) selVentaDia.value = sel.value;
+  if (selVentaAnual && sel) selVentaAnual.value = sel.value;
   if (selExp && sel) selExp.value = sel.value;
   await loadCatalogoPlanificacion();
 }
@@ -507,6 +530,7 @@ async function loadMes() {
     diasData = data.dias || [];
     const diasAnt = data.dias_anterior || [];
     const kAnt    = data.kpis_anterior || null;
+    const anioAnt = diasAnt[0]?.fecha_ant?.slice(0, 4) ?? String(vY - 1);
     // Un mes es proyecci?n si no tiene ventas reales (puede tener feriados con bultos=0)
     const tieneVentas = diasData.some(d => (d.bultos || 0) > 0 || (d.hectolitros || 0) > 0);
     const esProyeccion = !tieneVentas && diasAnt.length > 0;
@@ -2093,6 +2117,22 @@ function selectedOptionText(id, fallback = '-') {
   return (opt?.textContent || fallback || '-').trim();
 }
 
+function fillSelectPreserving(id, items, allValue, allLabel) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const current = el.value || allValue;
+  el.innerHTML = '';
+  el.add(new Option(allLabel, allValue));
+  (items || []).forEach(item => {
+    const value = item?.value ?? item;
+    const label = item?.label ?? item?.value ?? item;
+    if (value == null) return;
+    if ([...el.options].some(opt => opt.value === String(value))) return;
+    el.add(new Option(label, value));
+  });
+  el.value = [...el.options].some(opt => opt.value === current) ? current : allValue;
+}
+
 function experienciaFilterLabelText(filtros = {}, periodoLabel = null) {
   const metric = filtros.metrica || document.getElementById('expMetrica')?.value || 'nps';
   const estado = filtros.estado || document.getElementById('expEstado')?.value || 'TODOS';
@@ -3227,15 +3267,23 @@ async function loadDayDetail(fecha) {
 
     if (di.es_evento && di.evento_desc) {
       html += `<div style="background:rgba(239,68,68,.08);border:1px dashed rgba(239,68,68,.45);border-radius:6px;padding:10px 14px;font-size:12px">
-        <span style="font-weight:600;color:var(--red)">âš¡ Evento especial</span>
-        <span style="color:var(--muted);margin-left:8px">${di.evento_desc}</span>
-        <div style="margin-top:4px;font-size:11px;color:var(--muted)">La venta de este d?a se distribuye antes o despu?s.</div>
+        <span style="font-weight:600;color:var(--red)">&#9888; Evento especial</span>
+        <span style="color:var(--muted);margin-left:8px">${dayDetailText(di.evento_desc, 'Sin dato')}</span>
+        <div style="margin-top:4px;font-size:11px;color:var(--muted)">La venta de este d&iacute;a se distribuye antes o despu&eacute;s.</div>
       </div>`;
     }
     if (di.es_feriado && di.feriado_desc) {
       html += `<div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.35);border-radius:6px;padding:8px 14px;font-size:12px">
         <span style="font-weight:600;color:var(--pur)">Feriado:</span>
-        <span style="color:var(--muted);margin-left:6px">${di.feriado_desc}</span>
+        <span style="color:var(--muted);margin-left:6px">${dayDetailText(di.feriado_desc, 'Sin dato')}</span>
+      </div>`;
+    }
+
+    if (d?.detalle_nota) {
+      html += `<div style="margin-top:8px;background:rgba(91,141,238,.08);border:1px solid rgba(91,141,238,.28);border-radius:6px;padding:8px 12px;font-size:12px;color:var(--txt)">
+        <div style="font-weight:600;color:var(--blu);margin-bottom:2px">Nota del informe</div>
+        <div>${dayDetailText(d.detalle_nota, '')}</div>
+        ${d?.detalle_fuente ? `<div style="margin-top:4px;font-size:10px;color:var(--muted)">Fuente: ${dayDetailText(d.detalle_fuente, '')}</div>` : ''}
       </div>`;
     }
 
@@ -3244,7 +3292,7 @@ async function loadDayDetail(fecha) {
         <div class="kpi ora"><div class="kpi-lbl">Bultos desp.</div><div class="kpi-val ora" style="font-size:18px">${fmtN(Math.round(di.bultos))}</div></div>
         <div class="kpi pur"><div class="kpi-lbl">HL desp.</div><div class="kpi-val pur" style="font-size:18px">${fmtN(Math.round(di.hectolitros))}</div></div>
         <div class="kpi grn"><div class="kpi-lbl">PDV atendidos</div><div class="kpi-val grn" style="font-size:18px">${fmtN(di.pedidos || 0)}</div></div>
-        <div class="kpi pur"><div class="kpi-lbl">Clientes ?nicos</div><div class="kpi-val pur" style="font-size:18px">${fmtN(d?.clientes_unicos || di.clientes_unicos || 0)}</div></div>
+        <div class="kpi pur"><div class="kpi-lbl">Clientes &uacute;nicos</div><div class="kpi-val pur" style="font-size:18px">${fmtN(d?.clientes_unicos || di.clientes_unicos || 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo PDV</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_pedidos ?? 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo bultos</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_bultos ?? 0)}</div></div>
         <div class="kpi red"><div class="kpi-lbl">% rechazo HL</div><div class="kpi-val red" style="font-size:18px">${fmtPct1(di.pct_rechazo_hl ?? 0)}</div></div>
@@ -3264,22 +3312,22 @@ async function loadDayDetail(fecha) {
       html += `<div class="sec">Disponibilidad</div>`;
       disp.forEach(r => {
         html += `<div class="box" style="padding:10px 14px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-          <div><div style="font-size:9px;color:var(--muted)">CAMIONES DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--grn)">${r.camiones_disponibles || '?'}</div></div>
-          <div><div style="font-size:9px;color:var(--muted)">EN TALLER</div><div style="font-family:var(--mono);font-size:18px;color:var(--red)">${r.camiones_en_taller || '?'}</div></div>
-          <div><div style="font-size:9px;color:var(--muted)">PERSONAS DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--blu)">${r.personas_disponibles || '?'}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">CAMIONES DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--grn)">${dayDetailText(r.camiones_disponibles, 'Sin dato')}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">EN TALLER</div><div style="font-family:var(--mono);font-size:18px;color:var(--red)">${dayDetailText(r.camiones_en_taller, 'Sin dato')}</div></div>
+          <div><div style="font-size:9px;color:var(--muted)">PERSONAS DISP.</div><div style="font-family:var(--mono);font-size:18px;color:var(--blu)">${dayDetailText(r.personas_disponibles, 'Sin dato')}</div></div>
         </div>`;
       });
     }
 
     if (d?.planillas?.length) {
-      html += `<div class="sec">Salidas ?nicas (${d.salidas_unicas || d.planillas.length})</div>`;
-      let t = `<table class="rtbl"><thead><tr><th>Camión</th><th>Patente</th><th>Bultos</th><th>Pallets</th><th>Salida</th></tr></thead><tbody>`;
+      html += `<div class="sec">Salidas &uacute;nicas (${d.salidas_unicas || d.planillas.length})</div>`;
+      let t = `<table class="rtbl"><thead><tr><th>Cami&oacute;n</th><th>Patente</th><th>Bultos</th><th>Pallets</th><th>Hora salida</th></tr></thead><tbody>`;
       d.planillas.forEach(p => {
-        const sal    = p.fecha_salida ? String(p.fecha_salida).slice(11, 16) : '?';
-        const camion = p.transporte || p.camion_key || '?';
+        const sal    = dayDetailTime(p.hora_salida_label ?? p.fecha_salida, 'Sin hora');
+        const camion = dayDetailText(p.transporte || p.camion_key, 'Sin dato');
         t += `<tr>
           <td style="font-family:var(--mono)">${camion}</td>
-          <td style="font-family:var(--mono)">${p.patente || '?'}</td>
+          <td style="font-family:var(--mono)">${dayDetailText(p.patente, 'Sin dato')}</td>
           <td style="font-family:var(--mono)">${fmtN(Math.round(p.bultos_totales || 0))}</td>
           <td style="font-family:var(--mono)">${Math.round(p.pallets || 0)}</td>
           <td style="font-family:var(--mono)">${sal}</td>
@@ -3291,21 +3339,21 @@ async function loadDayDetail(fecha) {
 
     if (d?.clientes_por_sucursal?.length) {
       html += `<div class="sec">Clientes por sucursal</div>
-        <table class="rtbl"><thead><tr><th>Sucursal</th><th>Clientes ?nicos</th></tr></thead><tbody>`;
+        <table class="rtbl"><thead><tr><th>Sucursal</th><th>Clientes &uacute;nicos</th></tr></thead><tbody>`;
       d.clientes_por_sucursal.forEach(r => {
-        html += `<tr><td>${r.sucursal || 'SIN SUCURSAL'}</td><td style="font-family:var(--mono)">${fmtN(r.clientes_unicos || 0)}</td></tr>`;
+        html += `<tr><td>${dayDetailText(r.sucursal, 'SIN SUCURSAL')}</td><td style="font-family:var(--mono)">${fmtN(r.clientes_unicos || 0)}</td></tr>`;
       });
       html += '</tbody></table>';
     }
 
     if (d?.clientes?.length) {
-      html += `<div class="sec">Clientes ?nicos</div>
+      html += `<div class="sec">Clientes &uacute;nicos</div>
         <table class="rtbl"><thead><tr><th>ID cliente</th><th>Cliente</th><th>Sucursal</th></tr></thead><tbody>`;
       d.clientes.slice(0, 100).forEach(c => {
         html += `<tr>
-          <td style="font-family:var(--mono)">${c.id_cliente || '?'}</td>
-          <td>${c.nombre_cliente || '?'}</td>
-          <td>${c.sucursal || '?'}</td>
+          <td style="font-family:var(--mono)">${dayDetailText(c.id_cliente, 'Sin dato')}</td>
+          <td>${dayDetailText(c.nombre_cliente, 'Sin dato')}</td>
+          <td>${dayDetailText(c.sucursal, 'Sin dato')}</td>
         </tr>`;
       });
       if (d.clientes.length > 100) {
@@ -3319,24 +3367,24 @@ async function loadDayDetail(fecha) {
       eq.forEach(r => {
         const ok = r.cargado_tiempo?.toLowerCase().includes('si') || r.cargado_tiempo === '1';
         html += `<div class="box" style="padding:10px 14px">
-          <div style="font-size:13px;font-weight:600">${r.chofer || '?'}</div>
+          <div style="font-size:13px;font-weight:600">${dayDetailText(r.chofer, 'Sin dato')}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:3px">
-            🚛 ${r.camion || '?'} ${r.nro_camion ? '#' + r.nro_camion : ''}
-            ${r.ayudante1 ? ' ? ' + r.ayudante1 : ''}${r.ayudante2 ? ' ? ' + r.ayudante2 : ''}
-            ? ${r.personas || '?'} pers. ? ${r.pallets || '?'} pallets
-            ${r.kms ? ' ? ' + r.kms + ' km' : ''}${r.horas ? ' ? ' + r.horas + ' hs' : ''}
+            &#128667; ${dayDetailText(r.camion, 'Sin dato')}${r.nro_camion != null && r.nro_camion !== '' ? ' #' + dayDetailText(r.nro_camion, '') : ''}
+            ${r.ayudante1 ? ' &middot; ' + dayDetailText(r.ayudante1, 'Sin dato') : ''}${r.ayudante2 ? ' &middot; ' + dayDetailText(r.ayudante2, 'Sin dato') : ''}
+            &middot; ${dayDetailText(r.personas, 'Sin dato')} pers. &middot; ${dayDetailText(r.pallets, 'Sin dato')} pallets
+            ${r.kms != null && r.kms !== '' ? ' &middot; ' + dayDetailText(r.kms, 'Sin dato') + ' km' : ''}${r.horas != null && r.horas !== '' ? ' &middot; ' + dayDetailText(r.horas, 'Sin dato') + ' hs' : ''}
           </div>
-          ${r.cargado_tiempo ? `<div style="margin-top:5px"><span class="tag ${ok ? 'ok' : 'err'}">${ok ? '✓ A tiempo' : '✗ Tarde'}</span></div>` : ''}
+          ${r.cargado_tiempo ? `<div style="margin-top:5px"><span class="tag ${ok ? 'ok' : 'err'}">${ok ? '&#10003; A tiempo' : '&#10007; Tarde'}</span></div>` : ''}
         </div>`;
       });
     }
 
     if (d?.top_articulos?.length) {
-      html += `<div class="sec">Top art?culos</div>
-        <table class="rtbl"><thead><tr><th>Art?culo</th><th>Bultos</th><th>HL</th><th>Bultos rechazados</th><th>HL rechazados</th><th>PDV rechazados</th></tr></thead><tbody>`;
+      html += `<div class="sec">Top art&iacute;culos</div>
+        <table class="rtbl"><thead><tr><th>Art&iacute;culo</th><th>Bultos</th><th>HL</th><th>Bultos rechazados</th><th>HL rechazados</th><th>PDV rechazados</th></tr></thead><tbody>`;
       d.top_articulos.slice(0, 15).forEach(a => {
         html += `<tr>
-          <td>${a.descripcion_articulo || '?'}</td>
+          <td>${dayDetailText(a.descripcion_articulo, 'Sin dato')}</td>
           <td style="font-family:var(--mono)">${Math.round(a.bultos || 0)}</td>
           <td style="font-family:var(--mono)">${Math.round(a.hl || 0)}</td>
           <td style="font-family:var(--mono);color:${a.b_rec > 0 ? 'var(--red)' : 'var(--muted)'}">${Math.round(a.b_rec || 0)}</td>
@@ -3365,7 +3413,7 @@ async function loadDayDetail(fecha) {
       html += '</tbody></table>';
     }
 
-    if (!html) html = '<div class="empty"><div class="icon">📋</div>Sin datos para este d?a</div>';
+    if (!html) html = '<div class="empty"><div class="icon">&#128196;</div>Sin datos para este d&iacute;a</div>';
     body.innerHTML = html;
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -3413,6 +3461,8 @@ async function onMetricaChange() {
 async function onSucursalChange() {
   const selVentaDia = document.getElementById('ventaDiaSucursal');
   if (selVentaDia) selVentaDia.value = getSuc();
+  const selVentaAnual = document.getElementById('ventaAnualSucursal');
+  if (selVentaAnual) selVentaAnual.value = getSuc();
   const selExp = document.getElementById('expSucursal');
   if (selExp) selExp.value = getSuc();
   const expLoc = document.getElementById('expLocalidad');
@@ -4719,12 +4769,13 @@ async function guardarVariablePlanificacion() {
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
-  ['kpis', 'historico', 'venta-dia', 'comparativo', 'experiencia', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'calibres', 'upload', 'config', 'ayuda'].forEach(x => {
+  ['kpis', 'historico', 'venta-dia', 'venta-anual', 'comparativo', 'experiencia', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'calibres', 'upload', 'config', 'ayuda'].forEach(x => {
     const el2 = document.getElementById('tab-' + x);
     if (el2) el2.style.display = x === t ? '' : 'none';
   });
   if (t === 'historico')   loadHistorico();
   if (t === 'venta-dia')   loadVentaDia();
+  if (t === 'venta-anual') loadVentaAnual();
   if (t === 'comparativo') loadComparativo();
   if (t === 'experiencia') loadExperienciaClientes();
   if (t === 'dotacion')    loadDotacion();
@@ -5925,7 +5976,529 @@ async function eliminarPeriodoCritico(id) {
   }
 }
 
-// ─── COMPARATIVO ANUAL ────────────────────────────────────────
+// ─── VENTA VS AÑO ANTERIOR ────────────────────────────────────
+function ventaAnualMetricFormat(metric, value) {
+  if (value == null || Number.isNaN(Number(value))) return '—';
+  const n = Number(value);
+  if (metric === 'pallets') return n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (metric === 'bultos' || metric === 'pedidos' || metric === 'clientes') return fmtN(Math.round(n));
+  return n.toLocaleString('es-AR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+function syncVentaAnualFilters(data) {
+  fillSelectPreserving('ventaAnualDivision', data?.opciones?.divisiones || [], '', 'Todas las divisiones');
+  fillSelectPreserving('ventaAnualUnidadNegocio', data?.opciones?.unidades_negocio || [], '', 'Todas las unidades de negocio');
+}
+
+function renderVentaAnualChart(data) {
+  if (!window.Chart) return ventaAnualChart;
+  const el = document.getElementById('ventaAnualChart');
+  if (!el) return ventaAnualChart;
+  if (ventaAnualChart) ventaAnualChart.destroy();
+
+  const metric = data?.metrica || document.getElementById('selMetrica')?.value || 'bultos';
+  const labels = (data?.meses || []).map(m => m.nombre || '');
+  const base = (data?.meses || []).map(m => Number(m.base ?? 0));
+  const actual = (data?.meses || []).map(m => Number(m.actual ?? 0));
+  const maxVal = Math.max(5, ...base.filter(v => v != null), ...actual.filter(v => v != null));
+
+  ventaAnualChart = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: `Base ${data?.anio_base ?? ''}`,
+        data: base,
+        borderColor: '#5b8dee',
+        backgroundColor: 'rgba(91,141,238,.15)',
+        pointBackgroundColor: '#5b8dee',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#8fb3ff',
+        valueFormatter: raw => ventaAnualMetricFormat(metric, raw),
+      }, {
+        label: `Actual ${data?.anio ?? ''}`,
+        data: actual,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,.16)',
+        pointBackgroundColor: '#f5a623',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#f5a623',
+        valueFormatter: raw => ventaAnualMetricFormat(metric, raw),
+      }],
+    },
+    plugins: [chartValueLabels],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: true, maxLabelsPerDataset: 6 },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ventaAnualMetricFormat(metric, ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: {
+          beginAtZero: true,
+          suggestedMax: maxVal + 1,
+          ticks: { color: '#6b7080', callback: value => ventaAnualMetricFormat(metric, value) },
+          grid: { color: 'rgba(42,46,58,.35)' },
+        },
+      },
+    },
+  });
+
+  return ventaAnualChart;
+}
+
+function renderVentaAnual(data) {
+  const meta = document.getElementById('ventaAnualMeta');
+  const cont = document.getElementById('ventaAnualTabla');
+  const kpis = document.getElementById('ventaAnualKpis');
+  if (!cont || !kpis) return;
+
+  const metric = data?.metrica || document.getElementById('selMetrica')?.value || 'bultos';
+  const metricLabel = data?.metrica_label || metricSummaryLabel(metric);
+  const sucLabel = data?.filtros?.sucursal_label || selectedOptionText('selSucursal', getSuc());
+  const divLabel = data?.filtros?.division_label || selectedOptionText('ventaAnualDivision', 'Todas las divisiones');
+  const uniLabel = data?.filtros?.unidad_negocio_label || selectedOptionText('ventaAnualUnidadNegocio', 'Todas las unidades de negocio');
+  if (meta) {
+    meta.textContent = `Sucursal: ${sucLabel} | Métrica: ${metricLabel} | División: ${divLabel} | Unidad: ${uniLabel}`;
+  }
+
+  const resumen = data?.resumen || {};
+  const actual = Number(resumen.actual || 0);
+  const base = Number(resumen.base || 0);
+  const delta = Number(resumen.delta || (actual - base));
+  const deltaPct = resumen.delta_pct;
+  const deltaClass = delta > 0 ? 'grn' : delta < 0 ? 'red' : 'muted';
+  const deltaPctClass = deltaPct == null ? 'muted' : deltaPct > 0 ? 'grn' : deltaPct < 0 ? 'red' : 'muted';
+
+  kpis.innerHTML = `
+    <div class="kpi blu"><div class="kpi-lbl">Año actual</div><div class="kpi-val blu">${ventaAnualMetricFormat(metric, actual)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">Año base</div><div class="kpi-val ora">${ventaAnualMetricFormat(metric, base)}</div></div>
+    <div class="kpi ${deltaClass}"><div class="kpi-lbl">Variación</div><div class="kpi-val ${deltaClass}">${ventaAnualMetricFormat(metric, delta)}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">${deltaPct == null ? '—' : fmtPct1(deltaPct)}</div></div>
+  `;
+
+  const rows = Array.isArray(data?.meses) ? data.meses : [];
+  let html = `<table class="rtbl"><thead><tr>
+    <th>Mes</th>
+    <th>${data?.anio_base ?? ''}</th>
+    <th>${data?.anio ?? ''}</th>
+    <th>Variación</th>
+    <th>Variación %</th>
+  </tr></thead><tbody>`;
+  rows.forEach(row => {
+    const rowDelta = Number(row.delta ?? 0);
+    const rowPct = row.delta_pct;
+    const rowDeltaClass = rowDelta > 0 ? 'var(--grn)' : rowDelta < 0 ? 'var(--red)' : 'var(--muted)';
+    const rowPctClass = rowPct == null ? 'var(--muted)' : rowPct > 0 ? 'var(--grn)' : rowPct < 0 ? 'var(--red)' : 'var(--muted)';
+    html += `<tr>
+      <td>${esc(row.nombre || '')}</td>
+      <td style="font-family:var(--mono)">${ventaAnualMetricFormat(metric, row.base)}</td>
+      <td style="font-family:var(--mono)">${ventaAnualMetricFormat(metric, row.actual)}</td>
+      <td style="font-family:var(--mono);color:${rowDeltaClass}">${ventaAnualMetricFormat(metric, rowDelta)}</td>
+      <td style="font-family:var(--mono);color:${rowPctClass}">${rowPct == null ? '—' : fmtPct1(rowPct)}</td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr>
+    <td>Total</td>
+    <td>${ventaAnualMetricFormat(metric, base)}</td>
+    <td>${ventaAnualMetricFormat(metric, actual)}</td>
+    <td style="color:${deltaClass === 'grn' ? 'var(--grn)' : deltaClass === 'red' ? 'var(--red)' : 'var(--muted)'}">${ventaAnualMetricFormat(metric, delta)}</td>
+    <td style="color:${deltaPctClass === 'grn' ? 'var(--grn)' : deltaPctClass === 'red' ? 'var(--red)' : 'var(--muted)'}">${deltaPct == null ? '—' : fmtPct1(deltaPct)}</td>
+  </tr></tfoot></table>`;
+  cont.innerHTML = html;
+
+  renderVentaAnualChart(data);
+}
+
+async function loadVentaAnual() {
+  const seq = ++_loadVentaAnualSeq;
+  if (_ventaAnualAbort) _ventaAnualAbort.abort();
+  _ventaAnualAbort = new AbortController();
+
+  const cont = document.getElementById('ventaAnualTabla');
+  const kpis = document.getElementById('ventaAnualKpis');
+  if (!cont || !kpis) return;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  kpis.innerHTML = '<div class="loading"><div class="spinner"></div>Cargandoâ€¦</div>';
+
+  const hoy = new Date();
+  const anioEl = document.getElementById('ventaAnualAnio');
+  const baseEl = document.getElementById('ventaAnualAnioBase');
+  if (anioEl && !anioEl.value) anioEl.value = hoy.getFullYear();
+  if (baseEl && !baseEl.value) baseEl.value = hoy.getFullYear() - 1;
+
+  const suc = getSuc();
+  const anio = parseInt(anioEl?.value || hoy.getFullYear(), 10);
+  const anioBase = parseInt(baseEl?.value || hoy.getFullYear() - 1, 10);
+  const division = document.getElementById('ventaAnualDivision')?.value || '';
+  const unidadNegocio = document.getElementById('ventaAnualUnidadNegocio')?.value || '';
+  const metric = document.getElementById('selMetrica')?.value || 'bultos';
+
+  try {
+    const qs = new URLSearchParams({ sucursal: suc, anio, anio_base: anioBase, metrica: metric });
+    if (division) qs.set('division', division);
+    if (unidadNegocio) qs.set('unidad_negocio', unidadNegocio);
+    const data = await api(`/api/picos/venta-anual?${qs.toString()}`, { signal: _ventaAnualAbort.signal, timeout: 90000 });
+    if (
+      seq !== _loadVentaAnualSeq ||
+      suc !== getSuc() ||
+      anio !== parseInt(document.getElementById('ventaAnualAnio')?.value || anio, 10) ||
+      anioBase !== parseInt(document.getElementById('ventaAnualAnioBase')?.value || anioBase, 10) ||
+      metric !== document.getElementById('selMetrica')?.value
+    ) return;
+    syncVentaAnualFilters(data);
+    renderVentaAnual(data);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    cont.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+    kpis.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
+// â”€â”€â”€ COMPARATIVO ANUAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+function initVentaAnualDefaults() {
+  const periodo = document.getElementById('ventaAnualPeriodo');
+  if (periodo && !periodo.dataset.init) {
+    periodo.value = 'anio';
+    periodo.dataset.init = '1';
+  }
+
+  const hoy = new Date();
+  const anioEl = document.getElementById('ventaAnualAnio');
+  const baseEl = document.getElementById('ventaAnualAnioBase');
+  const mesEl = document.getElementById('ventaAnualMes');
+  const desdeEl = document.getElementById('ventaAnualDesde');
+  const hastaEl = document.getElementById('ventaAnualHasta');
+
+  if (anioEl && !anioEl.value) anioEl.value = hoy.getFullYear();
+  if (baseEl && !baseEl.value) baseEl.value = hoy.getFullYear() - 1;
+  if (mesEl && !mesEl.value) mesEl.value = mesPad();
+  if (desdeEl && !desdeEl.value) desdeEl.value = `${hoy.getFullYear()}-01`;
+  if (hastaEl && !hastaEl.value) hastaEl.value = mesPad();
+
+  syncVentaAnualPeriodoUI();
+}
+
+function syncVentaAnualMonthFilter() {
+  const mesEl = document.getElementById('ventaAnualMes');
+  if (!mesEl) return '';
+  if (!/^\d{4}-\d{2}$/.test(mesEl.value || '')) mesEl.value = mesPad();
+  return mesEl.value;
+}
+
+function syncVentaAnualRangeFilters() {
+  const hoy = new Date();
+  const desdeEl = document.getElementById('ventaAnualDesde');
+  const hastaEl = document.getElementById('ventaAnualHasta');
+
+  if (desdeEl && !/^\d{4}-\d{2}$/.test(desdeEl.value || '')) desdeEl.value = `${hoy.getFullYear()}-01`;
+  if (hastaEl && !/^\d{4}-\d{2}$/.test(hastaEl.value || '')) hastaEl.value = mesPad();
+  if (desdeEl && hastaEl && desdeEl.value > hastaEl.value) {
+    const tmp = desdeEl.value;
+    desdeEl.value = hastaEl.value;
+    hastaEl.value = tmp;
+  }
+
+  return { desde: desdeEl?.value || '', hasta: hastaEl?.value || '' };
+}
+
+function syncVentaAnualPeriodoUI() {
+  const tipo = document.getElementById('ventaAnualPeriodo')?.value || 'anio';
+  const anioEl = document.getElementById('ventaAnualAnio');
+  const baseEl = document.getElementById('ventaAnualAnioBase');
+  const fieldIds = ['ventaAnualAnioField', 'ventaAnualAnioBaseField', 'ventaAnualMesField', 'ventaAnualDesdeField', 'ventaAnualHastaField'];
+  fieldIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+
+  const hoy = new Date();
+  if (tipo === 'mes') {
+    const mes = syncVentaAnualMonthFilter();
+    const [anioMes] = mes.split('-');
+    const year = Number(anioMes) || hoy.getFullYear();
+    if (anioEl) anioEl.value = String(year);
+    if (baseEl) baseEl.value = String(year - 1);
+    const el = document.getElementById('ventaAnualMesField');
+    if (el) el.style.display = '';
+  } else if (tipo === 'rango') {
+    const { desde, hasta } = syncVentaAnualRangeFilters();
+    const year = Number((desde || '').slice(0, 4)) || hoy.getFullYear();
+    if (anioEl) anioEl.value = String(year);
+    if (baseEl) baseEl.value = String(year - 1);
+    const desdeField = document.getElementById('ventaAnualDesdeField');
+    const hastaField = document.getElementById('ventaAnualHastaField');
+    if (desdeField) desdeField.style.display = '';
+    if (hastaField) hastaField.style.display = '';
+  } else {
+    const year = Number(anioEl?.value || hoy.getFullYear()) || hoy.getFullYear();
+    if (anioEl && !anioEl.value) anioEl.value = String(year);
+    if (baseEl) baseEl.value = String(year - 1);
+    const anioField = document.getElementById('ventaAnualAnioField');
+    const baseField = document.getElementById('ventaAnualAnioBaseField');
+    if (anioField) anioField.style.display = '';
+    if (baseField) baseField.style.display = '';
+  }
+}
+
+function reloadVentaAnualIfVisible() {
+  if (!isTabVisible('tab-venta-anual')) return;
+  loadVentaAnual();
+}
+
+async function onVentaAnualSucursalChange() {
+  const sel = document.getElementById('ventaAnualSucursal');
+  const globalSel = document.getElementById('selSucursal');
+  if (!sel || !globalSel) return;
+  globalSel.value = sel.value;
+  await onSucursalChange();
+}
+
+function onVentaAnualPeriodoChange() {
+  syncVentaAnualPeriodoUI();
+  reloadVentaAnualIfVisible();
+}
+
+function syncVentaAnualFilters(data) {
+  fillSelectPreserving('ventaAnualDivision', data?.opciones?.divisiones || [], '', 'Todas las divisiones');
+  fillSelectPreserving('ventaAnualUnidadNegocio', data?.opciones?.unidades_negocio || [], '', 'Todas las unidades de negocio');
+}
+
+function ventaAnualQueryParams(extra = {}) {
+  syncVentaAnualPeriodoUI();
+  const params = new URLSearchParams();
+  const sucursal = document.getElementById('ventaAnualSucursal')?.value || getSuc();
+  const metric = document.getElementById('selMetrica')?.value || 'bultos';
+  const periodo = document.getElementById('ventaAnualPeriodo')?.value || 'anio';
+  const division = document.getElementById('ventaAnualDivision')?.value || '';
+  const unidadNegocio = document.getElementById('ventaAnualUnidadNegocio')?.value || '';
+
+  params.set('sucursal', sucursal);
+  params.set('metrica', metric);
+  params.set('periodo_tipo', periodo);
+
+  if (periodo === 'mes') {
+    const mes = syncVentaAnualMonthFilter();
+    const [anioMes] = mes.split('-');
+    const year = Number(anioMes) || new Date().getFullYear();
+    params.set('anio', String(year));
+    params.set('anio_base', String(year - 1));
+    params.set('mes', mes);
+  } else if (periodo === 'rango') {
+    const { desde, hasta } = syncVentaAnualRangeFilters();
+    const year = Number((desde || '').slice(0, 4)) || new Date().getFullYear();
+    params.set('anio', String(year));
+    params.set('anio_base', String(year - 1));
+    if (desde) params.set('desde', desde);
+    if (hasta) params.set('hasta', hasta);
+  } else {
+    const anio = parseInt(document.getElementById('ventaAnualAnio')?.value || new Date().getFullYear(), 10);
+    const anioBase = parseInt(document.getElementById('ventaAnualAnioBase')?.value || anio - 1, 10);
+    params.set('anio', String(Number.isFinite(anio) ? anio : new Date().getFullYear()));
+    params.set('anio_base', String(Number.isFinite(anioBase) ? anioBase : (Number.isFinite(anio) ? anio - 1 : new Date().getFullYear() - 1)));
+  }
+
+  if (division) params.set('division', division);
+  if (unidadNegocio) params.set('unidad_negocio', unidadNegocio);
+
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, value);
+  });
+
+  return params;
+}
+
+function renderVentaAnualChart(data) {
+  if (!window.Chart) return ventaAnualChart;
+  const el = document.getElementById('ventaAnualChart');
+  if (!el) return ventaAnualChart;
+  if (ventaAnualChart) ventaAnualChart.destroy();
+
+  const metric = data?.metrica || document.getElementById('selMetrica')?.value || 'bultos';
+  const puntos = Array.isArray(data?.puntos) ? data.puntos : Array.isArray(data?.meses) ? data.meses : [];
+  const labels = (data?.labels || puntos.map(m => m.label || m.nombre || '')).map(v => v || '');
+  const base = puntos.map(m => Number(m.base ?? 0));
+  const actual = puntos.map(m => Number(m.actual ?? 0));
+  const maxVal = Math.max(5, ...base.filter(v => v != null), ...actual.filter(v => v != null));
+
+  ventaAnualChart = new Chart(el.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: data?.periodo_base_label || `Base ${data?.anio_base ?? ''}`,
+        data: base,
+        borderColor: '#5b8dee',
+        backgroundColor: 'rgba(91,141,238,.15)',
+        pointBackgroundColor: '#5b8dee',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#8fb3ff',
+        valueFormatter: raw => ventaAnualMetricFormat(metric, raw),
+      }, {
+        label: data?.periodo_label || `Actual ${data?.anio ?? ''}`,
+        data: actual,
+        borderColor: '#f5a623',
+        backgroundColor: 'rgba(245,166,35,.16)',
+        pointBackgroundColor: '#f5a623',
+        pointRadius: 4,
+        pointHoverRadius: 6,
+        borderWidth: 2,
+        tension: .25,
+        spanGaps: true,
+        labelColor: '#f5a623',
+        valueFormatter: raw => ventaAnualMetricFormat(metric, raw),
+      }],
+    },
+    plugins: [chartValueLabels],
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top: 20 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#e8eaf0', boxWidth: 10 } },
+        chartValueLabels: { hideZero: true, maxLabelsPerDataset: 6 },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ventaAnualMetricFormat(metric, ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { color: '#6b7080' }, grid: { color: 'rgba(42,46,58,.35)' } },
+        y: {
+          beginAtZero: true,
+          suggestedMax: maxVal + 1,
+          ticks: { color: '#6b7080', callback: value => ventaAnualMetricFormat(metric, value) },
+          grid: { color: 'rgba(42,46,58,.35)' },
+        },
+      },
+    },
+  });
+
+  return ventaAnualChart;
+}
+
+function renderVentaAnual(data) {
+  const meta = document.getElementById('ventaAnualMeta');
+  const cont = document.getElementById('ventaAnualTabla');
+  const kpis = document.getElementById('ventaAnualKpis');
+  if (!cont || !kpis) return;
+
+  const metric = data?.metrica || document.getElementById('selMetrica')?.value || 'bultos';
+  const metricLabel = data?.metrica_label || metricSummaryLabel(metric);
+  const sucLabel = data?.filtros?.sucursal_label || selectedOptionText('ventaAnualSucursal', selectedOptionText('selSucursal', getSuc()));
+  const divLabel = data?.filtros?.division_label || selectedOptionText('ventaAnualDivision', 'Todas las divisiones');
+  const uniLabel = data?.filtros?.unidad_negocio_label || selectedOptionText('ventaAnualUnidadNegocio', 'Todas las unidades de negocio');
+  const periodoLabel = data?.periodo_label || '-';
+  const baseLabel = data?.periodo_base_label || '-';
+  const periodoTipo = data?.periodo_tipo || document.getElementById('ventaAnualPeriodo')?.value || 'anio';
+  const actualKpiLabel = periodoTipo === 'anio' ? 'Año actual' : periodoTipo === 'mes' ? 'Mes actual' : 'Período actual';
+  const baseKpiLabel = periodoTipo === 'anio' ? 'Año base' : periodoTipo === 'mes' ? 'Mes base' : 'Período base';
+  const periodColLabel = data?.granularidad === 'day' ? 'Día' : 'Período';
+
+  if (meta) {
+    meta.textContent = `Sucursal: ${sucLabel} | Métrica: ${metricLabel} | Período actual: ${periodoLabel} | Base: ${baseLabel} | División: ${divLabel} | Unidad: ${uniLabel}`;
+  }
+
+  const resumen = data?.resumen || {};
+  const actual = Number(resumen.actual || 0);
+  const base = Number(resumen.base || 0);
+  const delta = Number(resumen.delta || (actual - base));
+  const deltaPct = resumen.delta_pct;
+  const deltaClass = delta > 0 ? 'grn' : delta < 0 ? 'red' : 'muted';
+  const deltaPctClass = deltaPct == null ? 'muted' : deltaPct > 0 ? 'grn' : deltaPct < 0 ? 'red' : 'muted';
+
+  kpis.innerHTML = `
+    <div class="kpi blu"><div class="kpi-lbl">${actualKpiLabel}</div><div class="kpi-val blu">${ventaAnualMetricFormat(metric, actual)}</div></div>
+    <div class="kpi ora"><div class="kpi-lbl">${baseKpiLabel}</div><div class="kpi-val ora">${ventaAnualMetricFormat(metric, base)}</div></div>
+    <div class="kpi ${deltaClass}"><div class="kpi-lbl">Variación</div><div class="kpi-val ${deltaClass}">${ventaAnualMetricFormat(metric, delta)}</div><div style="font-size:10px;color:var(--muted);margin-top:4px">${deltaPct == null ? '—' : fmtPct1(deltaPct)}</div></div>
+  `;
+
+  const rows = Array.isArray(data?.puntos) ? data.puntos : Array.isArray(data?.meses) ? data.meses : [];
+  let html = `<table class="rtbl"><thead><tr>
+    <th>${periodColLabel}</th>
+    <th>${esc(baseLabel)}</th>
+    <th>${esc(periodoLabel)}</th>
+    <th>Variación</th>
+    <th>Variación %</th>
+  </tr></thead><tbody>`;
+  rows.forEach(row => {
+    const rowDelta = Number(row.delta ?? 0);
+    const rowPct = row.delta_pct;
+    const rowDeltaClass = rowDelta > 0 ? 'var(--grn)' : rowDelta < 0 ? 'var(--red)' : 'var(--muted)';
+    const rowPctClass = rowPct == null ? 'var(--muted)' : rowPct > 0 ? 'var(--grn)' : rowPct < 0 ? 'var(--red)' : 'var(--muted)';
+    html += `<tr>
+      <td>${esc(row.label || row.nombre || '')}</td>
+      <td style="font-family:var(--mono)">${ventaAnualMetricFormat(metric, row.base)}</td>
+      <td style="font-family:var(--mono)">${ventaAnualMetricFormat(metric, row.actual)}</td>
+      <td style="font-family:var(--mono);color:${rowDeltaClass}">${ventaAnualMetricFormat(metric, rowDelta)}</td>
+      <td style="font-family:var(--mono);color:${rowPctClass}">${rowPct == null ? '—' : fmtPct1(rowPct)}</td>
+    </tr>`;
+  });
+  html += `</tbody><tfoot><tr>
+    <td>Total</td>
+    <td>${ventaAnualMetricFormat(metric, base)}</td>
+    <td>${ventaAnualMetricFormat(metric, actual)}</td>
+    <td style="color:${deltaClass === 'grn' ? 'var(--grn)' : deltaClass === 'red' ? 'var(--red)' : 'var(--muted)'}">${ventaAnualMetricFormat(metric, delta)}</td>
+    <td style="color:${deltaPctClass === 'grn' ? 'var(--grn)' : deltaPctClass === 'red' ? 'var(--red)' : 'var(--muted)'}">${deltaPct == null ? '—' : fmtPct1(deltaPct)}</td>
+  </tr></tfoot></table>`;
+  cont.innerHTML = html;
+
+  renderVentaAnualChart(data);
+}
+
+async function loadVentaAnual() {
+  const seq = ++_loadVentaAnualSeq;
+  if (_ventaAnualAbort) _ventaAnualAbort.abort();
+  _ventaAnualAbort = new AbortController();
+  if (ventaAnualChart) {
+    ventaAnualChart.destroy();
+    ventaAnualChart = null;
+  }
+
+  initVentaAnualDefaults();
+
+  const cont = document.getElementById('ventaAnualTabla');
+  const kpis = document.getElementById('ventaAnualKpis');
+  if (!cont || !kpis) return;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  kpis.innerHTML = '<div class="loading"><div class="spinner"></div>Cargando…</div>';
+
+  try {
+    const params = ventaAnualQueryParams();
+    const query = params.toString();
+    const data = await api(`/api/picos/venta-anual?${query}`, { signal: _ventaAnualAbort.signal, timeout: 90000 });
+    if (seq !== _loadVentaAnualSeq || query !== ventaAnualQueryParams().toString()) return;
+    syncVentaAnualFilters(data);
+    renderVentaAnual(data);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    cont.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+    kpis.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
 let _cmpAbort = null;
 let _cmpSuc   = 'TODAS';
 const CMP_SUC_LABELS = { 'TODAS': 'General — ambas sucursales', '1': 'Casa Central', '2': 'Dolores' };

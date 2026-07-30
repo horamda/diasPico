@@ -199,6 +199,24 @@ def export_dias_detalle():
         return jsonify({'error': str(e)}), 500
 
 
+@bp.get('/rechazos-dolores/diario')
+def rechazos_dolores_diario():
+    desde_s = request.args.get('desde') or '2026-01-01'
+    hasta_s = request.args.get('hasta') or date.today().isoformat()
+    formato = (request.args.get('formato') or 'json').lower()
+    try:
+        desde = date.fromisoformat(desde_s)
+        hasta = date.fromisoformat(hasta_s)
+        if formato == 'csv':
+            stream, filename, mimetype = pico_svc.export_rechazos_dolores_diario_csv(desde, hasta)
+            return send_file(stream, as_attachment=True, download_name=filename, mimetype=mimetype)
+        return jsonify(pico_svc.get_rechazos_dolores_diario(desde, hasta))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.get('/comparativo-anual')
 def comparativo_anual():
     sucursal  = request.args.get('sucursal', 'TODAS')
@@ -206,6 +224,35 @@ def comparativo_anual():
     anio_base = request.args.get('anio_base', anio - 1,          type=int)
     try:
         return jsonify(pico_svc.get_comparativo_anual(sucursal, anio, anio_base))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/venta-anual')
+def venta_anual():
+    sucursal  = request.args.get('sucursal', 'TODAS')
+    anio      = request.args.get('anio',      date.today().year, type=int)
+    anio_base = request.args.get('anio_base', anio - 1,          type=int)
+    division  = request.args.get('division') or None
+    unidad_negocio = request.args.get('unidad_negocio') or None
+    metrica   = request.args.get('metrica') or None
+    periodo_tipo = request.args.get('periodo_tipo') or None
+    mes = request.args.get('mes') or None
+    desde = request.args.get('desde') or None
+    hasta = request.args.get('hasta') or None
+    try:
+        return jsonify(pico_svc.get_venta_anual(
+            sucursal,
+            anio,
+            anio_base,
+            division=division,
+            unidad_negocio=unidad_negocio,
+            metrica=metrica,
+            periodo_tipo=periodo_tipo,
+            mes=mes,
+            desde=desde,
+            hasta=hasta,
+        ))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

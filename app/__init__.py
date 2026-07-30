@@ -91,6 +91,13 @@ def create_app(env: str | None = None) -> Flask:
             return guarded
         return render_template('frescura_oportunidades.html')
 
+    @app.get('/importaciones-datos')
+    def importaciones_datos():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('importaciones_datos.html')
+
     @app.get('/admin')
     @app.get('/admin/proyecto')
     @app.get('/dashboard')

@@ -1,6 +1,7 @@
 import io
 
 from flask import Flask, Response
+from openpyxl import Workbook
 import pytest
 
 import app.routes.segmentacion as segmentacion
@@ -91,6 +92,29 @@ def test_get_experiencia_clientes_smoke(client, monkeypatch):
         "tipo_negocio": "Kiosco",
         "estado": "malo",
     }
+
+
+def test_get_nps_resumen_anual_smoke(client, monkeypatch):
+    captured = {}
+    sample = {
+        "anual": [{"periodo_anio": 2026, "respuestas": 10, "nps_indice": 80}],
+        "drivers": [{"periodo_anio": 2026, "driver": "Experiencia de entrega", "respuestas": 4}],
+        "subdrivers": [{"periodo_anio": 2026, "driver": "Experiencia de entrega", "subdriver": "Entrega en la fecha acordada", "respuestas": 3}],
+    }
+
+    def fake_resumen(**kwargs):
+        captured.update(kwargs)
+        return sample
+
+    monkeypatch.setattr(segmentacion.svc, "get_nps_resumen_anual", fake_resumen)
+
+    res = client.get("/api/segmentacion/nps/resumen-anual?sucursal=1&cluster=Ganador&limit=8")
+
+    assert res.status_code == 200
+    payload = res.get_json()
+    assert payload["ok"] is True
+    assert payload["data"] == sample
+    assert captured == {"sucursal": "1", "cluster": "Ganador", "limit": 8}
 
 
 def test_get_autoelevador_resumen_smoke(client, monkeypatch):
@@ -321,6 +345,148 @@ def test_parse_nps_detallado_csv_deduce_id_corto_y_fecha():
     assert rows[0]["driver_primario"] == "Experiencia de entrega"
     assert rows[0]["driver_secundario"] == "Entrega en la fecha acordada"
     assert rows[0]["comentario"] == "ok"
+
+
+def test_parse_nps_detallado_excel_export_sheet_normaliza_codigo_cliente():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append([
+        "FECHA ENC",
+        "COD CLIENTE DIST",
+        "NOMBRE CLIENTE",
+        "DESC LOCALIDAD",
+        "SCORE",
+        "COD DESC SEGMENTO MKT",
+        "COD DESC SEGMENTO VENTA",
+        "COD DISTRIBUIDOR",
+        "DDC NAME",
+        "CATEGORÍA",
+        "DRIVER PRIMARIO",
+        "DRIVER SECUNDARIO",
+        "COMENTARIO",
+    ])
+    ws.append([
+        "2021-10-01 08:57:45",
+        "13692800000754",
+        "PDV PRUEBA BEES DP K+T VD22",
+        "MAR DE AJO",
+        "10",
+        "950 - Mercado Hogar",
+        "800 - Minoristas",
+        136928,
+        "DEL PALACIO S.A.",
+        "Promoter",
+        "Ventas y relación con el vendedor",
+        "Ninguno",
+        "",
+    ])
+    raw = io.BytesIO()
+    wb.save(raw)
+
+    rows = segmentacion._parse_nps_detallado_excel(raw.getvalue())
+
+    assert len(rows) == 1
+    assert rows[0]["cliente"] == "754"
+    assert rows[0]["cod_cliente_distribuidor"] == "13692800000754"
+    assert rows[0]["cod_distribuidor"] == "136928"
+    assert rows[0]["categoria_nps"] == "Promoter"
+    assert rows[0]["nombre_cliente"] == "PDV PRUEBA BEES DP K+T VD22"
+    assert rows[0]["segmento_mkt"] == "950 - Mercado Hogar"
+    assert rows[0]["driver_secundario"] == "Ninguno"
+
+
+def test_parse_servicio_historico_excel_rmd_export_promedia_por_cliente_mes():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append([
+        "Motivos",
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        "Other issues",
+    ])
+    ws.append([
+        "Rmd_rating_id",
+        "Fecha Puntuacion",
+        "Fecha Entrega",
+        "NRO_PEDIDO",
+        "COD_CLIENTE_DISTRIBUIDOR",
+        "NOMBRE_CLIENTE",
+        "Puntuacion",
+        "Comentario",
+        "Recuento",
+    ])
+    ws.append([
+        "a1",
+        "2024-01-03",
+        "2023-12-21",
+        "9001",
+        "13692800001133",
+        "Cliente Uno",
+        5,
+        "",
+        1,
+    ])
+    ws.append([
+        "a2",
+        "2024-01-11",
+        "2023-12-22",
+        "9002",
+        "13692800001133",
+        "Cliente Uno",
+        3,
+        "",
+        1,
+    ])
+    ws.append([
+        "a3",
+        "2024-02-01",
+        "2024-01-26",
+        "9003",
+        "13692800010205",
+        "Cliente Dos",
+        None,
+        "",
+        1,
+    ])
+    raw = io.BytesIO()
+    wb.save(raw)
+
+    rows = segmentacion._parse_servicio_historico_excel(raw.getvalue())
+
+    assert rows == [{
+        "cliente": "1133",
+        "periodo_anio": 2024,
+        "periodo_mes": 1,
+        "rmd_valor": 4.0,
+        "rmd_fecha": "2024-01-11",
+    }]
+
+
+def test_parse_servicio_excel_normaliza_codigo_largo():
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Export"
+    ws.append(["COD_CLIENTE_DISTRIBUIDOR", "RMD", "OTIF", "fecha"])
+    ws.append(["13692800001133", 4.5, "96,5%", "2026-05-31"])
+    raw = io.BytesIO()
+    wb.save(raw)
+
+    rows = segmentacion._parse_servicio_excel(raw.getvalue())
+
+    assert rows == [{
+        "cliente": "1133",
+        "otif_valor": 96.5,
+        "otif_fecha": "2026-05-31",
+        "rmd_valor": 4.5,
+        "rmd_fecha": "2026-05-31",
+    }]
 
 
 def test_post_nps_detallado_import_csv(client, monkeypatch):

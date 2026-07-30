@@ -249,6 +249,9 @@ Reglas:
 - `Detractor`: score 0 a 6.
 - NPS indice: porcentaje de promotores menos porcentaje de detractores.
 - El subdriver `Delivery` y el driver/subdriver `General` se calculan de forma separada para logistica.
+- El export Excel tambien puede venir como hoja `Export` con `COD CLIENTE DIST`; el importador
+  normaliza ese campo a `id_cliente` quitando el prefijo `136928` y conserva el codigo bruto en
+  `cod_cliente_distribuidor`.
 
 ### 5.6 IPC inflacion
 

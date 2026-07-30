@@ -36,6 +36,8 @@ _AUTO_CLIENT_KEYS = (
     'codcliente',
     'codigocliente',
     'codigodecliente',
+    'codclientedistribuidor',
+    'codclientedist',
     'codigo',
     'nrocliente',
     'numerocliente',
@@ -115,7 +117,7 @@ _NPS_DETAIL_CLIENT_KEYS = (
 _NPS_DETAIL_KEYS = {
     'fecha_encuesta': ('fechaenc', 'fechaencuesta', 'fecha', 'fechamedicion'),
     'score': ('score', 'puntaje', 'npsscore', 'npspuntaje', 'nps'),
-    'categoria_nps': ('categoria', 'categorianps', 'clasificacionnps'),
+    'categoria_nps': ('categoria', 'categora', 'categorianps', 'clasificacionnps'),
     'driver_primario': ('driverprimario', 'driver', 'driverprincipal'),
     'driver_secundario': ('driversecundario', 'subdriver', 'subdriversecundario'),
     'comentario': ('comentario', 'comentarios', 'observacion'),
@@ -132,6 +134,8 @@ _FECHA_KEYS = (
     'fecha',
     'fechamedicion',
     'periodo',
+    'fechapuntuacion',
+    'fechaentrega',
 )
 
 _OTIF_FECHA_KEYS = ('fechaotif', 'otiffecha')
@@ -171,6 +175,26 @@ _MES_KEYS = (
     'mes',
     'month',
     'periodomes',
+)
+
+_RMD_EXPORT_CLIENT_KEYS = (
+    'codclientedistribuidor',
+    'codclientedist',
+    'cliente',
+    'idcliente',
+    'codcliente',
+)
+
+_RMD_EXPORT_SCORE_KEYS = (
+    'puntuacion',
+    'rmd',
+    'rmdvalor',
+)
+
+_RMD_EXPORT_DATE_KEYS = (
+    'fechapuntuacion',
+    'fechaentrega',
+    'fecha',
 )
 
 _MESES = {
@@ -222,7 +246,7 @@ def _parse_promotor_csv(raw: str) -> list[dict]:
 
     rows = []
     for row in reader:
-        cliente = str(row.get(cliente_col) or '').strip()
+        cliente = _normalize_nps_client_code(row.get(cliente_col))
         if not cliente:
             continue
         prom = str(row.get(promotor_col) or '').strip() if promotor_col else ''
@@ -317,6 +341,38 @@ def _normalize_client_code(value) -> str:
     return text
 
 
+def _normalize_nps_client_code(value, cod_distribuidor=None) -> str:
+    """Normalize client codes coming from the NPS export.
+
+    The source workbook prefixes the short client code with the distributor
+    code (for this client cluster, 136928). We strip that prefix when present
+    and fall back to the generic client-code normalizer otherwise.
+    """
+    text = str(value or '').strip()
+    if not text:
+        return ''
+    try:
+        num = float(text)
+        if num.is_integer():
+            text = str(int(num))
+    except (TypeError, ValueError):
+        pass
+
+    digits = re.sub(r'\D+', '', text)
+    distributor = re.sub(r'\D+', '', str(cod_distribuidor or '').strip())
+    prefixes = [prefix for prefix in (distributor, '136928') if prefix]
+    for prefix in prefixes:
+        if digits.startswith(prefix) and len(digits) > len(prefix):
+            digits = digits[len(prefix):]
+            break
+    else:
+        if len(digits) > 8:
+            digits = digits[-8:]
+
+    digits = digits.lstrip('0')
+    return digits or _normalize_client_code(text)
+
+
 def _first_nps_column(by_key: dict[str, str], field: str) -> str | None:
     return next((by_key[k] for k in _NPS_DETAIL_KEYS[field] if k in by_key), None)
 
@@ -336,6 +392,7 @@ def _parse_nps_detail_rows(rows: list[dict]) -> list[dict]:
     if not cliente_col or not fecha_col or not score_col:
         return []
 
+    cod_distribuidor_col = _first_nps_column(by_key, 'cod_distribuidor')
     optional_cols = {
         field: _first_nps_column(by_key, field)
         for field in _NPS_DETAIL_KEYS
@@ -343,7 +400,7 @@ def _parse_nps_detail_rows(rows: list[dict]) -> list[dict]:
     }
     parsed: list[dict] = []
     for row in rows:
-        cliente = _normalize_client_code(row.get(cliente_col))
+        cliente = _normalize_nps_client_code(row.get(cliente_col), row.get(cod_distribuidor_col))
         fecha = _parse_metric_datetime_value(row.get(fecha_col))
         score = _parse_metric_number(row.get(score_col))
         if not cliente or fecha is None or score is None:
@@ -389,6 +446,138 @@ def _parse_nps_detallado_upload(file_storage) -> list[dict]:
     if name.endswith(('.xlsx', '.xlsm')):
         return _parse_nps_detallado_excel(raw)
     return _parse_nps_detallado_csv(_decode_csv_upload(raw))
+
+
+def _rows_from_excel(raw: bytes, preferred_sheet: str = 'Export') -> list[dict]:
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True, data_only=True, keep_vba=False)
+    ws = wb[preferred_sheet] if preferred_sheet in wb.sheetnames else wb[wb.sheetnames[0]]
+    buffered = []
+    headers = []
+    header_row_idx = None
+    for idx, values in enumerate(ws.iter_rows(values_only=True), start=1):
+        row_values = list(values or [])
+        buffered.append(row_values)
+        candidates = [str(v).strip() if v is not None else '' for v in row_values]
+        by_key = {_norm_csv_key(name): name for name in candidates if name}
+        has_client = any(key in by_key for key in (*_AUTO_CLIENT_KEYS, *_RMD_EXPORT_CLIENT_KEYS, *_NPS_DETAIL_CLIENT_KEYS))
+        has_metric = any(key in by_key for key in (
+            *_OTIF_KEYS,
+            *_RMD_KEYS,
+            *_NPS_KEYS,
+            *_RMD_EXPORT_SCORE_KEYS,
+            'score',
+        ))
+        if has_client and has_metric:
+            headers = candidates
+            header_row_idx = idx
+            break
+        if idx >= 12:
+            break
+    if not headers or header_row_idx is None:
+        return []
+
+    rows = []
+    for values in ws.iter_rows(min_row=header_row_idx + 1, values_only=True):
+        item = {
+            headers[i]: values[i] if i < len(values) else None
+            for i in range(len(headers))
+            if headers[i]
+        }
+        if any(v not in (None, '') for v in item.values()):
+            rows.append(item)
+    return rows
+
+
+def _parse_rmd_export_rows(rows: list[dict]) -> list[dict]:
+    if not rows:
+        return []
+    fieldnames = []
+    for row in rows:
+        for key in row.keys():
+            if key and key not in fieldnames:
+                fieldnames.append(key)
+    by_key = {_norm_csv_key(name): name for name in fieldnames if name}
+    cliente_col = next((by_key[k] for k in _RMD_EXPORT_CLIENT_KEYS if k in by_key), None)
+    score_col = next((by_key[k] for k in _RMD_EXPORT_SCORE_KEYS if k in by_key), None)
+    fecha_col = next((by_key[k] for k in _RMD_EXPORT_DATE_KEYS if k in by_key), None)
+    if not cliente_col or not score_col or not fecha_col:
+        return []
+
+    grouped: dict[tuple[str, int, int], dict] = {}
+    for row in rows:
+        cliente = _normalize_nps_client_code(row.get(cliente_col))
+        score = _parse_service_metric_number('rmd', row.get(score_col))
+        period = _parse_period_value(row.get(fecha_col))
+        fecha = _parse_metric_date(row.get(fecha_col))
+        if not cliente or score is None or not period:
+            continue
+        key = (cliente, period[0], period[1])
+        item = grouped.setdefault(key, {'sum': 0.0, 'count': 0, 'fecha': fecha})
+        item['sum'] += score
+        item['count'] += 1
+        if fecha and (not item.get('fecha') or fecha > item['fecha']):
+            item['fecha'] = fecha
+
+    parsed = []
+    for (cliente, anio, mes), item in grouped.items():
+        if item['count'] <= 0:
+            continue
+        parsed.append({
+            'cliente': cliente,
+            'periodo_anio': anio,
+            'periodo_mes': mes,
+            'rmd_valor': round(item['sum'] / item['count'], 4),
+            'rmd_fecha': item.get('fecha'),
+        })
+    return parsed
+
+
+def _parse_servicio_excel(raw: bytes) -> list[dict]:
+    rows = _rows_from_excel(raw)
+    if not rows:
+        return []
+    text = _rows_to_csv_text(rows)
+    return _parse_servicio_csv(text)
+
+
+def _parse_servicio_historico_excel(raw: bytes) -> list[dict]:
+    rows = _rows_from_excel(raw)
+    if not rows:
+        return []
+    rmd_rows = _parse_rmd_export_rows(rows)
+    if rmd_rows:
+        return rmd_rows
+    text = _rows_to_csv_text(rows)
+    return _parse_servicio_historico_csv(text)
+
+
+def _rows_to_csv_text(rows: list[dict]) -> str:
+    fieldnames = []
+    for row in rows:
+        for key in row.keys():
+            if key and key not in fieldnames:
+                fieldnames.append(key)
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fieldnames, delimiter=';', lineterminator='\n')
+    writer.writeheader()
+    writer.writerows(rows)
+    return output.getvalue()
+
+
+def _parse_servicio_upload(file_storage) -> tuple[list[dict], str]:
+    raw = file_storage.read()
+    name = str(file_storage.filename or '').lower()
+    if name.endswith(('.xlsx', '.xlsm')):
+        return _parse_servicio_excel(raw), 'excel_upload'
+    return _parse_servicio_csv(_decode_csv_upload(raw)), 'csv_upload'
+
+
+def _parse_servicio_historico_upload(file_storage) -> tuple[list[dict], str]:
+    raw = file_storage.read()
+    name = str(file_storage.filename or '').lower()
+    if name.endswith(('.xlsx', '.xlsm')):
+        return _parse_servicio_historico_excel(raw), 'excel_historico_upload'
+    return _parse_servicio_historico_csv(_decode_csv_upload(raw)), 'csv_historico_upload'
 
 
 def _split_header_tokens(value: str | None) -> list[str]:
@@ -546,7 +735,7 @@ def _parse_servicio_csv(raw: str) -> list[dict]:
 
     rows = []
     for row in reader:
-        cliente = str(row.get(cliente_col) or '').strip()
+        cliente = _normalize_nps_client_code(row.get(cliente_col))
         if not cliente:
             continue
         item = {'cliente': cliente}
@@ -1088,6 +1277,18 @@ def experiencia_clientes():
         return _err(e, 500)
 
 
+@bp.get('/nps/resumen-anual')
+def nps_resumen_anual():
+    try:
+        return _ok(svc.get_nps_resumen_anual(
+            sucursal=request.args.get('sucursal'),
+            cluster=request.args.get('cluster'),
+            limit=int(request.args.get('limit', 12)),
+        ))
+    except Exception as e:
+        return _err(e, 500)
+
+
 @bp.get('/inflacion')
 def inflacion_mensual():
     try:
@@ -1152,12 +1353,11 @@ def import_promotor():
 
 @bp.post('/servicio/import')
 def import_metricas_servicio():
-    """Importa OTIF/RMD/NPS por cliente desde CSV o JSON y refresca cache."""
+    """Importa OTIF/RMD/NPS por cliente desde CSV, XLSX o JSON y refresca cache."""
     try:
         if request.files.get('file'):
-            raw = _decode_csv_upload(request.files['file'].read())
-            rows = _parse_servicio_csv(raw)
-            fuente = str(request.form.get('fuente') or 'csv_upload')
+            rows, default_fuente = _parse_servicio_upload(request.files['file'])
+            fuente = str(request.form.get('fuente') or default_fuente)
         else:
             payload = request.get_json(force=True, silent=True)
             if isinstance(payload, dict) and isinstance(payload.get('clientes'), list):
@@ -1183,12 +1383,11 @@ def import_metricas_servicio():
 
 @bp.post('/servicio/historico/import')
 def import_metricas_servicio_historico():
-    """Importa historico OTIF/RMD/NPS por cliente y periodo desde CSV o JSON."""
+    """Importa historico OTIF/RMD/NPS por cliente y periodo desde CSV, XLSX o JSON."""
     try:
         if request.files.get('file'):
-            raw = _decode_csv_upload(request.files['file'].read())
-            rows = _parse_servicio_historico_csv(raw)
-            fuente = str(request.form.get('fuente') or 'csv_historico_upload')
+            rows, default_fuente = _parse_servicio_historico_upload(request.files['file'])
+            fuente = str(request.form.get('fuente') or default_fuente)
         else:
             payload = request.get_json(force=True, silent=True)
             if isinstance(payload, dict) and isinstance(payload.get('clientes'), list):

@@ -1232,6 +1232,7 @@
         <button class="tab" data-tab="clients"><i data-lucide="users"></i>Clientes</button>
         <button class="tab" data-tab="territory"><i data-lucide="map"></i>Territorio</button>
         <button class="tab" data-tab="experience"><i data-lucide="message-square-text"></i>Experiencia</button>
+        <button class="tab" data-tab="nps-year"><i data-lucide="bar-chart-3"></i>NPS Año/Drivers</button>
         <button class="tab" data-tab="service"><i data-lucide="clipboard-list"></i>Plan</button>
         <button class="tab" data-tab="costs"><i data-lucide="truck"></i>Costos</button>
         <button class="tab" data-tab="cost-pdv"><i data-lucide="route"></i>Costo PDV</button>
@@ -1445,6 +1446,42 @@
         </article>
       </section>
 
+      <section class="view" id="view-nps-year">
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="bar-chart-3"></i>NPS año por año</div>
+            <div class="panel-meta" id="npsYearMeta"></div>
+          </div>
+          <div class="panel-body">
+            <div class="metric-grid" id="npsYearSummary"></div>
+            <div class="grid-2" style="margin-top:12px">
+              <div class="chart-box"><canvas id="npsYearChart"></canvas></div>
+              <div class="chart-box"><canvas id="npsYearVolumeChart"></canvas></div>
+            </div>
+          </div>
+        </article>
+        <div class="grid-2">
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="list-filter"></i>Drivers primarios por año</div>
+            </div>
+            <div class="panel-body"><div class="chart-box tall"><canvas id="npsDriverYearChart"></canvas></div></div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="list-tree"></i>Drivers secundarios por año</div>
+            </div>
+            <div class="panel-body"><div class="chart-box tall"><canvas id="npsSubdriverYearChart"></canvas></div></div>
+          </article>
+        </div>
+        <article class="panel">
+          <div class="panel-head">
+            <div class="panel-title"><i data-lucide="table-2"></i>Detalle anual</div>
+          </div>
+          <div class="panel-body"><div class="table-wrap" id="npsYearTable"></div></div>
+        </article>
+      </section>
+
       <section class="view" id="view-service">
         <article class="panel">
           <div class="panel-head">
@@ -1639,6 +1676,45 @@
         <div class="grid-2" style="margin-top:16px">
           <article class="panel">
             <div class="panel-head">
+              <div class="panel-title"><i data-lucide="message-square-text"></i>NPS detallado</div>
+              <div class="panel-meta">CSV / Excel</div>
+            </div>
+            <div class="panel-body">
+              <div class="upload-grid">
+                <div class="field">
+                  <label for="npsDetailFile">Archivo</label>
+                  <input class="control" id="npsDetailFile" type="file" accept=".csv,text/csv,.xlsx,.xlsm">
+                </div>
+                <button class="btn primary" id="npsDetailUploadBtn">
+                  <i data-lucide="upload"></i>Subir NPS detallado
+                </button>
+              </div>
+              <div class="upload-status" id="npsDetailUploadStatus">
+                Usar para encuestas NPS con drivers, como <code>id_cliente</code>, <code>FECHA ENC</code>, <code>SCORE</code>, <code>DRIVER PRIMARIO</code> y <code>DRIVER SECUNDARIO</code>.
+              </div>
+              <div class="template-actions" aria-label="Plantilla NPS detallado">
+                <a class="btn" href="/api/segmentacion/plantillas/nps-detallado"><i data-lucide="download"></i>Plantilla NPS detallado</a>
+              </div>
+              <div class="format-help">
+                Tipo: <code>.csv</code>, <code>.xlsx</code> o <code>.xlsm</code>. Para Excel se toma la hoja <code>Export</code> o <code>BASE NPS</code>.
+                Si viene <code>COD CLIENTE DIST</code>, se transforma al cliente interno quitando el prefijo <code>136928</code>.
+                Este importador recalcula NPS mensual, drivers y NPS vigente para el cluster.
+              </div>
+            </div>
+          </article>
+          <article class="panel">
+            <div class="panel-head">
+              <div class="panel-title"><i data-lucide="bar-chart-3"></i>Resultado NPS detallado</div>
+            </div>
+            <div class="panel-body">
+              <div class="metric-grid" id="npsDetailUploadSummary"></div>
+            </div>
+          </article>
+        </div>
+
+        <div class="grid-2" style="margin-top:16px">
+          <article class="panel">
+            <div class="panel-head">
               <div class="panel-title"><i data-lucide="check-circle-2"></i>OTIF / RMD / NPS</div>
               <div class="panel-meta">CSV</div>
             </div>
@@ -1759,45 +1835,6 @@
           </article>
         </div>
 
-        <div class="grid-2" style="margin-top:16px">
-          <article class="panel">
-            <div class="panel-head">
-              <div class="panel-title"><i data-lucide="message-square-text"></i>NPS detallado</div>
-              <div class="panel-meta">CSV / Excel</div>
-            </div>
-            <div class="panel-body">
-              <div class="upload-grid">
-                <div class="field">
-                  <label for="npsDetailFile">Archivo</label>
-                  <input class="control" id="npsDetailFile" type="file" accept=".csv,text/csv,.xlsx,.xlsm">
-                </div>
-                <button class="btn primary" id="npsDetailUploadBtn">
-                  <i data-lucide="upload"></i>Subir NPS
-                </button>
-              </div>
-              <div class="upload-status" id="npsDetailUploadStatus">
-                Archivo con encuestas NPS, score, driver primario, subdriver y comentario.
-              </div>
-              <div class="template-actions" aria-label="Plantilla NPS detallado">
-                <a class="btn" href="/api/segmentacion/plantillas/nps-detallado"><i data-lucide="download"></i>Plantilla NPS detallado</a>
-              </div>
-              <div class="format-help">
-                Para Excel se toma la hoja <code>BASE NPS</code>. Columnas requeridas:
-                <code>id_cliente</code>, <code>FECHA ENC</code> y <code>SCORE</code>.
-                Columnas recomendadas: <code>DRIVER PRIMARIO</code>, <code>DRIVER SECUNDARIO</code>,
-                <code>COMENTARIO</code>, <code>NOMBRE CLIENTE</code> y <code>DESC LOCALIDAD</code>.
-              </div>
-            </div>
-          </article>
-          <article class="panel">
-            <div class="panel-head">
-              <div class="panel-title"><i data-lucide="bar-chart-3"></i>Resultado NPS</div>
-            </div>
-            <div class="panel-body">
-              <div class="metric-grid" id="npsDetailUploadSummary"></div>
-            </div>
-          </article>
-        </div>
       </section>
 
       <section class="view" id="view-settings">
@@ -1994,6 +2031,8 @@
       quality: { fuentes: [], resumen: {}, alertas: [], versiones: [] },
       experience: null,
       experienceOptionsReady: false,
+      npsYear: null,
+      npsYearError: "",
       sectionSignatures: {},
       charts: {},
       map: null,
@@ -2417,6 +2456,18 @@
             fillExperienceSelects(state.experience);
           }
         });
+      } else if (tab === "nps-year") {
+        const npsParams = new URLSearchParams({ limit: "12" });
+        if (branch !== "TODAS") npsParams.set("sucursal", branch);
+        if (selectedCluster() !== "TODOS") npsParams.set("cluster", selectedCluster());
+        tasks.push({
+          label: "nps anual",
+          run: () => api(`/api/segmentacion/nps/resumen-anual?${npsParams.toString()}`, undefined, 45000),
+          apply: (data) => {
+            state.npsYear = data || { anual: [], drivers: [], subdrivers: [] };
+            state.npsYearError = "";
+          }
+        });
       } else if (tab === "data") {
         tasks.push(
           {
@@ -2468,6 +2519,7 @@
       setGlobalLoading(true, {
         territory: "Actualizando territorio...",
         experience: "Actualizando experiencia...",
+        "nps-year": "Actualizando NPS anual...",
         data: "Actualizando carga complementaria...",
         costs: "Actualizando costos...",
         "cost-pdv": "Actualizando costo por PDV...",
@@ -2483,6 +2535,9 @@
             task.apply(result.value);
           } else {
             failed.push(task.label);
+            if (task.label === "nps anual") {
+              state.npsYearError = result.reason?.message || String(result.reason || "No se pudo cargar NPS anual");
+            }
             console.warn(`No se pudo cargar ${task.label}`, result.reason);
           }
         });
@@ -2853,6 +2908,8 @@
         case "experience":
           ensureExperienceFilters();
           return `${branch}|${cluster}|${$("expSegPeriodo")?.value || ""}|${$("expSegMetrica")?.value || "nps"}|${$("expSegLocalidad")?.value || "TODAS"}|${$("expSegTipoNegocio")?.value || "TODAS"}|${$("expSegEstado")?.value || "TODOS"}`;
+        case "nps-year":
+          return `${branch}|${cluster}`;
         case "data":
           return branch;
         case "costs":
@@ -2882,6 +2939,8 @@
         safeRender("territorio", renderTerritory);
       } else if (tab === "experience") {
         safeRender("experiencia", renderExperience);
+      } else if (tab === "nps-year") {
+        safeRender("nps anual", renderNpsYear);
       } else if (tab === "service") {
         safeRender("plan", renderService);
       } else if (tab === "settings") {
@@ -2910,6 +2969,7 @@
       safeRender("clientes", renderClients);
       safeRender("territorio", renderTerritory);
       if (state.activeTab === "experience") safeRender("experiencia", renderExperience);
+      if (state.activeTab === "nps-year") safeRender("nps anual", renderNpsYear);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
       safeRender("costo PDV", renderCostPdv);
@@ -2935,6 +2995,7 @@
       safeRender("clientes", renderClients);
       safeRender("territorio", renderTerritory);
       if (state.activeTab === "experience") safeRender("experiencia", renderExperience);
+      if (state.activeTab === "nps-year") safeRender("nps anual", renderNpsYear);
       safeRender("plan", renderService);
       safeRender("costos", renderCosts);
       safeRender("costo PDV", renderCostPdv);
@@ -3486,6 +3547,119 @@
         attribution: "&copy; OpenStreetMap"
       }).addTo(state.expMap);
       state.expMapLayerGroup = L.layerGroup().addTo(state.expMap);
+    }
+
+    function npsYearColor(index) {
+      return ["#2563eb", "#16a34a", "#f59e0b", "#dc2626", "#7c3aed", "#0891b2", "#db2777", "#64748b", "#65a30d", "#ea580c", "#0f766e", "#9333ea"][index % 12];
+    }
+
+    function topNames(rows, field, limit = 6) {
+      const totals = new Map();
+      (rows || []).forEach((row) => {
+        const name = row[field] || "Sin dato";
+        totals.set(name, (totals.get(name) || 0) + Number(row.respuestas || 0));
+      });
+      return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name]) => name);
+    }
+
+    function renderDriverYearChart(canvasId, rows, field, title) {
+      const years = [...new Set((rows || []).map((row) => row.periodo_anio))].sort();
+      const names = topNames(rows, field, 6);
+      if (!years.length || !names.length) {
+        renderChartUnavailable(canvasId, "Sin datos de drivers");
+        return;
+      }
+      renderChart(canvasId, "bar", {
+        labels: years,
+        datasets: names.map((name, index) => ({
+          label: name,
+          data: years.map((year) => Number((rows || []).find((row) => Number(row.periodo_anio) === Number(year) && String(row[field] || "Sin dato") === name)?.respuestas || 0)),
+          backgroundColor: npsYearColor(index),
+          borderColor: npsYearColor(index),
+          maxLabelsPerDataset: 0
+        }))
+      }, {
+        scales: {
+          x: { stacked: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } }
+        },
+        plugins: {
+          legend: { display: true, position: "bottom", labels: { color: "#94a3b8", boxWidth: 10 } },
+          tooltip: { callbacks: { title: (items) => `${title} ${items?.[0]?.label || ""}` } }
+        }
+      });
+    }
+
+    function renderNpsYear() {
+      const data = state.npsYear || { anual: [], drivers: [], subdrivers: [] };
+      const annual = data.anual || [];
+      if (state.npsYearError) {
+        if ($("npsYearMeta")) $("npsYearMeta").textContent = "Error";
+        if ($("npsYearSummary")) $("npsYearSummary").innerHTML = `<div class="error">No se pudo cargar NPS anual: ${esc(state.npsYearError)}. Si aparece HTTP 404, reinicia el servidor para activar la nueva ruta.</div>`;
+        ["npsYearChart", "npsYearVolumeChart", "npsDriverYearChart", "npsSubdriverYearChart"].forEach((id) => renderChartUnavailable(id, "Error al cargar NPS"));
+        if ($("npsYearTable")) $("npsYearTable").innerHTML = `<div class="error">${esc(state.npsYearError)}</div>`;
+        return;
+      }
+      const years = annual.map((row) => row.periodo_anio);
+      const totalResponses = annual.reduce((sum, row) => sum + Number(row.respuestas || 0), 0);
+      const totalClients = Math.max(...annual.map((row) => Number(row.clientes || 0)), 0);
+      const weightedNps = totalResponses ? annual.reduce((sum, row) => sum + Number(row.nps_indice || 0) * Number(row.respuestas || 0), 0) / totalResponses : null;
+      const last = annual[annual.length - 1] || {};
+      if ($("npsYearMeta")) $("npsYearMeta").textContent = annual.length ? `${annual[0].periodo_anio} - ${last.periodo_anio}` : "Sin datos";
+      if ($("npsYearSummary")) $("npsYearSummary").innerHTML = annual.length ? `
+        ${metric("Encuestas", num(totalResponses), "var(--blue)")}
+        ${metric("Clientes max.", num(totalClients), "var(--green)")}
+        ${metric("NPS ponderado", numCard(weightedNps), npsColor(weightedNps))}
+        ${metric("Ultimo año", last.periodo_anio ? `${last.periodo_anio} | ${numCard(last.nps_indice)}` : "-", npsColor(last.nps_indice))}
+      ` : `<div class="empty">No hay encuestas NPS detalladas cargadas.</div>`;
+
+      if (!annual.length) {
+        ["npsYearChart", "npsYearVolumeChart", "npsDriverYearChart", "npsSubdriverYearChart"].forEach((id) => renderChartUnavailable(id, "Sin datos NPS"));
+        if ($("npsYearTable")) $("npsYearTable").innerHTML = `<div class="empty">Subi el archivo en Carga -> NPS detallado.</div>`;
+        return;
+      }
+
+      renderChart("npsYearChart", "line", {
+        labels: years,
+        datasets: [
+          { label: "NPS", data: annual.map((row) => Number(row.nps_indice || 0)), borderColor: "#2563eb", backgroundColor: "rgba(37,99,235,.18)", tension: .25 },
+          { label: "Score promedio x10", data: annual.map((row) => Number(row.score_promedio || 0) * 10), borderColor: "#16a34a", backgroundColor: "rgba(22,163,74,.12)", tension: .25 }
+        ]
+      }, { scales: { y: { min: 0, max: 100, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } } } });
+
+      renderChart("npsYearVolumeChart", "bar", {
+        labels: years,
+        datasets: [
+          { label: "Promotores", data: annual.map((row) => Number(row.promotores || 0)), backgroundColor: "#16a34a" },
+          { label: "Pasivos", data: annual.map((row) => Number(row.pasivos || 0)), backgroundColor: "#f59e0b" },
+          { label: "Detractores", data: annual.map((row) => Number(row.detractores || 0)), backgroundColor: "#dc2626" }
+        ]
+      }, {
+        scales: {
+          x: { stacked: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } },
+          y: { stacked: true, beginAtZero: true, ticks: { color: "#94a3b8" }, grid: { color: "rgba(148,163,184,.12)" } }
+        }
+      });
+      renderDriverYearChart("npsDriverYearChart", data.drivers || [], "driver", "Drivers");
+      renderDriverYearChart("npsSubdriverYearChart", data.subdrivers || [], "subdriver", "Subdrivers");
+
+      if ($("npsYearTable")) $("npsYearTable").innerHTML = `
+        <table>
+          <thead><tr>${thHelp("Año")}${thHelp("Respuestas", "num")}${thHelp("Clientes", "num")}${thHelp("Score prom.", "num")}${thHelp("Promotores", "num")}${thHelp("Pasivos", "num")}${thHelp("Detractores", "num")}${thHelp("NPS", "num")}</tr></thead>
+          <tbody>${annual.map((row) => `
+            <tr>
+              <td>${esc(row.periodo_anio)}</td>
+              <td class="num">${num(row.respuestas || 0)}</td>
+              <td class="num">${num(row.clientes || 0)}</td>
+              <td class="num">${num(row.score_promedio, 2)}</td>
+              <td class="num">${num(row.promotores || 0)}</td>
+              <td class="num">${num(row.pasivos || 0)}</td>
+              <td class="num">${num(row.detractores || 0)}</td>
+              <td class="num" style="color:${npsColor(row.nps_indice)}">${num(row.nps_indice, 2)}</td>
+            </tr>
+          `).join("")}</tbody>
+        </table>
+      `;
     }
 
     function renderExperienceMap(data) {
@@ -4870,7 +5044,7 @@
     }
 
     function bindEvents() {
-      document.querySelectorAll(".tab").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
+      document.querySelectorAll(".tab[data-tab]").forEach((button) => button.addEventListener("click", () => setTab(button.dataset.tab)));
       on("branchFilter", "change", () => {
         resetClientPage();
         renderFilterDependentViews();

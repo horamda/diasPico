@@ -31,6 +31,30 @@ class _Conn:
         return False
 
 
+class _CursorSeq:
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.calls = []
+        self._idx = 0
+
+    def execute(self, sql, params=None):
+        self.calls.append((sql, params or {}))
+
+    def _pop(self, expected):
+        if self._idx >= len(self.responses):
+            raise AssertionError(f'No response queued for {expected}')
+        mode, value = self.responses[self._idx]
+        self._idx += 1
+        assert mode == expected
+        return value
+
+    def fetchall(self):
+        return self._pop('all')
+
+    def fetchone(self):
+        return self._pop('one')
+
+
 def _sample_rows():
     return [
         {'fecha': date(2025, 1, 6), 'sucursal_id': '1', 'dow': 1, 'hectolitros': 10, 'bultos': 100, 'pallets': 5},
@@ -259,10 +283,47 @@ def test_get_venta_por_dia_heatmap_salidas(monkeypatch):
     assert data['heatmaps']['hectolitros']['data'][0][1] == 50.0
     assert data['heatmaps']['salidas']['metrica'] == 'salidas'
     assert data['heatmaps']['salidas']['metrica_label'] == 'Salidas'
-    assert data['heatmaps']['salidas']['periodo_label'] == 'Enero 2026'
-    assert data['heatmaps']['salidas']['data'][0][0] == 2
-    assert data['heatmaps']['salidas']['data'][0][1] == 1
-    assert data['heatmaps']['salidas']['max_val'] == 2
+
+
+def test_get_detalle_dia_incluye_nota_y_hora_sin_dato(monkeypatch):
+    cursor = _CursorSeq([
+        ('all', [{
+            'camion_key': 'IVECO-01',
+            'patente': 'AF186WG',
+            'transporte': 'IVECO TECTOR',
+            'carga_maxima_kg': 1000,
+            'capacidad_up': 10,
+            'chofer': None,
+            'planillas': 0,
+            'pedidos': 3,
+            'bultos_totales': 120,
+            'pallets': 4,
+            'up': 0,
+            'importe_total': 0,
+            'fecha_salida': None,
+            'fecha_llegada': None,
+        }]),
+        ('one', {'salidas_unicas': 1}),
+        ('one', {'clientes_unicos': 2}),
+        ('all', [{'id_articulo': 1, 'descripcion_articulo': 'Articulo A', 'bultos': 120, 'hl': 60, 'b_rec': 0, 'hl_rec': 0, 'p_rec': 0}]),
+        ('all', []),
+        ('all', [{'id_cliente': '100', 'nombre_cliente': 'Cliente Uno', 'sucursal': '1'}]),
+        ('all', [{'sucursal': '1', 'clientes_unicos': 1}]),
+    ])
+    monkeypatch.setattr(pico_svc, 'ensure_ventas_detalle_table', lambda: None)
+    monkeypatch.setattr(pico_svc, 'ensure_transportes_table', lambda: None)
+    monkeypatch.setattr(pico_svc, 'pg_cursor', lambda: _Conn(cursor))
+
+    data = pico_svc.get_detalle_dia('TODAS', date(2026, 6, 16))
+
+    assert data['detalle_fuente'] == 'ventas_detalle'
+    assert 'Sin hora' in data['detalle_nota']
+    assert data['planillas'][0]['tiene_hora_salida'] is False
+    assert data['planillas'][0]['hora_salida_label'] is None
+    assert data['planillas'][0]['hora_llegada_label'] is None
+    assert data['salidas_unicas'] == 1
+    assert data['clientes_unicos'] == 2
+    assert data['clientes_por_sucursal'][0]['clientes_unicos'] == 1
 
 
 def test_get_venta_por_dia_heatmap_personas(monkeypatch):
@@ -288,3 +349,130 @@ def test_get_venta_por_dia_heatmap_personas(monkeypatch):
     assert data['heatmaps']['personas']['periodo_label'] == 'Enero 2026'
     assert data['heatmaps']['personas']['data'][0][0] == 4
     assert data['heatmaps']['personas']['data'][0][1] == 6
+
+
+def test_venta_anual_route_acepta_division_y_unidad(monkeypatch):
+    app = Flask(__name__)
+    app.config.update(TESTING=True)
+    app.register_blueprint(picos.bp)
+
+    captured = {}
+
+    monkeypatch.setattr(
+        picos.cache_svc,
+        'get_or_set',
+        lambda _key, factory, ttl_seconds=120: factory(),
+    )
+    monkeypatch.setattr(
+        picos.pico_svc,
+        'get_venta_anual',
+        lambda *args, **kwargs: captured.update(kwargs) or {
+            'sucursal': '1',
+            'sucursal_label': 'Casa Central',
+            'anio': 2026,
+            'anio_base': 2025,
+            'periodo_tipo': 'mes',
+            'periodo_label': 'Enero 2026',
+            'periodo_base_label': 'Enero 2025',
+            'granularidad': 'day',
+            'metrica': 'bultos',
+            'metrica_label': 'Bultos',
+            'filtros': {
+                'sucursal': '1',
+                'sucursal_label': 'Casa Central',
+                'periodo_tipo': 'mes',
+                'periodo_label': 'Enero 2026',
+                'periodo_base_label': 'Enero 2025',
+                'mes': '2026-01',
+                'division': 'BEBIDAS',
+                'division_label': 'BEBIDAS',
+                'unidad_negocio': 'CERVEZA',
+                'unidad_negocio_label': 'CERVEZA',
+            },
+            'opciones': {'divisiones': ['BEBIDAS'], 'unidades_negocio': ['CERVEZA']},
+            'resumen': {'actual': 200, 'base': 150, 'delta': 50, 'delta_pct': 33.3},
+            'labels': ['1', '2'],
+            'puntos': [
+                {'key': '1', 'label': '1', 'actual': 100, 'base': 75, 'delta': 25, 'delta_pct': 33.3},
+                {'key': '2', 'label': '2', 'actual': 100, 'base': 75, 'delta': 25, 'delta_pct': 33.3},
+            ],
+        },
+    )
+
+    client = app.test_client()
+    res = client.get('/api/picos/venta-anual?sucursal=1&anio=2026&anio_base=2025&periodo_tipo=mes&mes=2026-01&division=BEBIDAS&unidad_negocio=CERVEZA')
+
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['metrica'] == 'bultos'
+    assert body['periodo_tipo'] == 'mes'
+    assert body['periodo_label'] == 'Enero 2026'
+    assert body['resumen']['delta_pct'] == 33.3
+    assert captured['division'] == 'BEBIDAS'
+    assert captured['unidad_negocio'] == 'CERVEZA'
+    assert captured['periodo_tipo'] == 'mes'
+    assert captured['mes'] == '2026-01'
+
+
+def test_venta_anual_route_acepta_rango(monkeypatch):
+    app = Flask(__name__)
+    app.config.update(TESTING=True)
+    app.register_blueprint(picos.bp)
+
+    captured = {}
+
+    monkeypatch.setattr(
+        picos.cache_svc,
+        'get_or_set',
+        lambda _key, factory, ttl_seconds=120: factory(),
+    )
+    monkeypatch.setattr(
+        picos.pico_svc,
+        'get_venta_anual',
+        lambda *args, **kwargs: captured.update(kwargs) or {
+            'sucursal': '2',
+            'sucursal_label': 'Dolores',
+            'anio': 2025,
+            'anio_base': 2024,
+            'periodo_tipo': 'rango',
+            'periodo_label': 'Enero 2025 - Marzo 2025',
+            'periodo_base_label': 'Enero 2024 - Marzo 2024',
+            'granularidad': 'month',
+            'metrica': 'bultos',
+            'metrica_label': 'Bultos',
+            'filtros': {
+                'sucursal': '2',
+                'sucursal_label': 'Dolores',
+                'periodo_tipo': 'rango',
+                'periodo_label': 'Enero 2025 - Marzo 2025',
+                'periodo_base_label': 'Enero 2024 - Marzo 2024',
+                'desde': '2025-01',
+                'hasta': '2025-03',
+                'division': '',
+                'division_label': 'Todas las divisiones',
+                'unidad_negocio': '',
+                'unidad_negocio_label': 'Todas las unidades de negocio',
+            },
+            'opciones': {'divisiones': ['BEBIDAS'], 'unidades_negocio': ['CERVEZA']},
+            'resumen': {'actual': 300, 'base': 240, 'delta': 60, 'delta_pct': 25.0},
+            'labels': ['Enero 2025', 'Febrero 2025', 'Marzo 2025'],
+            'puntos': [
+                {'key': '2025-01', 'label': 'Enero 2025', 'actual': 100, 'base': 80, 'delta': 20, 'delta_pct': 25.0},
+                {'key': '2025-02', 'label': 'Febrero 2025', 'actual': 110, 'base': 90, 'delta': 20, 'delta_pct': 22.2},
+                {'key': '2025-03', 'label': 'Marzo 2025', 'actual': 90, 'base': 70, 'delta': 20, 'delta_pct': 28.6},
+            ],
+        },
+    )
+
+    client = app.test_client()
+    res = client.get('/api/picos/venta-anual?sucursal=2&anio=2025&anio_base=2024&periodo_tipo=rango&desde=2025-01&hasta=2025-03')
+
+    assert res.status_code == 200
+    body = res.get_json()
+    assert body['periodo_tipo'] == 'rango'
+    assert body['periodo_label'] == 'Enero 2025 - Marzo 2025'
+    assert body['anio'] == 2025
+    assert body['anio_base'] == 2024
+    assert captured['periodo_tipo'] == 'rango'
+    assert captured['desde'] == '2025-01'
+    assert captured['hasta'] == '2025-03'

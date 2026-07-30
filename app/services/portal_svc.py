@@ -14,6 +14,14 @@ _TABLES_LOCK = Lock()
 
 _DEFAULT_MODULES = (
     {
+        'codigo': 'importaciones_datos',
+        'titulo': 'Importaciones de datos',
+        'descripcion': 'Carga centralizada de archivos, maestros y sincronizaciones externas.',
+        'ruta': '/importaciones-datos',
+        'image_url': None,
+        'orden': 5,
+    },
+    {
         'codigo': 'dias_pico',
         'titulo': 'Panel Dias Pico',
         'descripcion': 'Analisis operativo de dias pico, volumenes y desempeno por sucursal.',
@@ -104,6 +112,19 @@ def ensure_tables() -> None:
                            VALUES (%(codigo)s, %(titulo)s, %(descripcion)s, %(ruta)s, %(image_url)s, %(orden)s, TRUE)
                            ON CONFLICT (codigo) DO NOTHING""",
                         mod,
+                    )
+
+                # La pantalla reemplaza cargas que antes estaban dentro de otros
+                # modulos. Conservar el acceso de los usuarios ya creados evita
+                # que la migracion les quite una funcion que ya utilizaban.
+                cur.execute("SELECT id FROM portal_modulos WHERE codigo = 'importaciones_datos'")
+                import_module = cur.fetchone()
+                if import_module:
+                    cur.execute(
+                        """INSERT INTO portal_usuario_modulo(usuario_id, modulo_id, puede_ver)
+                           SELECT id, %s, TRUE FROM portal_usuarios WHERE activo
+                           ON CONFLICT (usuario_id, modulo_id) DO NOTHING""",
+                        (import_module[0],),
                     )
         _TABLES_READY = True
 
