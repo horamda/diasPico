@@ -9,6 +9,7 @@ from app.services import pico_svc
 
 def _fake_calendario(sucursal, mes, *args, **kwargs):
     assert sucursal == '2'
+    assert args == (None, None)
     dias = {
         '2026-01': [
             {

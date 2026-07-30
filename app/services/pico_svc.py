@@ -1751,7 +1751,7 @@ def get_rechazos_dolores_diario(
     meses = _iter_meses(desde.strftime('%Y-%m'), hasta.strftime('%Y-%m'))
     filas = []
     for mes_key in meses:
-        cal = get_calendario('2', mes_key, incluir_complementos=False)
+        cal = get_calendario('2', mes_key, None, None, incluir_complementos=False)
         for d in cal.get('dias') or []:
             fecha_s = d.get('fecha')
             if not fecha_s:
