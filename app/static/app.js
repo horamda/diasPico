@@ -27,6 +27,7 @@ let _loadDropSeq = 0;
 let historicoChart = null;
 let historicoPicosChart = null;
 let historicoVolumenChart = null;
+let rechazoPctCharts = {};
 let ventaAnualChart = null;
 let ventaDiaData = null;
 let ventaDiaCmpCharts = {};
@@ -516,6 +517,7 @@ async function loadMes() {
   _mesAbort = new AbortController();
 
   load('kpiGrid'); load('tablaDias');
+  destroyRechazoPctCharts();
   try {
     const u    = document.getElementById('sliderUmbral').value;
     const m    = document.getElementById('selMetrica').value;
@@ -650,9 +652,11 @@ async function loadMes() {
       grid.insertBefore(banner, grid.firstChild);
     }
     renderTablaDias();
+    renderRechazoPctCharts();
   } catch (e) {
     if (e.name === 'AbortError') return;
     errBox('kpiGrid', 'Error al cargar datos: ' + e.message);
+    destroyRechazoPctCharts();
     document.getElementById('sPicos').textContent = 'ERR';
   }
 }
@@ -840,6 +844,87 @@ function renderTablaDias() {
   });
   html += '</tbody></table>';
   document.getElementById('tablaDias').innerHTML = html;
+}
+
+function destroyRechazoPctCharts() {
+  Object.values(rechazoPctCharts || {}).forEach(chart => {
+    if (chart && typeof chart.destroy === 'function') chart.destroy();
+  });
+  rechazoPctCharts = {};
+}
+
+function renderRechazoPctCharts() {
+  const cont = document.getElementById('rechazoPctCharts');
+  if (!cont) return;
+  destroyRechazoPctCharts();
+  if (!window.Chart || !diasData.length || diasData[0]?.es_proyeccion) {
+    cont.style.display = 'none';
+    return;
+  }
+  cont.style.display = 'grid';
+
+  const labels = diasData.map(d => String(d.fecha || '').slice(8, 10));
+  const baseOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    layout: { padding: { top: 10, right: 6, bottom: 0, left: 0 } },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          title: items => {
+            const idx = items?.[0]?.dataIndex ?? 0;
+            return diasData[idx]?.fecha || '';
+          },
+          label: ctx => `${ctx.dataset.label}: ${fmtPct1(ctx.parsed.y || 0)}`,
+        },
+      },
+      chartValueLabels: { hideZero: true },
+    },
+    scales: {
+      x: {
+        ticks: { color: '#9aa4b2', maxRotation: 0, autoSkip: true, maxTicksLimit: 10 },
+        grid: { display: false },
+      },
+      y: {
+        beginAtZero: true,
+        ticks: { color: '#9aa4b2', callback: value => `${value}%` },
+        grid: { color: 'rgba(255,255,255,.07)' },
+      },
+    },
+  };
+
+  const configs = [
+    { id: 'rechazoPdvChart', key: 'pct_rechazo_pedidos', label: '% rechazo PDV', color: '#e05c5c' },
+    { id: 'rechazoBultosChart', key: 'pct_rechazo_bultos', label: '% rechazo bultos', color: '#f5a623' },
+    { id: 'rechazoHlChart', key: 'pct_rechazo_hl', label: '% rechazo HL', color: '#a78bfa' },
+  ];
+
+  configs.forEach(cfg => {
+    const el = document.getElementById(cfg.id);
+    if (!el) return;
+    rechazoPctCharts[cfg.id] = new Chart(el.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: cfg.label,
+          data: diasData.map(d => Number(d[cfg.key] || 0)),
+          borderColor: cfg.color,
+          backgroundColor: `${cfg.color}22`,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: .25,
+          fill: true,
+          valueFormatter: raw => fmtPct1(raw || 0),
+        }],
+      },
+      plugins: [chartValueLabels],
+      options: baseOptions,
+    });
+  });
 }
 
 async function selectDay(k) {

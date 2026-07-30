@@ -16,6 +16,10 @@ def test_kpi_tab_tiene_layout_compacto_y_bandas_por_unidad():
     assert '#tab-kpis .kpi-goal{margin-top:3px;display:flex;justify-content:center;}' in html
     assert "Experiencia de clientes" in html
     assert "Detalle diario del mes" in html
+    assert 'id="rechazoPctCharts"' in html
+    assert 'id="rechazoPdvChart"' in html
+    assert 'id="rechazoBultosChart"' in html
+    assert 'id="rechazoHlChart"' in html
     assert "Períodos críticos — R3.4.1" in html
     assert "Distribución por sucursal" in html
     assert "Pestañas principales" in html
@@ -54,3 +58,7 @@ def test_kpi_tab_render_agrupa_positivo_y_rechazo_por_unidad():
     assert "Generar plan" in js
     assert "rmcyo_pct_rechazo_bultos" in js
     assert "rmcyo_pct_rechazo_pedidos" in js
+    assert "function renderRechazoPctCharts()" in js
+    assert "pct_rechazo_pedidos" in js
+    assert "pct_rechazo_bultos" in js
+    assert "pct_rechazo_hl" in js
