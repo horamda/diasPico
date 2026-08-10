@@ -26,6 +26,44 @@
     @media(max-width:820px){.save-footer{position:sticky;bottom:0;z-index:10;border-radius:12px 12px 0 0;margin:12px -10px 0;padding:12px;box-shadow:0 -4px 14px rgba(15,23,42,.18);align-items:stretch;flex-direction:column}.save-btn{width:100%;height:52px;font-size:16px}.save-title{font-size:15px}.save-sub{font-size:12px}.top>div:last-child{width:100%;display:grid;grid-template-columns:1fr 1fr 1fr}.top .btn{text-align:center;justify-content:center}.grid{grid-template-columns:1fr}.field.w2{grid-column:span 1}.stats{gap:6px}.stats .pill{flex:1;min-width:calc(50% - 6px);text-align:center}.mobile-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
     .mobile-help{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin:8px 0}.mobile-help span{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:6px;padding:6px 8px;font-size:12px;color:#334155}.mobile-total{margin-top:8px;background:#dcfce7!important;border-color:#86efac!important;color:#14532d!important}.mobile-card .stock-input{min-width:0}.mobile-row.five{grid-template-columns:repeat(5,minmax(0,1fr))}
     @media(max-width:640px){.shell{padding:8px}.top>div:last-child{grid-template-columns:1fr 1fr}.top>div:last-child .btn:last-child{grid-column:1/-1}.tabs{margin-left:-4px;margin-right:-4px}.panel{border-radius:8px}.stats .pill{min-width:100%;font-size:12px}.mobile-row.five{grid-template-columns:repeat(2,minmax(0,1fr))}.mobile-row.five input:last-child{grid-column:1/-1}.mobile-card{margin-left:-2px;margin-right:-2px}.mobile-head{align-items:flex-start;flex-direction:column}.mobile-help{grid-template-columns:1fr}.stock-input{height:46px;font-size:18px}.save-footer{margin-left:-8px;margin-right:-8px}}
+    #viewConteo .auto-field{display:none!important}
+    .time-note{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:8px;padding:9px 11px;font-size:12px;margin:0 0 10px}
+    @media(max-width:900px){
+      #viewConteo .auto-field{display:none!important}
+      #viewConteo .table-wrap{display:none!important}
+      #cards{display:block!important;padding-bottom:92px}
+      #cards .mobile-card{display:block!important;background:#fff!important;color:#0f172a!important;border:1px solid #cbd5e1;border-radius:10px;margin:8px 0;padding:10px}
+      #viewConteo .panel{position:static;box-shadow:none}
+      #viewConteo .grid{grid-template-columns:1fr!important}
+      #viewConteo .field{padding:5px 7px;border-right:0}
+      #viewConteo .field label{font-size:9px;margin-bottom:2px}
+      #viewConteo .field input,#viewConteo .field select{min-height:34px!important;height:34px!important;font-size:12px!important;padding:5px 8px!important}
+      #viewConteo .time-note{font-size:11px;padding:7px 9px;margin-bottom:6px}
+      #viewConteo .stats{position:static!important;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px;background:#eef2f5}
+      #viewConteo .stats .pill{min-width:0!important;font-size:10.5px;padding:5px 6px}
+      .top{gap:6px;margin-bottom:6px}.top h1{font-size:18px}.top .sub{display:none}.eyebrow{font-size:9px}
+      .top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr 1fr!important;gap:5px;width:100%}
+      .top .btn{min-height:30px!important;height:30px!important;font-size:11px!important;padding:4px 7px!important}
+      .tabs{padding:3px;gap:3px;margin-bottom:8px}.tab{font-size:10.5px;padding:7px 9px}
+      .mobile-head{display:flex;flex-direction:row!important;justify-content:space-between;gap:8px;font-size:13px;line-height:1.2}
+      .mobile-meta{font-size:12px;margin:6px 0;color:#334155}
+      .mobile-help{display:grid;grid-template-columns:1fr 1fr!important;gap:5px;margin:6px 0}
+      .mobile-help span{font-size:11px;padding:5px 6px}
+      .mobile-row.five{display:grid;grid-template-columns:1fr 1fr!important;gap:6px}
+      .mobile-row.five input:last-child{grid-column:1/-1}
+      #cards .stock-input{height:40px!important;font-size:15px!important;border-width:1px!important}
+      .mobile-total{font-size:12px;margin-top:7px;text-align:center}
+      .save-footer{position:fixed!important;left:0;right:0;bottom:0;margin:0!important;border-radius:12px 12px 0 0;padding:9px 10px!important}
+      .save-title{font-size:13px}.save-sub{font-size:10.5px}.save-btn{height:42px!important;font-size:13px!important}
+      .mobile-carousel-bar{display:flex!important;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;margin:8px 0;position:sticky;top:0;z-index:8;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+      .mobile-carousel-bar .btn{height:34px!important;min-height:34px!important;font-size:12px!important;padding:5px 10px!important}
+      .mobile-progress{font-size:12px;font-weight:800;color:#0f172a;text-align:center;flex:1}
+      .mobile-card{min-height:calc(100vh - 280px);display:flex!important;flex-direction:column;justify-content:flex-start}
+      .mobile-card .mobile-row.five{margin-top:14px}
+      .mobile-card .stock-input{height:52px!important;font-size:18px!important}
+      .mobile-total{margin-top:12px!important;padding:10px!important}
+    }
+    .mobile-carousel-bar{display:none}
   </style>
 </head>
 <body>
@@ -110,17 +148,17 @@
   <section class="view" id="viewConteo">
   <section class="panel">
     <div class="grid">
-      <div class="field"><label>Mes ABC</label><input id="mes" type="month"></div>
+      <div class="field auto-field"><label>Mes ABC</label><input id="mes" type="month"></div>
       <div class="field"><label>Sucursal</label><select id="sucursalConteo" onchange="syncSucursal('conteo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
       <div class="field"><label>Semana</label><select id="semana"><option value="AUTO">Automatica</option><option value="TODAS">TODAS</option><option value="semana1">Semana 1</option><option value="semana2">Semana 2</option><option value="semana3">Semana 3</option><option value="semana4">Semana 4</option></select></div>
       <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option></select></div>
       <div class="field"><label>ABC</label><select id="abc"><option>TODOS</option><option>A</option><option>B</option><option>C</option></select></div>
       <div class="field"><label>Fecha</label><input id="fecha" type="date"></div>
       <div class="field"><label>Responsable control stock</label><select id="responsable"></select></div>
-      <div class="field"><label>Hora inicio</label><input id="horaInicio" type="time"></div>
-      <div class="field"><label>Hora fin</label><input id="horaFin" type="time"></div>
+      <div class="field auto-field"><label>Hora inicio</label><input id="horaInicio" type="time"></div>
+      <div class="field auto-field"><label>Hora fin</label><input id="horaFin" type="time"></div>
       <div class="field w2"><label>Observaciones</label><input id="observaciones" placeholder="Opcional"></div>
-      <div class="field w2"><label>Estado</label><input id="estado" readonly value="Sin guardar"></div>
+      <div class="field w2 auto-field"><label>Estado</label><input id="estado" readonly value="Sin guardar"></div>
     </div>
     <div class="stats">
       <span class="pill" id="pMes">Mes: -</span>
@@ -130,6 +168,7 @@
     </div>
   </section>
 
+  <div class="time-note">El horario de inicio se registra con la primera cantidad cargada. El horario final se registra al tocar “Guardar control y finalizar”.</div>
   <div class="status" id="status">Cargando...</div>
   <section class="table-wrap">
     <table>
@@ -185,6 +224,7 @@ let abcLoaded = false;
 let planLoaded = false;
 let resumenLoaded = false;
 let respLoaded = false;
+let mobileIndex = 0;
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function cargarSucursales(){
@@ -378,8 +418,15 @@ async function toggleResponsable(id,activo){
   await loadResponsables();
 }
 function cantidadInputs(id){
-  const values=[1,2,3,4].map(n=>Number(document.querySelector(`[data-cant="${id}-${n}"]`)?.value||0));
-  const unidades=Number(document.querySelector(`[data-unid="${id}"]`)?.value||0);
+  let draft={values:{},unidades:{}};
+  try{draft=JSON.parse(localStorage.getItem(draftKey())||'{}')}catch(_){}
+  const values=[1,2,3,4].map(n=>{
+    const key=`${id}-${n}`;
+    const el=document.querySelector(`[data-cant="${key}"]`);
+    return Number((el?el.value:draft.values?.[key])||0);
+  });
+  const unidEl=document.querySelector(`[data-unid="${id}"]`);
+  const unidades=Number((unidEl?unidEl.value:draft.unidades?.[id])||0);
   const total=values.reduce((a,b)=>a+b,0);
   return {values,total,unidades};
 }
@@ -411,8 +458,16 @@ function actualizarTotales(markTime=true){
   if(markTime) guardarBorradorLocal();
 }
 function updateDiffCount(){actualizarTotales()}
+function isMobileConteo(){return window.matchMedia('(max-width: 900px)').matches}
 function renderMobileCards(){
-  cards.innerHTML=currentRows.map(r=>`<article class="mobile-card">
+  if(!currentRows.length){cards.innerHTML='';return}
+  const visibleRows=isMobileConteo()? [currentRows[Math.min(mobileIndex,currentRows.length-1)]] : currentRows;
+  const bar=isMobileConteo()?`<div class="mobile-carousel-bar">
+    <button class="btn" onclick="mobilePrev()">Anterior</button>
+    <div class="mobile-progress">${Math.min(mobileIndex+1,currentRows.length)} / ${currentRows.length}</div>
+    <button class="btn primary" onclick="mobileNext()">Siguiente</button>
+  </div>`:'';
+  cards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
     <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
     <div class="mobile-meta">${esc(r.descripcion)}</div>
     <div class="mobile-help"><span>Bultos/Pallet: <strong>${fmt.format(r.bultos_por_pallet||0)}</strong></span><span>Unid/Bulto: <strong>${fmt.format(r.unidades_por_bulto||0)}</strong></span></div>
@@ -425,10 +480,16 @@ function renderMobileCards(){
     </div>
     <div class="pill mobile-total"><span data-total="${r.id_articulo}m">0</span> bultos con <span data-unidades="${r.id_articulo}m">0</span> unidades</div>
   </article>`).join('');
+  cargarBorradorLocal();
+  actualizarTotales(false);
 }
+function mobilePrev(){if(mobileIndex>0){mobileIndex--;renderMobileCards()}}
+function mobileNext(){if(mobileIndex<currentRows.length-1){mobileIndex++;renderMobileCards()}}
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
-  const data={horaInicio:horaInicio.value,horaFin:horaFin.value,responsable:responsable.value,observaciones:observaciones.value,values:{},unidades:{}};
+  let data={horaInicio:horaInicio.value,responsable:responsable.value,observaciones:observaciones.value,values:{},unidades:{}};
+  try{data={...data,...JSON.parse(localStorage.getItem(draftKey())||'{}'),values:{...(JSON.parse(localStorage.getItem(draftKey())||'{}').values||{})},unidades:{...(JSON.parse(localStorage.getItem(draftKey())||'{}').unidades||{})}}}catch(_){}
+  data.horaInicio=horaInicio.value||data.horaInicio;data.responsable=responsable.value||data.responsable;data.observaciones=observaciones.value;
   document.querySelectorAll('[data-cant]').forEach(el=>data.values[el.dataset.cant]=el.value);
   document.querySelectorAll('[data-unid]').forEach(el=>data.unidades[el.dataset.unid]=el.value);
   localStorage.setItem(draftKey(),JSON.stringify(data));
@@ -439,7 +500,7 @@ function cargarBorradorLocal(){
   if(!raw) return;
   try{
     const data=JSON.parse(raw);
-    horaInicio.value=data.horaInicio||horaInicio.value; horaFin.value=data.horaFin||horaFin.value;
+    horaInicio.value=data.horaInicio||horaInicio.value;
     if(data.responsable && [...responsable.options].some(o=>o.value===data.responsable)) responsable.value=data.responsable;
     observaciones.value=data.observaciones||observaciones.value;
     Object.entries(data.values||{}).forEach(([k,v])=>{const el=document.querySelector(`[data-cant="${k}"]`); if(el) el.value=v});
@@ -454,6 +515,7 @@ async function loadPlanilla(){
   const data=await res.json();
   if(!res.ok||data.ok===false){status.textContent='Error: '+(data.error||'No se pudo cargar');return}
   currentRows=data.rows||[];
+  mobileIndex=0;
   pMes.textContent=`Mes: ${data.mes}`;
   pArt.textContent=`Artículos: ${data.total_filtrado}`;
   pDia.textContent=`${f.semana.toUpperCase()} · ${f.dia}`;
@@ -491,8 +553,10 @@ async function loadPlanilla(){
   </article>`).join('');
   renderMobileCards();
   status.textContent=`Cantidad de artículos a contar: ${currentRows.length}`;
-  cargarBorradorLocal();
-  actualizarTotales(false);
+  if(!isMobileConteo()){
+    cargarBorradorLocal();
+    actualizarTotales(false);
+  }
 }
 async function guardarConteo(){
   horaFin.value=new Date().toTimeString().slice(0,5);
@@ -512,6 +576,7 @@ async function guardarConteo(){
 (async function initControlStock(){
   mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=defaultMonth();fecha.value=today();semana.value='AUTO';dia.value='AUTO';
   [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
+  [mes,horaInicio,horaFin,estado].forEach(el=>el.closest('.field').style.display='none');
   await cargarSucursales();
   loadAbc();loadPlanificacion();loadResumenMensual();loadResponsables();loadPlanilla();
 })();
