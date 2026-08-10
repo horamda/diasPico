@@ -115,6 +115,9 @@ GET /api/picos/venta-dia?sucursal=TODAS&periodo_tipo=mes&mes=2026-06
 GET /api/picos/venta-dia/export?sucursal=TODAS&periodo_tipo=anio&anio=2026&formato=xlsx
 GET /api/picos/venta-dia/export?sucursal=TODAS&periodo_tipo=anio&anio=2026&formato=pdf
 GET /api/rechazos
+GET /api/rechazos/diario/resumen?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
+GET /api/rechazos/diario/detalle?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
+GET /api/rechazos/diario/integracion?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
 GET /api/admin-proyecto/dashboard
 GET /api/admin-proyecto/tablas
 GET /api/admin-proyecto/indices

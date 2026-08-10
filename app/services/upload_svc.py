@@ -528,7 +528,7 @@ _ART_COLS = [
     'presentacion_bulto', 'unidades_por_bulto', 'unidad_medida',
     'desc_unidad_medida', 'valor_unidad_medida', 'peso', 'alcoholico',
     'division', 'familia', 'marca', 'tipo_producto', 'unidad_negocio',
-    'rotacion_abc', 'grupos_productos', 'activo_cc', 'activo_dolores', 'actualizado',
+    'rotacion_abc', 'grupos_productos', 'activo_cc', 'activo_dolores', 'movil', 'anulado', 'actualizado',
 ]
 
 _ART_CONFLICT = """
@@ -547,6 +547,7 @@ ON CONFLICT (id_articulo) DO UPDATE SET
     rotacion_abc=EXCLUDED.rotacion_abc,
     grupos_productos=EXCLUDED.grupos_productos,
     activo_cc=EXCLUDED.activo_cc, activo_dolores=EXCLUDED.activo_dolores,
+    movil=EXCLUDED.movil, anulado=EXCLUDED.anulado,
     actualizado=NOW()
 """
 
@@ -573,6 +574,8 @@ def _art_row(r: dict) -> tuple:
         str(r.get('grupos_productos', ''))[:100],
         str(r.get('activo_cc', ''))[:10],
         str(r.get('activo_dolores', ''))[:10],
+        str(r.get('movil', ''))[:20],
+        str(r.get('anulado', ''))[:20],
         datetime.now(),
     )
 

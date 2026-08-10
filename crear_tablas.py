@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS articulos (
     grupos_productos    VARCHAR(100),
     activo_cc           VARCHAR(10),
     activo_dolores      VARCHAR(10),
+    movil               VARCHAR(20),
+    anulado             VARCHAR(20),
     actualizado         TIMESTAMP DEFAULT NOW()
 );
 """)

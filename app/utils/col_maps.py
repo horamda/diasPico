@@ -43,6 +43,8 @@ ARTICULOS_MAP: dict[str, list[str]] = {
     'grupos_productos': ['grupos de productos', 'grupo de productos', 'grupos_productos'],
     'activo_cc': ['articulos casa central', 'activo cc', 'activo_cc'],
     'activo_dolores': ['articulos sucursal dolores', 'activo dolores', 'activo_dolores'],
+    'movil': ['usado en dispositivo movil', 'usado en dispositivo móvil', 'dispositivo movil', 'dispositivo móvil', 'movil', 'móvil'],
+    'anulado': ['anulado'],
 }
 
 

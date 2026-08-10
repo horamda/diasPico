@@ -46,6 +46,14 @@ _DEFAULT_MODULES = (
         'orden': 25,
     },
     {
+        'codigo': 'control_stock',
+        'titulo': 'Control de stock',
+        'descripcion': 'ABC de articulos activos de Casa Central segun bultos vendidos el ultimo mes.',
+        'ruta': '/control-stock',
+        'image_url': None,
+        'orden': 27,
+    },
+    {
         'codigo': 'panel_proyecto',
         'titulo': 'Panel Proyecto',
         'descripcion': 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
@@ -114,12 +122,12 @@ def ensure_tables() -> None:
                         mod,
                     )
 
-                # La pantalla reemplaza cargas que antes estaban dentro de otros
-                # modulos. Conservar el acceso de los usuarios ya creados evita
-                # que la migracion les quite una funcion que ya utilizaban.
-                cur.execute("SELECT id FROM portal_modulos WHERE codigo = 'importaciones_datos'")
-                import_module = cur.fetchone()
-                if import_module:
+                # Conservar acceso para usuarios ya creados en modulos
+                # operativos agregados despues del setup inicial.
+                cur.execute(
+                    "SELECT id FROM portal_modulos WHERE codigo IN ('importaciones_datos', 'control_stock')"
+                )
+                for import_module in cur.fetchall() or []:
                     cur.execute(
                         """INSERT INTO portal_usuario_modulo(usuario_id, modulo_id, puede_ver)
                            SELECT id, %s, TRUE FROM portal_usuarios WHERE activo

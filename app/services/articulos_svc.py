@@ -37,6 +37,8 @@ def ensure_articulos_table() -> None:
                     grupos_productos    VARCHAR(100),
                     activo_cc           VARCHAR(10),
                     activo_dolores      VARCHAR(10),
+                    movil               VARCHAR(20),
+                    anulado             VARCHAR(20),
                     actualizado         TIMESTAMP DEFAULT NOW()
                 );
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bultos_por_pallet DECIMAL(10,4);
@@ -55,6 +57,8 @@ def ensure_articulos_table() -> None:
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS grupos_productos VARCHAR(100);
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS activo_cc VARCHAR(10);
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS activo_dolores VARCHAR(10);
+                ALTER TABLE articulos ADD COLUMN IF NOT EXISTS movil VARCHAR(20);
+                ALTER TABLE articulos ADD COLUMN IF NOT EXISTS anulado VARCHAR(20);
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS actualizado TIMESTAMP DEFAULT NOW();
             """)
     _ARTICULOS_READY = True

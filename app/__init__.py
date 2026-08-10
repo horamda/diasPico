@@ -19,6 +19,7 @@ BLUEPRINT_MODULES = (
     'app.routes.kpi_objetivos',
     'app.routes.planificacion_picos',
     'app.routes.catalogo',
+    'app.routes.control_stock',
     'app.routes.flota',
     'app.routes.simulacion_logistica',
     'app.routes.sync_sheets',
@@ -97,6 +98,13 @@ def create_app(env: str | None = None) -> Flask:
         if guarded:
             return guarded
         return render_template('importaciones_datos.html')
+
+    @app.get('/control-stock')
+    def control_stock():
+        guarded = _guard()
+        if guarded:
+            return guarded
+        return render_template('control_stock.html')
 
     @app.get('/admin')
     @app.get('/admin/proyecto')

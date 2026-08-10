@@ -1,0 +1,128 @@
+from __future__ import annotations
+
+from flask import Blueprint, g, jsonify, request
+
+from app.routes.portal import login_required
+from app.services import control_stock_svc
+
+
+bp = Blueprint("control_stock", __name__, url_prefix="/api/control-stock")
+
+
+@bp.get("/abc")
+@login_required
+def abc():
+    try:
+        data = control_stock_svc.get_abc_articulos(
+            mes=request.args.get("mes"),
+            limit=request.args.get("limit", type=int),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/planilla")
+@login_required
+def planilla():
+    try:
+        data = control_stock_svc.get_planilla(
+            mes=request.args.get("mes"),
+            semana=request.args.get("semana", "TODAS"),
+            dia=request.args.get("dia", "TODOS"),
+            abc=request.args.get("abc", "TODOS"),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/planificacion")
+@login_required
+def planificacion():
+    try:
+        data = control_stock_svc.get_planificacion(
+            mes=request.args.get("mes"),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/resumen-mensual")
+@login_required
+def resumen_mensual():
+    try:
+        data = control_stock_svc.get_resumen_mensual(
+            mes=request.args.get("mes"),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/conteos")
+@login_required
+def guardar_conteo():
+    try:
+        user = getattr(g, "portal_user", None) or {}
+        data = control_stock_svc.guardar_conteo(
+            request.get_json(force=True) or {},
+            responsable_default=str(user.get("nombre") or user.get("username") or ""),
+        )
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/responsables")
+@login_required
+def responsables():
+    try:
+        return jsonify({
+            "ok": True,
+            "data": control_stock_svc.list_responsables(
+                sucursal=request.args.get("sucursal", "1"),
+                incluir_inactivos=request.args.get("incluir_inactivos", "0") in {"1", "true", "TRUE", "si", "SI"},
+            ),
+        })
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/responsables")
+@login_required
+def responsables_create():
+    try:
+        data = control_stock_svc.save_responsable(request.get_json(force=True) or {})
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.put("/responsables/<int:responsable_id>")
+@login_required
+def responsables_update(responsable_id: int):
+    try:
+        data = control_stock_svc.update_responsable(responsable_id, request.get_json(force=True) or {})
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500

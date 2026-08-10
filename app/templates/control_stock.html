@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Control de stock · DPO</title>
+  {% include 'partials/head_icons.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
+  <style>
+    body{background:#eef2f5;color:#0f172a}.shell{max-width:1500px;margin:auto;padding:14px}.top{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:10px}.eyebrow{font:700 11px var(--mono);letter-spacing:.14em;color:#2563eb;text-transform:uppercase}h1{font-size:24px;margin:2px 0}.sub{font-size:12px;color:#64748b}.btn{background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:9px 12px;cursor:pointer}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.btn.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}.tabs{display:flex;gap:4px;background:#dbe4ed;border:1px solid #b6c3d1;border-radius:7px;padding:4px;margin-bottom:10px}.tab{border:0;background:transparent;color:#475569;border-radius:5px;padding:9px 13px;font-weight:700;cursor:pointer}.tab.active{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(15,23,42,.12)}.view{display:none}.view.active{display:block}.panel{background:#fff;border:1px solid #b6c3d1;border-radius:7px;margin-bottom:10px;overflow:hidden}.grid{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:0}.field{border-right:1px solid #b6c3d1;border-bottom:1px solid #b6c3d1;padding:7px}.field label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#475569;margin-bottom:4px}.field input,.field select{width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:5px;color:#0f172a;padding:7px;font-size:13px}.field.w2{grid-column:span 2}.field.w3{grid-column:span 3}.stats{display:flex;gap:8px;flex-wrap:wrap;padding:8px}.pill{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:6px 9px;font:700 12px var(--mono)}.table-wrap{background:#fff;border:1px solid #64748b;overflow:auto;max-height:calc(100vh - 300px)}table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px;color:#0f172a}th,td{border:1px solid #9aa8b7;padding:4px 6px;white-space:nowrap}th{position:sticky;top:0;z-index:2;background:#c8d8dc;color:#003b73;text-transform:uppercase;font-size:11px}th:first-child,td:first-child{position:sticky;left:0;z-index:1}td:first-child{background:#edf7f8}th:first-child{z-index:3;background:#003b73;color:#fff}.num{text-align:right;font-family:var(--mono)}.stock-input{width:86px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px;text-align:right}.obs-input{width:170px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px}.check-cell{text-align:center}.abc-a{background:#dff3e7}.abc-b{background:#eaf0ff}.abc-c{background:#fff2cc}.status{font:12px var(--mono);color:#475569;margin:8px 0}.mobile-card{display:none}
+    @media(max-width:820px){.shell{padding:10px}.top{flex-direction:column;align-items:flex-start}.grid{grid-template-columns:1fr 1fr}.field.w2,.field.w3{grid-column:span 2}.table-wrap{display:none}.mobile-card{display:block;background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:8px;padding:10px}.mobile-head{display:flex;justify-content:space-between;gap:8px;font-weight:800}.mobile-meta{font-size:12px;color:#64748b;margin:4px 0 8px}.mobile-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stock-input,.obs-input{width:100%}}
+    #viewConteo input,#viewConteo select,#viewResp input,#viewResp select,#viewResumen input,#viewResumen select{background:#fff!important;color:#0f172a!important;border-color:#94a3b8!important}
+    #viewConteo select option,#viewResp select option,#viewResumen select option{background:#fff!important;color:#0f172a!important}
+    .stock-input{background:#fff!important;color:#0f172a!important;border:2px solid #64748b!important;border-radius:7px!important;min-width:76px;height:36px;font-size:15px;font-weight:700}
+    .stock-input:focus{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.18)!important}
+    #viewConteo .panel{position:sticky;top:0;z-index:5;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+    #viewConteo .pill{background:#e0f2fe;border-color:#7dd3fc;color:#0c4a6e}
+    #viewConteo th{background:#0f4c81;color:#fff}
+    #viewConteo td{background:#fff;color:#0f172a}
+    #viewConteo tbody tr:nth-child(even) td{background:#f8fafc}
+    #viewConteo td:first-child{background:#e0f2fe}
+    @media(max-width:1100px){.grid{grid-template-columns:repeat(3,minmax(150px,1fr))}.top>div:last-child{display:flex;gap:6px;flex-wrap:wrap}.btn{min-height:38px}.table-wrap{max-height:calc(100vh - 340px)}}
+    @media(max-width:820px){body{background:#f8fafc}.tabs{overflow-x:auto;white-space:nowrap}.tab{min-width:max-content}.field{border-right:0}.field label{font-size:11px}.field input,.field select{min-height:42px;font-size:15px}.stats{position:sticky;top:0;z-index:4;background:#eef2f5;border-top:1px solid #cbd5e1;border-bottom:1px solid #cbd5e1}.mobile-card{border-radius:10px;padding:12px;box-shadow:0 1px 4px rgba(15,23,42,.08)}.mobile-head{font-size:15px}.mobile-meta{font-size:13px;color:#334155}.mobile-row{grid-template-columns:repeat(2,1fr);margin-top:8px}.stock-input{height:44px;font-size:17px}.pill{font-size:13px}.top h1{font-size:22px}.top .sub{font-size:12px}}
+    .save-footer{display:flex;align-items:center;justify-content:space-between;gap:14px;background:#fff;border:1px solid #94a3b8;border-radius:10px;padding:14px;margin:14px 0 28px;box-shadow:0 2px 8px rgba(15,23,42,.08)}
+    .save-title{font-size:16px;font-weight:800;color:#0f172a}.save-sub{font-size:12px;color:#475569;margin-top:2px}.save-btn{min-height:46px;font-size:15px;padding:0 18px}
+    @media(max-width:820px){.save-footer{position:sticky;bottom:0;z-index:10;border-radius:12px 12px 0 0;margin:12px -10px 0;padding:12px;box-shadow:0 -4px 14px rgba(15,23,42,.18);align-items:stretch;flex-direction:column}.save-btn{width:100%;height:52px;font-size:16px}.save-title{font-size:15px}.save-sub{font-size:12px}.top>div:last-child{width:100%;display:grid;grid-template-columns:1fr 1fr 1fr}.top .btn{text-align:center;justify-content:center}.grid{grid-template-columns:1fr}.field.w2{grid-column:span 1}.stats{gap:6px}.stats .pill{flex:1;min-width:calc(50% - 6px);text-align:center}.mobile-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Stock · Control mensual</div>
+      <h1>Control de stock</h1>
+      <div class="sub">ABC generado con ventas del mes anterior. La planilla se filtra por semana y día para contar stock.</div>
+    </div>
+    <div>
+      <button class="btn primary" onclick="loadPlanilla()">Actualizar</button>
+      <button class="btn" onclick="usarHoy()">Hoy</button>
+      <a class="btn" href="/portal">Volver</a>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" id="tabAbc" onclick="openTab('abc')">Analisis ABC</button>
+    <button class="tab" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
+    <button class="tab" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
+    <button class="tab" id="tabResumen" onclick="openTab('resumen')">Resumen mensual</button>
+    <button class="tab" id="tabResp" onclick="openTab('resp')">Responsables</button>
+  </nav>
+
+  <section class="view active" id="viewAbc">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalAbc" onchange="syncSucursal('abc')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Mes ABC</label><input id="mesAbc" type="month"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadAbc()">Actualizar ABC</button></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="aMes">Mes: -</span>
+        <span class="pill" id="aArt">Articulos: -</span>
+        <span class="pill" id="aBultos">Bultos: -</span>
+      </div>
+    </section>
+    <div class="status" id="abcStatus">Cargando...</div>
+    <section class="table-wrap">
+      <table>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>Stock-SI</th><th>Activo</th><th>Movil</th><th>Anulado</th><th>Bultos</th><th>%Peso</th><th>%Acum</th><th>ABC</th><th>Semana1</th><th>Semana2</th><th>Semana3</th><th>Semana4</th><th>Lunes</th><th>Martes</th><th>Miercoles</th><th>Jueves</th><th>Viernes</th><th>Participa</th><th>Status</th></tr></thead>
+        <tbody id="abcBody"></tbody>
+      </table>
+    </section>
+  </section>
+
+  <section class="view" id="viewPlan">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalPlan" onchange="syncSucursal('plan')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Mes ABC</label><input id="mesPlan" type="month"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadPlanificacion()">Actualizar plan</button></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="plTitulo">Plan: -</span>
+        <span class="pill" id="plArticulos">Articulos: -</span>
+        <span class="pill" id="plControles">Controles: -</span>
+      </div>
+    </section>
+    <div class="status" id="planStatus">Cargando...</div>
+    <section class="table-wrap" style="max-height:none">
+      <table>
+        <thead><tr><th>Descripcion</th><th>Total</th><th>Frecuencia</th><th>Participacion</th></tr></thead>
+        <tbody id="planResumen"></tbody>
+      </table>
+    </section>
+    <section class="table-wrap" style="max-height:none;margin-top:12px">
+      <table>
+        <thead><tr><th>Mes</th><th>Semana 1</th><th>Semana 2</th><th>Semana 3</th><th>Semana 4</th></tr></thead>
+        <tbody id="planGrupos"></tbody>
+      </table>
+    </section>
+    <section class="table-wrap" style="max-height:none;margin-top:12px">
+      <table>
+        <thead><tr><th>Semana</th><th>Lunes</th><th>Martes</th><th>Miercoles</th><th>Jueves</th><th>Viernes</th></tr></thead>
+        <tbody id="planDias"></tbody>
+      </table>
+    </section>
+  </section>
+
+  <section class="view" id="viewConteo">
+  <section class="panel">
+    <div class="grid">
+      <div class="field"><label>Mes ABC</label><input id="mes" type="month"></div>
+      <div class="field"><label>Sucursal</label><select id="sucursalConteo" onchange="syncSucursal('conteo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+      <div class="field"><label>Semana</label><select id="semana"><option value="AUTO">Automatica</option><option value="TODAS">TODAS</option><option value="semana1">Semana 1</option><option value="semana2">Semana 2</option><option value="semana3">Semana 3</option><option value="semana4">Semana 4</option></select></div>
+      <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option></select></div>
+      <div class="field"><label>ABC</label><select id="abc"><option>TODOS</option><option>A</option><option>B</option><option>C</option></select></div>
+      <div class="field"><label>Fecha</label><input id="fecha" type="date"></div>
+      <div class="field"><label>Responsable control stock</label><select id="responsable"></select></div>
+      <div class="field"><label>Hora inicio</label><input id="horaInicio" type="time"></div>
+      <div class="field"><label>Hora fin</label><input id="horaFin" type="time"></div>
+      <div class="field w2"><label>Observaciones</label><input id="observaciones" placeholder="Opcional"></div>
+      <div class="field w2"><label>Estado</label><input id="estado" readonly value="Sin guardar"></div>
+    </div>
+    <div class="stats">
+      <span class="pill" id="pMes">Mes: -</span>
+      <span class="pill" id="pArt">Artículos: -</span>
+      <span class="pill" id="pDia">Dia: -</span>
+      <span class="pill" id="pTotalCant">Total: 0 bultos · 0 unidades</span>
+    </div>
+  </section>
+
+  <div class="status" id="status">Cargando...</div>
+  <section class="table-wrap">
+    <table>
+      <thead><tr><th>Artículo</th><th>Descripción</th><th>ABC</th><th>Semana</th><th>Día</th><th>Stock</th><th>Diferencia</th><th>Observación</th><th>Bultos mes</th><th>%Peso</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </section>
+  <section id="cards"></section>
+  <section class="save-footer">
+    <div>
+      <div class="save-title">Finalizar control</div>
+      <div class="save-sub" id="saveFooterSummary">Revisá las cantidades antes de guardar.</div>
+    </div>
+    <button class="btn ok save-btn" onclick="guardarConteo()">Guardar control y finalizar</button>
+  </section>
+  </section>
+
+  <section class="view" id="viewResumen">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalResumen" onchange="syncSucursal('resumen')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Mes</label><input id="mesResumen" type="month"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadResumenMensual()">Actualizar resumen</button></div>
+      </div>
+    </section>
+    <div class="status" id="resumenStatus">Cargando...</div>
+    <section class="table-wrap" style="max-height:none">
+      <table><thead><tr><th>Fecha</th><th>Responsable</th><th>Semana</th><th>Dia</th><th>Inicio</th><th>Fin</th><th>Articulos</th><th>Bultos</th><th>Unidades</th><th>Minutos</th></tr></thead><tbody id="resumenDiario"></tbody></table>
+    </section>
+    <section class="table-wrap" style="max-height:none;margin-top:12px">
+      <table><thead><tr><th>Responsable</th><th>Dias</th><th>Controles</th><th>Articulos</th><th>Bultos</th><th>Unidades</th><th>Minutos</th></tr></thead><tbody id="resumenControlador"></tbody></table>
+    </section>
+  </section>
+
+  <section class="view" id="viewResp">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalResp" onchange="syncSucursal('resp')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field w2"><label>Nombre</label><input id="respNombre" placeholder="Responsable"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="guardarResponsable()">Agregar / activar</button></div>
+      </div>
+    </section>
+    <div class="status" id="respStatus">Cargando...</div>
+    <section class="table-wrap" style="max-height:none">
+      <table><thead><tr><th>Responsable</th><th>Estado</th><th>Accion</th></tr></thead><tbody id="respBody"></tbody></table>
+    </section>
+  </section>
+</main>
+<script>
+const fmt = new Intl.NumberFormat('es-AR', {maximumFractionDigits: 2});
+let currentRows = [];
+let abcLoaded = false;
+let planLoaded = false;
+let resumenLoaded = false;
+let respLoaded = false;
+let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
+function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function cargarSucursales(){
+  try{
+    const res=await fetch('/api/sucursales?empresa_id=1');
+    const rows=await res.json();
+    if(Array.isArray(rows)&&rows.length) sucursalesDisponibles=rows.filter(r=>r.activa!==false).map(r=>({value:String(r.value??r.id),label:String(r.label??r.nombre??r.value??r.id)}));
+  }catch(_){}
+  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalResumen,sucursalResp];
+  ids.forEach(sel=>{
+    const keep=sel.value||'1';
+    sel.innerHTML=sucursalesDisponibles.map(s=>`<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('');
+    sel.value=sucursalesDisponibles.some(s=>s.value===keep)?keep:(sucursalesDisponibles[0]?.value||'1');
+  });
+}
+function defaultMonth(){const d=new Date();d.setMonth(d.getMonth()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function today(){return new Date().toISOString().slice(0,10)}
+function parseLocalDate(value){
+  if(!value) return new Date();
+  const [y,m,d]=value.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+function semanaDesdeFecha(value){
+  const d=parseLocalDate(value);
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const firstDow = first.getDay();
+  const firstMondayDay = firstDow === 1 ? 1 : 1 + ((8 - firstDow) % 7);
+  if(d.getDate() < firstMondayDay) return 'semana1';
+  return `semana${Math.min(4, Math.max(1, Math.floor((d.getDate() - firstMondayDay) / 7) + 1))}`;
+}
+function diaDesdeFecha(value){
+  const d=parseLocalDate(value);
+  return ['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'][d.getDay()] || 'TODOS';
+}
+function filtrosEfectivos(){
+  let sem=semana.value;
+  let day=dia.value;
+  if(sem==='AUTO') sem=semanaDesdeFecha(fecha.value);
+  if(day==='AUTO') day=diaDesdeFecha(fecha.value);
+  if(day==='Sabado'||day==='Domingo') day='TODOS';
+  return {semana:sem,dia:day};
+}
+function usarHoy(){
+  fecha.value=today();
+  semana.value='AUTO';
+  dia.value='AUTO';
+  loadPlanilla();
+}
+function syncSucursal(origin){
+  if(origin==='abc') sucursalConteo.value=sucursalAbc.value;
+  if(origin==='abc') sucursalPlan.value=sucursalAbc.value;
+  if(origin==='abc') sucursalResumen.value=sucursalAbc.value;
+  if(origin==='abc') sucursalResp.value=sucursalAbc.value;
+  if(origin==='conteo') sucursalAbc.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalPlan.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalResumen.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalResp.value=sucursalConteo.value;
+  if(origin==='plan') { sucursalAbc.value=sucursalPlan.value; sucursalConteo.value=sucursalPlan.value; }
+  if(origin==='plan') sucursalResumen.value=sucursalPlan.value;
+  if(origin==='plan') sucursalResp.value=sucursalPlan.value;
+  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; }
+  if(origin==='resumen') sucursalResp.value=sucursalResumen.value;
+  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; }
+  abcLoaded=false;
+  planLoaded=false;
+  resumenLoaded=false;
+  respLoaded=false;
+  loadAbc();
+  loadPlanificacion();
+  loadPlanilla();
+  loadResumenMensual();
+  loadResponsables();
+}
+function openTab(name){
+  tabAbc.classList.toggle('active', name==='abc');
+  tabPlan.classList.toggle('active', name==='plan');
+  tabConteo.classList.toggle('active', name==='conteo');
+  tabResumen.classList.toggle('active', name==='resumen');
+  tabResp.classList.toggle('active', name==='resp');
+  viewAbc.classList.toggle('active', name==='abc');
+  viewPlan.classList.toggle('active', name==='plan');
+  viewConteo.classList.toggle('active', name==='conteo');
+  viewResumen.classList.toggle('active', name==='resumen');
+  viewResp.classList.toggle('active', name==='resp');
+  if(name==='abc' && !abcLoaded) loadAbc();
+  if(name==='plan' && !planLoaded) loadPlanificacion();
+  if(name==='resumen' && !resumenLoaded) loadResumenMensual();
+  if(name==='resp' && !respLoaded) loadResponsables();
+}
+function rowSemana(r){return r.control_semana||r.semana1||r.semana2||r.semana3||r.semana4||''}
+function rowDia(r){return r.control_dia||r.lunes||r.martes||r.miercoles||r.jueves||r.viernes||''}
+async function loadAbc(){
+  const selectedMes=mesAbc.value||defaultMonth();
+  abcStatus.textContent='Cargando ABC...';
+  const res=await fetch('/api/control-stock/abc?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalAbc.value));
+  const data=await res.json();
+  if(!res.ok||data.ok===false){abcStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  aMes.textContent=`Mes: ${data.mes}`;
+  aArt.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
+  aBultos.textContent=`Bultos: ${fmt.format(data.total_bultos||0)}`;
+  abcBody.innerHTML=(data.rows||[]).map(r=>`<tr>
+    <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td>${esc(r.negocio)}</td><td>${esc(r.tipo_producto)}</td>
+    <td>${esc(r.stock_si)}</td><td>${esc(r.activo)}</td><td>${esc(r.movil)}</td><td>${esc(r.anulado)}</td><td class="num">${fmt.format(r.bultos)}</td>
+    <td class="num">${Number(r.peso_pct||0).toFixed(2)}%</td><td class="num">${Number(r.acumulado_pct||0).toFixed(2)}%</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
+    <td>${esc(r.semana1)}</td><td>${esc(r.semana2)}</td><td>${esc(r.semana3)}</td><td>${esc(r.semana4)}</td>
+    <td>${esc(r.lunes)}</td><td>${esc(r.martes)}</td><td>${esc(r.miercoles)}</td><td>${esc(r.jueves)}</td><td>${esc(r.viernes)}</td>
+    <td>${esc(r.participa)}</td><td>${esc(r.status)}</td>
+  </tr>`).join('');
+  abcStatus.textContent=`${(data.rows||[]).length} filas`;
+  abcLoaded = true;
+}
+async function loadPlanificacion(){
+  const selectedMes=mesPlan.value||defaultMonth();
+  planStatus.textContent='Cargando planificacion...';
+  const res=await fetch('/api/control-stock/planificacion?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalPlan.value));
+  const data=await res.json();
+  if(!res.ok||data.ok===false){planStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  const counts=data.abc_counts||{}, events=data.control_events||{}, freq=data.frecuencias||{};
+  const total=data.total_articulos||0;
+  plTitulo.textContent=`${data.sucursal_nombre} · ${data.mes}`;
+  plArticulos.textContent=`Articulos: ${fmt.format(total)}`;
+  plControles.textContent=`Controles mensuales: ${fmt.format(data.total_controles||0)}`;
+  planResumen.innerHTML=[
+    ['Total articulos activos', total, '-', '100%'],
+    ['Total articulos tipo A', counts.A||0, `${freq.A||4} x mes`, total?`${(((counts.A||0)/total)*100).toFixed(1)}%`:'0%'],
+    ['Total articulos tipo B', counts.B||0, `${freq.B||3} x mes`, total?`${(((counts.B||0)/total)*100).toFixed(1)}%`:'0%'],
+    ['Total articulos tipo C', counts.C||0, `${freq.C||1} x mes`, total?`${(((counts.C||0)/total)*100).toFixed(1)}%`:'0%'],
+    ['Total controles A', events.A||0, 'A x 4', ''],
+    ['Total controles B', events.B||0, 'B x 3', ''],
+    ['Total controles C', events.C||0, 'C x 1', ''],
+    ['Total articulos a contar', data.total_controles||0, '-', '100%'],
+  ].map(r=>`<tr><td>${esc(r[0])}</td><td class="num">${fmt.format(r[1])}</td><td>${esc(r[2])}</td><td class="num">${esc(r[3])}</td></tr>`).join('');
+  const mix=data.mix_semana||{};
+  planGrupos.innerHTML=`<tr><td>${esc(data.mes)}</td><td>${esc(mix.SEMANA1||'')}</td><td>${esc(mix.SEMANA2||'')}</td><td>${esc(mix.SEMANA3||'')}</td><td>${esc(mix.SEMANA4||'')}</td></tr>
+    <tr><td>Frecuencia</td><td>A-B-C</td><td>A-B-C</td><td>A-B-C</td><td>A-C</td></tr>`;
+  const pd=data.por_semana_dia||{}, days=['Lunes','Martes','Miercoles','Jueves','Viernes'];
+  const weekRows=['SEMANA1','SEMANA2','SEMANA3','SEMANA4'].map(s=>`<tr><td>${s}</td>${days.map(d=>`<td class="num">${fmt.format((pd[s]||{})[d]||0)}</td>`).join('')}</tr>`).join('');
+  planDias.innerHTML=weekRows+`<tr><td>Totales</td>${days.map(d=>`<td class="num">${fmt.format((data.totales_dia||{})[d]||0)}</td>`).join('')}</tr>`;
+  planStatus.textContent='Planificacion cargada';
+  planLoaded=true;
+}
+async function loadResumenMensual(){
+  const selectedMes=mesResumen.value||defaultMonth();
+  resumenStatus.textContent='Cargando resumen...';
+  const res=await fetch('/api/control-stock/resumen-mensual?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalResumen.value));
+  const data=await res.json();
+  if(!res.ok||data.ok===false){resumenStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  resumenDiario.innerHTML=(data.diarios||[]).map(r=>`<tr><td>${esc(r.fecha)}</td><td>${esc(r.responsable)}</td><td>${esc(r.semana)}</td><td>${esc(r.dia)}</td><td>${esc(r.hora_inicio)}</td><td>${esc(r.hora_fin)}</td><td class="num">${fmt.format(r.articulos_contados)}</td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${r.minutos==null?'':fmt.format(r.minutos)}</td></tr>`).join('');
+  resumenControlador.innerHTML=(data.por_controlador||[]).map(r=>`<tr><td>${esc(r.responsable)}</td><td class="num">${fmt.format(r.dias)}</td><td class="num">${fmt.format(r.controles)}</td><td class="num">${fmt.format(r.articulos_contados)}</td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${fmt.format(r.minutos)}</td></tr>`).join('');
+  resumenStatus.textContent=`${(data.diarios||[]).length} controles guardados`;
+  resumenLoaded=true;
+}
+async function loadResponsables(){
+  respStatus.textContent='Cargando responsables...';
+  const res=await fetch('/api/control-stock/responsables?sucursal='+encodeURIComponent(sucursalResp.value)+'&incluir_inactivos=1');
+  const data=await res.json();
+  if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  const rows=data.data||[];
+  responsable.innerHTML='<option value="">Seleccionar responsable</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
+  respBody.innerHTML=rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('');
+  respStatus.textContent=`${rows.length} responsables`;
+  respLoaded=true;
+}
+async function guardarResponsable(){
+  const nombre=respNombre.value.trim();
+  if(!nombre){respStatus.textContent='Ingresá un nombre';return}
+  const res=await fetch('/api/control-stock/responsables',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sucursal:sucursalResp.value,nombre,activo:true})});
+  const data=await res.json();
+  if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
+  respNombre.value='';
+  respLoaded=false;
+  await loadResponsables();
+}
+function escapeJs(value){return String(value??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
+async function editarResponsable(id,nombreActual){
+  const nombre=prompt('Nuevo nombre del responsable', nombreActual);
+  if(nombre===null) return;
+  const limpio=nombre.trim();
+  if(!limpio){respStatus.textContent='El nombre no puede quedar vacio';return}
+  const res=await fetch('/api/control-stock/responsables/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:limpio})});
+  const data=await res.json();
+  if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo actualizar');return}
+  respLoaded=false;
+  await loadResponsables();
+}
+async function toggleResponsable(id,activo){
+  const res=await fetch('/api/control-stock/responsables/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({activo})});
+  const data=await res.json();
+  if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo actualizar');return}
+  respLoaded=false;
+  await loadResponsables();
+}
+function cantidadInputs(id){
+  const values=[1,2,3,4].map(n=>Number(document.querySelector(`[data-cant="${id}-${n}"]`)?.value||0));
+  const unidades=Number(document.querySelector(`[data-unid="${id}"]`)?.value||0);
+  const total=values.reduce((a,b)=>a+b,0);
+  return {values,total,unidades};
+}
+function normalizarConteo(row,input){
+  const upb=Number(row.unidades_por_bulto||0);
+  if(upb<=0) return {bultos:input.total, unidades:input.unidades, bultosDesdeUnidades:0};
+  const bultosDesdeUnidades=Math.floor(input.unidades/upb);
+  return {bultos:input.total+bultosDesdeUnidades, unidades:input.unidades%upb, bultosDesdeUnidades};
+}
+function actualizarTotales(markTime=true){
+  const now=new Date().toTimeString().slice(0,5);
+  if(markTime){
+    if(!horaInicio.value) horaInicio.value=now;
+  }
+  let totalGeneral=0;
+  let unidadesGeneral=0;
+  currentRows.forEach(r=>{
+    const desktop=cantidadInputs(r.id_articulo);
+    const mobile=cantidadInputs(String(r.id_articulo)+'m');
+    const chosen=(desktop.total||desktop.unidades)?desktop:mobile;
+    const norm=normalizarConteo(r,chosen);
+    totalGeneral+=norm.bultos;
+    unidadesGeneral+=norm.unidades;
+    document.querySelectorAll(`[data-total="${r.id_articulo}"],[data-total="${r.id_articulo}m"]`).forEach(el=>el.textContent=fmt.format(norm.bultos));
+    document.querySelectorAll(`[data-unidades="${r.id_articulo}"],[data-unidades="${r.id_articulo}m"]`).forEach(el=>el.textContent=fmt.format(norm.unidades));
+  });
+  pTotalCant.textContent=`Total: ${fmt.format(totalGeneral)} bultos con ${fmt.format(unidadesGeneral)} unidades`;
+  saveFooterSummary.textContent=`${fmt.format(currentRows.length)} articulos · ${fmt.format(totalGeneral)} bultos con ${fmt.format(unidadesGeneral)} unidades`;
+  if(markTime) guardarBorradorLocal();
+}
+function updateDiffCount(){actualizarTotales()}
+function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
+function guardarBorradorLocal(){
+  const data={horaInicio:horaInicio.value,horaFin:horaFin.value,responsable:responsable.value,observaciones:observaciones.value,values:{},unidades:{}};
+  document.querySelectorAll('[data-cant]').forEach(el=>data.values[el.dataset.cant]=el.value);
+  document.querySelectorAll('[data-unid]').forEach(el=>data.unidades[el.dataset.unid]=el.value);
+  localStorage.setItem(draftKey(),JSON.stringify(data));
+  estado.value='Borrador guardado';
+}
+function cargarBorradorLocal(){
+  const raw=localStorage.getItem(draftKey());
+  if(!raw) return;
+  try{
+    const data=JSON.parse(raw);
+    horaInicio.value=data.horaInicio||horaInicio.value; horaFin.value=data.horaFin||horaFin.value;
+    if(data.responsable && [...responsable.options].some(o=>o.value===data.responsable)) responsable.value=data.responsable;
+    observaciones.value=data.observaciones||observaciones.value;
+    Object.entries(data.values||{}).forEach(([k,v])=>{const el=document.querySelector(`[data-cant="${k}"]`); if(el) el.value=v});
+    Object.entries(data.unidades||{}).forEach(([k,v])=>{const el=document.querySelector(`[data-unid="${k}"]`); if(el) el.value=v});
+  }catch(_){}
+}
+async function loadPlanilla(){
+  const f=filtrosEfectivos();
+  const params=new URLSearchParams({mes:mes.value||defaultMonth(),sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value});
+  status.textContent='Cargando planilla...';
+  const res=await fetch('/api/control-stock/planilla?'+params);
+  const data=await res.json();
+  if(!res.ok||data.ok===false){status.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  currentRows=data.rows||[];
+  pMes.textContent=`Mes: ${data.mes}`;
+  pArt.textContent=`Artículos: ${data.total_filtrado}`;
+  pDia.textContent=`${f.semana.toUpperCase()} · ${f.dia}`;
+  document.querySelector('#viewConteo thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Semana</th><th>Dia</th><th>Bultos/Pallet</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
+  tbody.innerHTML=currentRows.map(r=>`<tr>
+    <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
+    <td>${esc(rowSemana(r))}</td><td>${esc(rowDia(r))}</td>
+    <td class="num">${fmt.format(r.bultos_por_pallet||0)}</td>
+    <td class="num">${fmt.format(r.unidades_por_bulto||0)}</td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-4" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
+    <td class="num" data-total="${r.id_articulo}">0</td>
+    <td class="num" data-unidades="${r.id_articulo}">0</td>
+  </tr>`).join('');
+  cards.innerHTML=currentRows.map(r=>`<article class="mobile-card">
+    <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowDia(r))}</span></div>
+    <div class="mobile-meta">${esc(r.descripcion)}<br>${esc(rowSemana(r))} · ${fmt.format(r.bultos)} bultos</div>
+    <div class="mobile-row"><input class="stock-input" type="number" step="1" min="0" placeholder="Stock" data-stock="${r.id_articulo}m"><label><input class="diff-check" type="checkbox" data-diff="${r.id_articulo}m" onchange="updateDiffCount()"> Diferencia</label></div>
+    <input class="obs-input" placeholder="Observación" data-obs="${r.id_articulo}m">
+  </article>`).join('');
+  cards.innerHTML=currentRows.map(r=>`<article class="mobile-card">
+    <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowDia(r))}</span></div>
+    <div class="mobile-meta">${esc(r.descripcion)}<br>${esc(rowSemana(r))} · ${fmt.format(r.bultos_por_pallet||0)} b/pallet · ${fmt.format(r.unidades_por_bulto||0)} u/bulto</div>
+    <div class="mobile-row">
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 1" data-cant="${r.id_articulo}m-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 2" data-cant="${r.id_articulo}m-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 3" data-cant="${r.id_articulo}m-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 4" data-cant="${r.id_articulo}m-4" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Unidades" data-unid="${r.id_articulo}m" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+    </div>
+    <div class="pill"><span data-total="${r.id_articulo}m">0</span> bultos con <span data-unidades="${r.id_articulo}m">0</span> unidades</div>
+  </article>`).join('');
+  status.textContent=`Cantidad de artículos a contar: ${currentRows.length}`;
+  cargarBorradorLocal();
+  actualizarTotales(false);
+}
+async function guardarConteo(){
+  horaFin.value=new Date().toTimeString().slice(0,5);
+  const items=currentRows.map(r=>{const a=cantidadInputs(r.id_articulo);const b=cantidadInputs(String(r.id_articulo)+'m');const chosen=(a.total||a.unidades)?a:b;const norm=normalizarConteo(r,chosen);return {id_articulo:r.id_articulo,descripcion:r.descripcion,abc:r.abc,semana:rowSemana(r),dia:rowDia(r),cantidad_1:chosen.values[0],cantidad_2:chosen.values[1],cantidad_3:chosen.values[2],cantidad_4:chosen.values[3],unidades_sueltas:norm.unidades,stock:norm.bultos,diferencia:false,observacion:`Bultos: ${chosen.values.join(' + ')} | Unidades cargadas: ${chosen.unidades} | Convierte: ${norm.bultosDesdeUnidades} bultos | Total: ${norm.bultos} bultos con ${norm.unidades} unidades`}});
+  const f=filtrosEfectivos();
+  const payload={mes:mes.value,sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value,fecha:fecha.value,responsable:responsable.value,hora_inicio:horaInicio.value,hora_fin:horaFin.value,observaciones:observaciones.value,items};
+  estado.value='Guardando...';
+  const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await res.json();
+  if(!res.ok||data.ok===false){estado.value='Error';status.textContent='Error: '+(data.error||'No se pudo guardar');return}
+  estado.value=`Guardado #${data.data.id}`;
+  status.textContent=`Control guardado. Items: ${data.data.items_guardados}`;
+  localStorage.removeItem(draftKey());
+  resumenLoaded=false;
+  loadResumenMensual();
+}
+(async function initControlStock(){
+  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=defaultMonth();fecha.value=today();semana.value='AUTO';dia.value='AUTO';
+  [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
+  await cargarSucursales();
+  loadAbc();loadPlanificacion();loadResumenMensual();loadResponsables();loadPlanilla();
+})();
+</script>
+</body>
+</html>
