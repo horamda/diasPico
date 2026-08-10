@@ -7,7 +7,9 @@
   {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
   <style>
-    body{background:#eef2f5;color:#0f172a}.shell{max-width:1500px;margin:auto;padding:14px}.top{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:10px}.eyebrow{font:700 11px var(--mono);letter-spacing:.14em;color:#2563eb;text-transform:uppercase}h1{font-size:24px;margin:2px 0}.sub{font-size:12px;color:#64748b}.btn{background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:9px 12px;cursor:pointer}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.btn.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}.tabs{display:flex;gap:4px;background:#dbe4ed;border:1px solid #b6c3d1;border-radius:7px;padding:4px;margin-bottom:10px}.tab{border:0;background:transparent;color:#475569;border-radius:5px;padding:9px 13px;font-weight:700;cursor:pointer}.tab.active{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(15,23,42,.12)}.view{display:none}.view.active{display:block}.panel{background:#fff;border:1px solid #b6c3d1;border-radius:7px;margin-bottom:10px;overflow:hidden}.grid{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:0}.field{border-right:1px solid #b6c3d1;border-bottom:1px solid #b6c3d1;padding:7px}.field label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#475569;margin-bottom:4px}.field input,.field select{width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:5px;color:#0f172a;padding:7px;font-size:13px}.field.w2{grid-column:span 2}.field.w3{grid-column:span 3}.stats{display:flex;gap:8px;flex-wrap:wrap;padding:8px}.pill{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:6px 9px;font:700 12px var(--mono)}.table-wrap{background:#fff;border:1px solid #64748b;overflow:auto;max-height:calc(100vh - 300px)}table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px;color:#0f172a}th,td{border:1px solid #9aa8b7;padding:4px 6px;white-space:nowrap}th{position:sticky;top:0;z-index:2;background:#c8d8dc;color:#003b73;text-transform:uppercase;font-size:11px}th:first-child,td:first-child{position:sticky;left:0;z-index:1}td:first-child{background:#edf7f8}th:first-child{z-index:3;background:#003b73;color:#fff}.num{text-align:right;font-family:var(--mono)}.stock-input{width:86px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px;text-align:right}.obs-input{width:170px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px}.check-cell{text-align:center}.abc-a{background:#dff3e7}.abc-b{background:#eaf0ff}.abc-c{background:#fff2cc}.status{font:12px var(--mono);color:#475569;margin:8px 0}.mobile-card{display:none}
+    body{background:#eef2f5;color:#0f172a}.shell{max-width:1500px;margin:auto;padding:14px}.top{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:10px}.eyebrow{font:700 11px var(--mono);letter-spacing:.14em;color:#2563eb;text-transform:uppercase}h1{font-size:24px;margin:2px 0}.sub{font-size:12px;color:#64748b}.btn{background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:9px 12px;cursor:pointer}.btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}.btn.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}.tabs{display:flex;gap:4px;background:#dbe4ed;border:1px solid #b6c3d1;border-radius:7px;padding:4px;margin-bottom:10px}.tab{border:0;background:transparent;color:#475569;border-radius:5px;padding:9px 13px;font-weight:700;cursor:pointer}.tab.active{background:#fff;color:#0f172a;box-shadow:0 1px 2px rgba(15,23,42,.12)}.view{display:none}.view.active{display:block}.panel{background:#fff;border:1px solid #b6c3d1;border-radius:7px;margin-bottom:10px;overflow:hidden}.grid{display:grid;grid-template-columns:repeat(6,minmax(130px,1fr));gap:0}.field{border-right:1px solid #b6c3d1;border-bottom:1px solid #b6c3d1;padding:7px}.field label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#475569;margin-bottom:4px}.field input,.field select{width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:5px;color:#0f172a;padding:7px;font-size:13px}.field.w2{grid-column:span 2}.field.w3{grid-column:span 3}.stats{display:flex;gap:8px;flex-wrap:wrap;padding:8px}.pill{background:#e2e8f0;border:1px solid #cbd5e1;border-radius:5px;padding:6px 9px;font:700 12px var(--mono)}.table-wrap{background:#fff;border:1px solid #64748b;overflow:auto;max-height:calc(100vh - 300px)}table{border-collapse:collapse;width:max-content;min-width:100%;font-size:12px;color:#0f172a}th,td{border:1px solid #9aa8b7;padding:4px 6px;white-space:nowrap}th{position:sticky;top:0;z-index:2;background:#c8d8dc;color:#003b73;text-transform:uppercase;font-size:11px}th:first-child,td:first-child{position:sticky;left:0;z-index:1}td:first-child{background:#edf7f8}th:first-child{z-index:3;background:#003b73;color:#fff}.num{text-align:right;font-family:var(--mono)}.stock-input{width:86px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px;text-align:right}.obs-input{width:170px;background:#fff;border:1px solid #94a3b8;border-radius:4px;padding:6px}.check-cell{text-align:center}.abc-a{background:#dcfce7!important;color:#14532d!important;font-weight:900}.abc-b{background:#fde68a!important;color:#713f12!important;font-weight:900}.abc-c{background:#fee2e2!important;color:#7f1d1d!important;font-weight:900}.status{font:12px var(--mono);color:#475569;margin:8px 0}.mobile-card{display:none}
+    .dashboard-grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:10px;margin:10px 0}.kpi-card{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px;box-shadow:0 1px 3px rgba(15,23,42,.06)}.kpi-label{font-size:11px;font-weight:800;text-transform:uppercase;color:#64748b}.kpi-value{font-size:26px;line-height:1.1;font-weight:850;margin-top:5px;font-variant-numeric:tabular-nums}.kpi-note{font-size:12px;color:#64748b;margin-top:4px}.charts-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:10px;margin:10px 0}.chart-panel{background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:12px}.chart-title{font-size:13px;font-weight:850;color:#0f172a;margin-bottom:10px}.bar-row{display:grid;grid-template-columns:minmax(100px,180px) 1fr 68px;gap:8px;align-items:center;margin:8px 0}.bar-name{font-size:12px;color:#334155;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bar-track{height:12px;background:#e2e8f0;border-radius:999px;overflow:hidden}.bar-fill{height:100%;background:#2563eb;border-radius:999px}.bar-value{text-align:right;font:700 12px var(--mono)}.donut-wrap{display:flex;align-items:center;gap:14px}.donut{position:relative;width:132px;height:132px;border-radius:50%;background:conic-gradient(#2563eb 0deg,#e2e8f0 0deg);display:grid;place-items:center}.donut::after{content:"";width:82px;height:82px;background:#fff;border-radius:50%;position:absolute}.donut span{position:relative;z-index:1;font-weight:850;font-size:18px}.legend{display:grid;gap:7px;font-size:12px;color:#475569}.legend b{color:#0f172a}.mobile-summary{display:none}.section-title{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 6px;font-weight:850;color:#0f172a}.section-title span{font-size:12px;color:#64748b;font-weight:600}
+    .control-mark{text-align:center;font-weight:900;color:#166534;background:#dcfce7}.status-chip{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:800}.status-chip.ok{background:#dcfce7;color:#166534}.status-chip.pending{background:#fee2e2;color:#991b1b}.articulos-table table{min-width:1180px}.mini-note{font-size:11px;color:#64748b;margin:-4px 0 8px 188px}.abc-fill-a{background:#22c55e}.abc-fill-b{background:#f59e0b}.abc-fill-c{background:#ef4444}.pending-row{display:grid;grid-template-columns:38px 1fr 36px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e2e8f0}.pending-row strong{display:block;font-size:12px;color:#0f172a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pending-row small{display:block;font-size:11px;color:#64748b}.pending-row b{text-align:right;font:850 14px var(--mono);color:#991b1b}.abc-mensual-table{max-height:calc(100vh - 330px)!important}.abc-mensual-table table{width:100%;min-width:1160px;table-layout:fixed;font-size:11px}.abc-mensual-table th,.abc-mensual-table td{padding:4px 5px}.abc-mensual-table th:nth-child(1),.abc-mensual-table td:nth-child(1){width:66px}.abc-mensual-table th:nth-child(2),.abc-mensual-table td:nth-child(2){width:220px;white-space:normal;line-height:1.2}.abc-mensual-table th:nth-child(3),.abc-mensual-table td:nth-child(3){width:130px}.abc-mensual-table th:nth-child(4),.abc-mensual-table td:nth-child(4){width:108px}.abc-mensual-table th:nth-child(n+5):nth-child(-n+16),.abc-mensual-table td:nth-child(n+5):nth-child(-n+16){width:52px;text-align:center}.abc-mensual-table th:nth-child(17),.abc-mensual-table td:nth-child(17){width:150px;white-space:normal;line-height:1.2}.abc-month{text-align:center;font-weight:900}.abc-month:empty{background:#f8fafc!important}.abc-mobile-list{display:none}.abc-mobile-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:10px;margin:8px 0}.abc-mobile-card:has(.abc-mobile-head .abc-a){border-color:#86efac}.abc-mobile-card:has(.abc-mobile-head .abc-b){border-color:#fde68a}.abc-mobile-card:has(.abc-mobile-head .abc-c){border-color:#fecaca}.abc-mobile-head{display:flex;justify-content:space-between;gap:8px;font-weight:850}.abc-badge{display:inline-flex;align-items:center;justify-content:center;min-width:30px;border-radius:999px;padding:2px 8px}.abc-mobile-desc{font-size:12px;color:#475569;margin:4px 0 8px}.abc-month-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}.abc-month-pill{border:1px solid #cbd5e1;border-radius:7px;padding:5px;text-align:center;background:#f8fafc;font-size:11px}.abc-month-pill b{display:block;font-size:13px}.abc-mobile-obs{margin-top:8px;font-size:12px;color:#334155;background:#f1f5f9;border-radius:7px;padding:7px}
     @media(max-width:820px){.shell{padding:10px}.top{flex-direction:column;align-items:flex-start}.grid{grid-template-columns:1fr 1fr}.field.w2,.field.w3{grid-column:span 2}.table-wrap{display:none}.mobile-card{display:block;background:#fff;border:1px solid #cbd5e1;border-radius:7px;margin-bottom:8px;padding:10px}.mobile-head{display:flex;justify-content:space-between;gap:8px;font-weight:800}.mobile-meta{font-size:12px;color:#64748b;margin:4px 0 8px}.mobile-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.stock-input,.obs-input{width:100%}}
     #viewConteo input,#viewConteo select,#viewResp input,#viewResp select,#viewResumen input,#viewResumen select{background:#fff!important;color:#0f172a!important;border-color:#94a3b8!important}
     #viewConteo select option,#viewResp select option,#viewResumen select option{background:#fff!important;color:#0f172a!important}
@@ -28,7 +30,7 @@
     @media(max-width:640px){.shell{padding:8px}.top>div:last-child{grid-template-columns:1fr 1fr}.top>div:last-child .btn:last-child{grid-column:1/-1}.tabs{margin-left:-4px;margin-right:-4px}.panel{border-radius:8px}.stats .pill{min-width:100%;font-size:12px}.mobile-row.five{grid-template-columns:repeat(2,minmax(0,1fr))}.mobile-row.five input:last-child{grid-column:1/-1}.mobile-card{margin-left:-2px;margin-right:-2px}.mobile-head{align-items:flex-start;flex-direction:column}.mobile-help{grid-template-columns:1fr}.stock-input{height:46px;font-size:18px}.save-footer{margin-left:-8px;margin-right:-8px}}
     #viewConteo .auto-field{display:none!important}
     .time-note{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:8px;padding:9px 11px;font-size:12px;margin:0 0 10px}
-    @media(max-width:900px){
+    @media(max-width:1100px){
       #viewConteo .auto-field{display:none!important}
       #viewConteo .table-wrap{display:none!important}
       #cards{display:block!important;padding-bottom:92px}
@@ -62,8 +64,26 @@
       .mobile-card .mobile-row.five{margin-top:14px}
       .mobile-card .stock-input{height:52px!important;font-size:18px!important}
       .mobile-total{margin-top:12px!important;padding:10px!important}
+      .mobile-group{border:1px solid #cbd5e1;border-radius:10px;padding:10px;margin-top:10px;background:#f8fafc}
+      .mobile-group-title{font-size:12px;font-weight:900;color:#0f172a;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+      .mobile-group-hint{font-size:11px;color:#64748b;margin:-3px 0 8px;line-height:1.3}
+      .mobile-group.units{background:#f0f9ff;border-color:#7dd3fc}
+      .mobile-error{display:none;background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d;border-radius:8px;padding:8px 10px;font-size:12px;margin-top:8px}
+      .mobile-card.invalid{border-color:#ef4444!important;box-shadow:0 0 0 2px rgba(239,68,68,.14)}
     }
     .mobile-carousel-bar{display:none}
+    .summary-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0;box-shadow:0 1px 4px rgba(15,23,42,.06)}.summary-head{display:flex;justify-content:space-between;gap:10px;color:#0f172a}.summary-head span{font:700 12px var(--mono);color:#475569}.summary-meta{font-size:12px;color:#64748b;margin-top:4px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.summary-grid span{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:7px;font-size:12px}.summary-grid b{display:block;font-size:16px;color:#0f172a}.summary-card pre{white-space:pre-wrap;margin:8px 0 0;font:11px var(--mono);max-height:180px;overflow:auto}
+    @media(max-width:820px){ #viewAbc .table-wrap,#viewPlan .table-wrap,#viewResp .table-wrap{display:block;overflow:auto}}
+    @media(max-width:1100px){.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts-grid{grid-template-columns:1fr}.donut-wrap{justify-content:flex-start}}
+    @media(max-width:760px){
+      .dashboard-grid{grid-template-columns:1fr 1fr;gap:7px}.kpi-card{padding:10px}.kpi-value{font-size:21px}.kpi-label{font-size:10px}.kpi-note{font-size:11px}
+      .charts-grid{gap:8px}.chart-panel{padding:10px}.bar-row{grid-template-columns:96px 1fr 48px;gap:6px}.bar-name{font-size:11px}.bar-value{font-size:11px}.donut{width:104px;height:104px}.donut::after{width:66px;height:66px}.donut span{font-size:15px}.legend{font-size:11px}
+      .mini-note{margin-left:0;font-size:10.5px}.pending-row{grid-template-columns:34px 1fr 30px}.pending-row strong{white-space:normal}
+      #viewResumen .table-wrap{display:none}.mobile-summary{display:block}.section-title{font-size:13px;margin-top:10px}.section-title span{display:none}.summary-grid{grid-template-columns:1fr 1fr}.summary-head{align-items:flex-start;flex-direction:column;gap:2px}
+      #viewAbc .table-wrap,#viewPlan .table-wrap,#viewResp .table-wrap,#viewArticulos .table-wrap,#viewAbcMensual .table-wrap{max-height:55vh;border-radius:8px}#viewAbc table,#viewArticulos table,#viewAbcMensual table{font-size:11px}#viewPlan table,#viewResp table{min-width:620px}
+    }
+    @media(max-width:980px){ #viewAbcMensual .abc-mensual-table{display:none}.abc-mobile-list{display:block}.abc-month-grid{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:520px){.abc-month-grid{grid-template-columns:repeat(2,1fr)}#viewAbcMensual .stats .pill{min-width:100%}}
   </style>
 </head>
 <body>
@@ -85,8 +105,10 @@
     <button class="tab active" id="tabAbc" onclick="openTab('abc')">Analisis ABC</button>
     <button class="tab" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
     <button class="tab" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
-    <button class="tab" id="tabResumen" onclick="openTab('resumen')">Resumen mensual</button>
+    <button class="tab" id="tabArticulos" onclick="openTab('articulos')">Articulos controlados</button>
+    <button class="tab" id="tabAbcMensual" onclick="openTab('abcMensual')">ABC mensual</button>
     <button class="tab" id="tabResp" onclick="openTab('resp')">Responsables</button>
+    <button class="tab" id="tabResumen" onclick="openTab('resumen')">Dashboard</button>
   </nav>
 
   <section class="view active" id="viewAbc">
@@ -195,12 +217,98 @@
       </div>
     </section>
     <div class="status" id="resumenStatus">Cargando...</div>
+    <section class="dashboard-grid" id="resumenKpis">
+      <article class="kpi-card"><div class="kpi-label">Controles reales</div><div class="kpi-value" id="kpiControles">0</div><div class="kpi-note">guardados en el mes</div></article>
+      <article class="kpi-card"><div class="kpi-label">Articulos contados</div><div class="kpi-value" id="kpiArticulos">0</div><div class="kpi-note">suma de items controlados</div></article>
+      <article class="kpi-card"><div class="kpi-label">Personas</div><div class="kpi-value" id="kpiPersonas">0</div><div class="kpi-note">responsables con actividad</div></article>
+      <article class="kpi-card"><div class="kpi-label">Tiempo promedio</div><div class="kpi-value" id="kpiPromedio">0 min</div><div class="kpi-note">por control finalizado</div></article>
+      <article class="kpi-card"><div class="kpi-label">Cumplimiento ABC</div><div class="kpi-value" id="kpiCumplimiento">0%</div><div class="kpi-note" id="kpiCumplimientoNote">objetivo mensual</div></article>
+      <article class="kpi-card"><div class="kpi-label">Pendientes</div><div class="kpi-value" id="kpiPendientes">0</div><div class="kpi-note">controles faltantes</div></article>
+      <article class="kpi-card"><div class="kpi-label">Articulos vencidos</div><div class="kpi-value" id="kpiVencidos">0</div><div class="kpi-note">no cumplen frecuencia</div></article>
+      <article class="kpi-card"><div class="kpi-label">Productividad</div><div class="kpi-value" id="kpiProductividad">0</div><div class="kpi-note">articulos por hora</div></article>
+    </section>
+    <section class="charts-grid">
+      <article class="chart-panel">
+        <div class="chart-title">Articulos contados por responsable</div>
+        <div id="chartResponsables"></div>
+      </article>
+      <article class="chart-panel">
+        <div class="chart-title">Avance operativo</div>
+        <div class="donut-wrap">
+          <div class="donut" id="donutControles"><span id="donutValue">0%</span></div>
+          <div class="legend">
+            <div><b id="legendDias">0</b> dias con control</div>
+            <div><b id="legendMinutos">0</b> minutos cargados</div>
+            <div><b id="legendBultos">0</b> bultos contados</div>
+          </div>
+        </div>
+      </article>
+    </section>
+    <section class="charts-grid">
+      <article class="chart-panel">
+        <div class="chart-title">Cumplimiento por ABC</div>
+        <div id="chartCumplimientoAbc"></div>
+      </article>
+      <article class="chart-panel">
+        <div class="chart-title">Pendientes prioritarios</div>
+        <div id="pendientesTop"></div>
+      </article>
+    </section>
+    <div id="resumenMobile" class="mobile-summary"></div>
+    <div class="section-title">Detalle diario <span>Ultimo control por fecha, semana, dia y responsable</span></div>
     <section class="table-wrap" style="max-height:none">
       <table><thead><tr><th>Fecha</th><th>Responsable</th><th>Semana</th><th>Dia</th><th>Inicio</th><th>Fin</th><th>Articulos</th><th>Bultos</th><th>Unidades</th><th>Minutos</th></tr></thead><tbody id="resumenDiario"></tbody></table>
     </section>
+    <div class="section-title">Resumen por responsable <span>Totales del mes seleccionado</span></div>
     <section class="table-wrap" style="max-height:none;margin-top:12px">
       <table><thead><tr><th>Responsable</th><th>Dias</th><th>Controles</th><th>Articulos</th><th>Bultos</th><th>Unidades</th><th>Minutos</th></tr></thead><tbody id="resumenControlador"></tbody></table>
     </section>
+  </section>
+
+  <section class="view" id="viewArticulos">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalArticulos" onchange="syncSucursal('articulos')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Mes control</label><input id="mesArticulos" type="month"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadArticulosControlados()">Actualizar</button></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="acMes">Mes: -</span>
+        <span class="pill" id="acTotal">Articulos: -</span>
+        <span class="pill" id="acControlados">Controlados: -</span>
+        <span class="pill" id="acPendientes">Pendientes: -</span>
+      </div>
+    </section>
+    <div class="status" id="articulosStatus">Cargando...</div>
+    <section class="table-wrap articulos-table" style="max-height:none">
+      <table>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>ABC</th><th>Bultos mes</th><th>Control 1</th><th>Control 2</th><th>Control 3</th><th>Control 4</th><th>Veces</th><th>Estado</th></tr></thead>
+        <tbody id="articulosControlBody"></tbody>
+      </table>
+    </section>
+  </section>
+
+  <section class="view" id="viewAbcMensual">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalAbcMensual" onchange="syncSucursal('abcMensual')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Año</label><input id="anioAbcMensual" type="number" min="2020" max="2100"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadAbcMensual()">Actualizar</button></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="amAnio">Año: -</span>
+        <span class="pill" id="amTotal">Articulos: -</span>
+        <span class="pill" id="amCambios">Con cambios: -</span>
+      </div>
+    </section>
+    <div class="status" id="abcMensualStatus">Cargando...</div>
+    <section class="table-wrap abc-mensual-table" style="max-height:none">
+      <table>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>Ene</th><th>Feb</th><th>Mar</th><th>Abr</th><th>May</th><th>Jun</th><th>Jul</th><th>Ago</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dic</th><th>Observaciones</th></tr></thead>
+        <tbody id="abcMensualBody"></tbody>
+      </table>
+    </section>
+    <section id="abcMensualCards" class="abc-mobile-list"></section>
   </section>
 
   <section class="view" id="viewResp">
@@ -223,6 +331,8 @@ let currentRows = [];
 let abcLoaded = false;
 let planLoaded = false;
 let resumenLoaded = false;
+let articulosLoaded = false;
+let abcMensualLoaded = false;
 let respLoaded = false;
 let mobileIndex = 0;
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
@@ -233,7 +343,7 @@ async function cargarSucursales(){
     const rows=await res.json();
     if(Array.isArray(rows)&&rows.length) sucursalesDisponibles=rows.filter(r=>r.activa!==false).map(r=>({value:String(r.value??r.id),label:String(r.label??r.nombre??r.value??r.id)}));
   }catch(_){}
-  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalResumen,sucursalResp];
+  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalResumen,sucursalArticulos,sucursalAbcMensual,sucursalResp];
   ids.forEach(sel=>{
     const keep=sel.value||'1';
     sel.innerHTML=sucursalesDisponibles.map(s=>`<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('');
@@ -241,6 +351,7 @@ async function cargarSucursales(){
   });
 }
 function defaultMonth(){const d=new Date();d.setMonth(d.getMonth()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function currentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function today(){return new Date().toISOString().slice(0,10)}
 function parseLocalDate(value){
   if(!value) return new Date();
@@ -277,25 +388,37 @@ function syncSucursal(origin){
   if(origin==='abc') sucursalConteo.value=sucursalAbc.value;
   if(origin==='abc') sucursalPlan.value=sucursalAbc.value;
   if(origin==='abc') sucursalResumen.value=sucursalAbc.value;
+  if(origin==='abc') sucursalArticulos.value=sucursalAbc.value;
+  if(origin==='abc') sucursalAbcMensual.value=sucursalAbc.value;
   if(origin==='abc') sucursalResp.value=sucursalAbc.value;
   if(origin==='conteo') sucursalAbc.value=sucursalConteo.value;
   if(origin==='conteo') sucursalPlan.value=sucursalConteo.value;
   if(origin==='conteo') sucursalResumen.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalArticulos.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalAbcMensual.value=sucursalConteo.value;
   if(origin==='conteo') sucursalResp.value=sucursalConteo.value;
   if(origin==='plan') { sucursalAbc.value=sucursalPlan.value; sucursalConteo.value=sucursalPlan.value; }
   if(origin==='plan') sucursalResumen.value=sucursalPlan.value;
+  if(origin==='plan') sucursalArticulos.value=sucursalPlan.value;
+  if(origin==='plan') sucursalAbcMensual.value=sucursalPlan.value;
   if(origin==='plan') sucursalResp.value=sucursalPlan.value;
-  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; }
+  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; sucursalArticulos.value=sucursalResumen.value; sucursalAbcMensual.value=sucursalResumen.value; }
   if(origin==='resumen') sucursalResp.value=sucursalResumen.value;
-  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; }
+  if(origin==='articulos') { sucursalAbc.value=sucursalArticulos.value; sucursalPlan.value=sucursalArticulos.value; sucursalConteo.value=sucursalArticulos.value; sucursalResumen.value=sucursalArticulos.value; sucursalAbcMensual.value=sucursalArticulos.value; sucursalResp.value=sucursalArticulos.value; }
+  if(origin==='abcMensual') { sucursalAbc.value=sucursalAbcMensual.value; sucursalPlan.value=sucursalAbcMensual.value; sucursalConteo.value=sucursalAbcMensual.value; sucursalResumen.value=sucursalAbcMensual.value; sucursalArticulos.value=sucursalAbcMensual.value; sucursalResp.value=sucursalAbcMensual.value; }
+  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; sucursalArticulos.value=sucursalResp.value; sucursalAbcMensual.value=sucursalResp.value; }
   abcLoaded=false;
   planLoaded=false;
   resumenLoaded=false;
+  articulosLoaded=false;
+  abcMensualLoaded=false;
   respLoaded=false;
   loadAbc();
   loadPlanificacion();
   loadPlanilla();
   loadResumenMensual();
+  loadArticulosControlados();
+  loadAbcMensual();
   loadResponsables();
 }
 function openTab(name){
@@ -303,15 +426,21 @@ function openTab(name){
   tabPlan.classList.toggle('active', name==='plan');
   tabConteo.classList.toggle('active', name==='conteo');
   tabResumen.classList.toggle('active', name==='resumen');
+  tabArticulos.classList.toggle('active', name==='articulos');
+  tabAbcMensual.classList.toggle('active', name==='abcMensual');
   tabResp.classList.toggle('active', name==='resp');
   viewAbc.classList.toggle('active', name==='abc');
   viewPlan.classList.toggle('active', name==='plan');
   viewConteo.classList.toggle('active', name==='conteo');
   viewResumen.classList.toggle('active', name==='resumen');
+  viewArticulos.classList.toggle('active', name==='articulos');
+  viewAbcMensual.classList.toggle('active', name==='abcMensual');
   viewResp.classList.toggle('active', name==='resp');
   if(name==='abc' && !abcLoaded) loadAbc();
   if(name==='plan' && !planLoaded) loadPlanificacion();
   if(name==='resumen' && !resumenLoaded) loadResumenMensual();
+  if(name==='articulos' && !articulosLoaded) loadArticulosControlados();
+  if(name==='abcMensual' && !abcMensualLoaded) loadAbcMensual();
   if(name==='resp' && !respLoaded) loadResponsables();
 }
 function rowSemana(r){return r.control_semana||r.semana1||r.semana2||r.semana3||r.semana4||''}
@@ -372,10 +501,144 @@ async function loadResumenMensual(){
   const res=await fetch('/api/control-stock/resumen-mensual?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalResumen.value));
   const data=await res.json();
   if(!res.ok||data.ok===false){resumenStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
-  resumenDiario.innerHTML=(data.diarios||[]).map(r=>`<tr><td>${esc(r.fecha)}</td><td>${esc(r.responsable)}</td><td>${esc(r.semana)}</td><td>${esc(r.dia)}</td><td>${esc(r.hora_inicio)}</td><td>${esc(r.hora_fin)}</td><td class="num">${fmt.format(r.articulos_contados)}</td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${r.minutos==null?'':fmt.format(r.minutos)}</td></tr>`).join('');
-  resumenControlador.innerHTML=(data.por_controlador||[]).map(r=>`<tr><td>${esc(r.responsable)}</td><td class="num">${fmt.format(r.dias)}</td><td class="num">${fmt.format(r.controles)}</td><td class="num">${fmt.format(r.articulos_contados)}</td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${fmt.format(r.minutos)}</td></tr>`).join('');
-  resumenStatus.textContent=`${(data.diarios||[]).length} controles guardados`;
+  const diarios=data.diarios||[];
+  const porControlador=data.por_controlador||[];
+  const totalControles=diarios.length;
+  const totalArticulos=diarios.reduce((a,r)=>a+Number(r.articulos_contados||0),0);
+  const totalMinutos=diarios.reduce((a,r)=>a+Number(r.minutos||0),0);
+  const controlesConTiempo=diarios.filter(r=>r.minutos!=null).length;
+  const promedio=controlesConTiempo?totalMinutos/controlesConTiempo:0;
+  const diasUnicos=new Set(diarios.map(r=>r.fecha).filter(Boolean)).size;
+  const diasHabiles=Math.max(1, diasHabilesMes(selectedMes));
+  const avance=Math.min(100, Math.round((diasUnicos/diasHabiles)*100));
+  const totalBultos=diarios.reduce((a,r)=>a+Number(r.bultos_contados||0),0);
+  const kpis=data.kpis||{};
+  kpiControles.textContent=fmt.format(totalControles);
+  kpiArticulos.textContent=fmt.format(totalArticulos);
+  kpiPersonas.textContent=fmt.format(porControlador.length);
+  kpiPromedio.textContent=`${fmt.format(promedio)} min`;
+  kpiCumplimiento.textContent=`${fmt.format(kpis.cumplimiento_pct||0)}%`;
+  kpiCumplimientoNote.textContent=`ABC base ${kpis.abc_mes||'-'}`;
+  kpiPendientes.textContent=fmt.format(kpis.controles_pendientes||0);
+  kpiVencidos.textContent=fmt.format(kpis.articulos_vencidos||0);
+  kpiProductividad.textContent=fmt.format(kpis.articulos_por_hora||0);
+  donutControles.style.background=`conic-gradient(#2563eb 0deg ${avance*3.6}deg,#e2e8f0 ${avance*3.6}deg 360deg)`;
+  donutValue.textContent=`${avance}%`;
+  legendDias.textContent=fmt.format(kpis.dias_controlados??diasUnicos);
+  legendMinutos.textContent=fmt.format(totalMinutos);
+  legendBultos.textContent=fmt.format(totalBultos);
+  renderBarChart(porControlador);
+  renderCumplimientoAbc(data.cumplimiento_abc||[]);
+  renderPendientesTop(data.pendientes_top||[]);
+  resumenDiario.innerHTML=diarios.map(r=>`<tr><td>${esc(r.fecha)}</td><td>${esc(r.responsable)}</td><td>${esc(r.semana)}</td><td>${esc(r.dia)}</td><td>${esc(r.hora_inicio)}</td><td>${esc(r.hora_fin)}</td><td title="${esc(r.articulos_detalle||'')}"><details><summary>${fmt.format(r.articulos_contados)} articulos</summary><pre style="white-space:pre-wrap;margin:6px 0 0;font:11px var(--mono)">${esc(r.articulos_detalle||'')}</pre></details></td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${r.minutos==null?'':fmt.format(r.minutos)}</td></tr>`).join('');
+  resumenControlador.innerHTML=porControlador.map(r=>`<tr><td>${esc(r.responsable)}</td><td class="num">${fmt.format(r.dias)}</td><td class="num">${fmt.format(r.controles)}</td><td class="num">${fmt.format(r.articulos_contados)}</td><td class="num">${fmt.format(r.bultos_contados||0)}</td><td class="num">${fmt.format(r.unidades_sueltas||0)}</td><td class="num">${fmt.format(r.minutos)}</td></tr>`).join('');
+  resumenMobile.innerHTML=diarios.map(r=>`<article class="summary-card">
+    <div class="summary-head"><strong>${esc(r.responsable)}</strong><span>${esc(r.fecha)}</span></div>
+    <div class="summary-meta">${esc(r.semana)} · ${esc(r.dia)} · ${esc(r.hora_inicio)} a ${esc(r.hora_fin)}</div>
+    <div class="summary-grid">
+      <span><b>${fmt.format(r.articulos_contados)}</b> articulos</span>
+      <span><b>${fmt.format(r.bultos_contados||0)}</b> bultos</span>
+      <span><b>${fmt.format(r.unidades_sueltas||0)}</b> unidades</span>
+      <span><b>${r.minutos==null?'-':fmt.format(r.minutos)}</b> min</span>
+    </div>
+    <details><summary>Ver articulos</summary><pre>${esc(r.articulos_detalle||'')}</pre></details>
+  </article>`).join('');
+  resumenStatus.textContent=`${totalControles} controles reales · ${fmt.format(totalArticulos)} articulos · ${fmt.format(porControlador.length)} responsables`;
   resumenLoaded=true;
+}
+function diasHabilesMes(mesValue){
+  const [y,m]=(mesValue||currentMonth()).split('-').map(Number);
+  const last=new Date(y,m,0).getDate();
+  let count=0;
+  for(let d=1;d<=last;d++){
+    const day=new Date(y,m-1,d).getDay();
+    if(day>=1&&day<=5) count++;
+  }
+  return count;
+}
+function renderBarChart(rows){
+  if(!rows.length){chartResponsables.innerHTML='<div class="status">Sin controles para graficar.</div>';return}
+  const max=Math.max(...rows.map(r=>Number(r.articulos_contados||0)),1);
+  chartResponsables.innerHTML=rows
+    .slice()
+    .sort((a,b)=>Number(b.articulos_contados||0)-Number(a.articulos_contados||0))
+    .map(r=>{
+      const value=Number(r.articulos_contados||0);
+      const pct=Math.max(3,(value/max)*100);
+      return `<div class="bar-row"><div class="bar-name" title="${esc(r.responsable)}">${esc(r.responsable)}</div><div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div><div class="bar-value">${fmt.format(value)}</div></div>`;
+    }).join('');
+}
+function renderCumplimientoAbc(rows){
+  if(!rows.length){chartCumplimientoAbc.innerHTML='<div class="status">Sin base ABC para el mes.</div>';return}
+  chartCumplimientoAbc.innerHTML=rows.map(r=>{
+    const pct=Number(r.cumplimiento_pct||0);
+    return `<div class="bar-row"><div class="bar-name"><span class="abc-badge abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</span> ${fmt.format(r.articulos)} art.</div><div class="bar-track"><div class="bar-fill abc-fill-${String(r.abc).toLowerCase()}" style="width:${Math.max(3,Math.min(100,pct))}%"></div></div><div class="bar-value">${fmt.format(pct)}%</div></div>
+      <div class="mini-note">${fmt.format(r.realizados)} de ${fmt.format(r.objetivo)} controles · ${fmt.format(r.pendientes)} pendientes</div>`;
+  }).join('');
+}
+function renderPendientesTop(rows){
+  if(!rows.length){pendientesTop.innerHTML='<div class="status">Sin pendientes para el objetivo mensual.</div>';return}
+  pendientesTop.innerHTML=rows.slice(0,8).map(r=>`<div class="pending-row">
+    <span class="abc-badge abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</span>
+    <div><strong>${esc(r.id_articulo)} · ${esc(r.descripcion)}</strong><small>${fmt.format(r.controles)} de ${fmt.format(r.objetivo)} controles</small></div>
+    <b>${fmt.format(r.pendientes)}</b>
+  </div>`).join('');
+}
+async function loadArticulosControlados(){
+  const selectedMes=mesArticulos.value||currentMonth();
+  articulosStatus.textContent='Cargando articulos controlados...';
+  const res=await fetch('/api/control-stock/articulos-controlados?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalArticulos.value));
+  const data=await res.json();
+  if(!res.ok||data.ok===false){articulosStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  acMes.textContent=`Mes: ${data.mes}`;
+  acTotal.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
+  acControlados.textContent=`Controlados: ${fmt.format(data.total_controlados||0)}`;
+  acPendientes.textContent=`Pendientes: ${fmt.format(data.total_pendientes||0)}`;
+  articulosControlBody.innerHTML=(data.rows||[]).map(r=>`<tr>
+    <td class="num">${esc(r.id_articulo)}</td>
+    <td>${esc(r.descripcion)}</td>
+    <td>${esc(r.negocio)}</td>
+    <td>${esc(r.tipo_producto)}</td>
+    <td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
+    <td class="num">${fmt.format(r.bultos||0)}</td>
+    <td class="control-mark">${esc(r.control_1)}</td>
+    <td class="control-mark">${esc(r.control_2)}</td>
+    <td class="control-mark">${esc(r.control_3)}</td>
+    <td class="control-mark">${esc(r.control_4)}</td>
+    <td class="num">${fmt.format(r.controles||0)}</td>
+    <td><span class="status-chip ${r.controles?'ok':'pending'}">${esc(r.estado_control)}</span></td>
+  </tr>`).join('');
+  articulosStatus.textContent=`${(data.rows||[]).length} articulos`;
+  articulosLoaded=true;
+}
+async function loadAbcMensual(){
+  const selectedYear=anioAbcMensual.value||new Date().getFullYear();
+  abcMensualStatus.textContent='Cargando ABC mensual...';
+  const res=await fetch('/api/control-stock/abc-mensual?anio='+encodeURIComponent(selectedYear)+'&sucursal='+encodeURIComponent(sucursalAbcMensual.value));
+  const data=await res.json();
+  if(!res.ok||data.ok===false){abcMensualStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
+  const months=data.meses||['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  amAnio.textContent=`Año: ${data.anio}`;
+  amTotal.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
+  amCambios.textContent=`Con cambios: ${fmt.format(data.articulos_con_cambios||0)}`;
+  abcMensualBody.innerHTML=(data.rows||[]).map(r=>`<tr>
+    <td class="num">${esc(r.id_articulo)}</td>
+    <td>${esc(r.descripcion)}</td>
+    <td>${esc(r.negocio)}</td>
+    <td>${esc(r.tipo_producto)}</td>
+    ${months.map(m=>`<td class="abc-${String(r[m]||'').toLowerCase()} abc-month">${esc(r[m]||'')}</td>`).join('')}
+    <td>${esc(r.observaciones||'')}</td>
+  </tr>`).join('');
+  abcMensualCards.innerHTML=(data.rows||[]).map(r=>`<article class="abc-mobile-card">
+    <div class="abc-mobile-head"><span>${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.enero||'').toLowerCase()}">${esc(r.enero||'-')}</span></span><span>${esc(r.tipo_producto||'')}</span></div>
+    <div class="abc-mobile-desc">${esc(r.descripcion)}<br>${esc(r.negocio||'')}</div>
+    <div class="abc-month-grid">
+      ${months.map(m=>`<div class="abc-month-pill abc-${String(r[m]||'').toLowerCase()}"><span>${esc(m.slice(0,3).toUpperCase())}</span><b>${esc(r[m]||'-')}</b></div>`).join('')}
+    </div>
+    <div class="abc-mobile-obs">${esc(r.observaciones||'')}</div>
+  </article>`).join('');
+  abcMensualStatus.textContent=`${(data.rows||[]).length} articulos`;
+  abcMensualLoaded=true;
 }
 async function loadResponsables(){
   respStatus.textContent='Cargando responsables...';
@@ -420,15 +683,18 @@ async function toggleResponsable(id,activo){
 function cantidadInputs(id){
   let draft={values:{},unidades:{}};
   try{draft=JSON.parse(localStorage.getItem(draftKey())||'{}')}catch(_){}
-  const values=[1,2,3,4].map(n=>{
+  const rawValues=[1,2,3,4].map(n=>{
     const key=`${id}-${n}`;
     const el=document.querySelector(`[data-cant="${key}"]`);
-    return Number((el?el.value:draft.values?.[key])||0);
+    return (el?el.value:draft.values?.[key]) ?? '';
   });
   const unidEl=document.querySelector(`[data-unid="${id}"]`);
-  const unidades=Number((unidEl?unidEl.value:draft.unidades?.[id])||0);
+  const rawUnidades=(unidEl?unidEl.value:draft.unidades?.[id]) ?? '';
+  const values=rawValues.map(v=>v===''?0:Number(v));
+  const unidades=rawUnidades===''?0:Number(rawUnidades);
   const total=values.reduce((a,b)=>a+b,0);
-  return {values,total,unidades};
+  const touched=rawValues.some(v=>v!=='')||rawUnidades!=='';
+  return {values,total,unidades,touched,rawValues,rawUnidades};
 }
 function normalizarConteo(row,input){
   const upb=Number(row.unidades_por_bulto||0);
@@ -437,6 +703,10 @@ function normalizarConteo(row,input){
   return {bultos:input.total+bultosDesdeUnidades, unidades:input.unidades%upb, bultosDesdeUnidades};
 }
 function actualizarTotales(markTime=true){
+  const card=document.querySelector('#cards .mobile-card');
+  const err=document.getElementById('mobileError');
+  if(card) card.classList.remove('invalid');
+  if(err) err.style.display='none';
   const now=new Date().toTimeString().slice(0,5);
   if(markTime){
     if(!horaInicio.value) horaInicio.value=now;
@@ -458,7 +728,22 @@ function actualizarTotales(markTime=true){
   if(markTime) guardarBorradorLocal();
 }
 function updateDiffCount(){actualizarTotales()}
-function isMobileConteo(){return window.matchMedia('(max-width: 900px)').matches}
+function isMobileConteo(){return window.matchMedia('(max-width: 1100px)').matches}
+function rowTouched(row){
+  const a=cantidadInputs(row.id_articulo);
+  const b=cantidadInputs(String(row.id_articulo)+'m');
+  return a.touched||b.touched;
+}
+function currentRowValid(){
+  if(!isMobileConteo()||!currentRows.length) return true;
+  return rowTouched(currentRows[Math.min(mobileIndex,currentRows.length-1)]);
+}
+function showMobileValidation(){
+  const card=document.querySelector('#cards .mobile-card');
+  const err=document.getElementById('mobileError');
+  if(card) card.classList.add('invalid');
+  if(err) err.style.display='block';
+}
 function renderMobileCards(){
   if(!currentRows.length){cards.innerHTML='';return}
   const visibleRows=isMobileConteo()? [currentRows[Math.min(mobileIndex,currentRows.length-1)]] : currentRows;
@@ -471,12 +756,21 @@ function renderMobileCards(){
     <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
     <div class="mobile-meta">${esc(r.descripcion)}</div>
     <div class="mobile-help"><span>Bultos/Pallet: <strong>${fmt.format(r.bultos_por_pallet||0)}</strong></span><span>Unid/Bulto: <strong>${fmt.format(r.unidades_por_bulto||0)}</strong></span></div>
-    <div class="mobile-row five">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 1" data-cant="${r.id_articulo}m-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 2" data-cant="${r.id_articulo}m-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 3" data-cant="${r.id_articulo}m-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 4" data-cant="${r.id_articulo}m-4" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Unidades" data-unid="${r.id_articulo}m" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+    <div class="mobile-error" id="mobileError">Cargá al menos un valor para este artículo. Si no hay stock, escribí 0.</div>
+    <div class="mobile-group">
+      <div class="mobile-group-title">Bultos</div>
+      <div class="mobile-group-hint" title="Ingresá solo bultos completos. Si no hay stock, cargá 0 en uno de los campos.">Bultos completos encontrados en el conteo.</div>
+      <div class="mobile-row five">
+        <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" title="Bultos completos. Solo números enteros." aria-label="Bultos 1" data-cant="${r.id_articulo}m-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+        <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" title="Bultos completos. Solo números enteros." aria-label="Bultos 2" data-cant="${r.id_articulo}m-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+        <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" title="Bultos completos. Solo números enteros." aria-label="Bultos 3" data-cant="${r.id_articulo}m-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+        <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" title="Bultos completos. Solo números enteros." aria-label="Bultos 4" data-cant="${r.id_articulo}m-4" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
+      </div>
+    </div>
+    <div class="mobile-group units">
+      <div class="mobile-group-title">Unidades</div>
+      <div class="mobile-group-hint" title="Ingresá unidades sueltas. El sistema las convierte a bultos si completan un bulto.">Unidades sueltas fuera de bulto completo.</div>
+      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" title="Unidades sueltas. Solo números enteros." aria-label="Unidades sueltas" data-unid="${r.id_articulo}m" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
     </div>
     <div class="pill mobile-total"><span data-total="${r.id_articulo}m">0</span> bultos con <span data-unidades="${r.id_articulo}m">0</span> unidades</div>
   </article>`).join('');
@@ -484,7 +778,7 @@ function renderMobileCards(){
   actualizarTotales(false);
 }
 function mobilePrev(){if(mobileIndex>0){mobileIndex--;renderMobileCards()}}
-function mobileNext(){if(mobileIndex<currentRows.length-1){mobileIndex++;renderMobileCards()}}
+function mobileNext(){if(!currentRowValid()){showMobileValidation();return}if(mobileIndex<currentRows.length-1){mobileIndex++;renderMobileCards()}}
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
   let data={horaInicio:horaInicio.value,responsable:responsable.value,observaciones:observaciones.value,values:{},unidades:{}};
@@ -559,6 +853,13 @@ async function loadPlanilla(){
   }
 }
 async function guardarConteo(){
+  const faltante=currentRows.find(r=>!rowTouched(r));
+  if(faltante){
+    mobileIndex=Math.max(0,currentRows.findIndex(r=>r.id_articulo===faltante.id_articulo));
+    if(isMobileConteo()){renderMobileCards();showMobileValidation()}
+    status.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribí 0.`;
+    return;
+  }
   horaFin.value=new Date().toTimeString().slice(0,5);
   const items=currentRows.map(r=>{const a=cantidadInputs(r.id_articulo);const b=cantidadInputs(String(r.id_articulo)+'m');const chosen=(a.total||a.unidades)?a:b;const norm=normalizarConteo(r,chosen);return {id_articulo:r.id_articulo,descripcion:r.descripcion,abc:r.abc,semana:rowSemana(r),dia:rowDia(r),cantidad_1:chosen.values[0],cantidad_2:chosen.values[1],cantidad_3:chosen.values[2],cantidad_4:chosen.values[3],unidades_sueltas:norm.unidades,stock:norm.bultos,diferencia:false,observacion:`Bultos: ${chosen.values.join(' + ')} | Unidades cargadas: ${chosen.unidades} | Convierte: ${norm.bultosDesdeUnidades} bultos | Total: ${norm.bultos} bultos con ${norm.unidades} unidades`}});
   const f=filtrosEfectivos();
@@ -571,14 +872,16 @@ async function guardarConteo(){
   status.textContent=`Control guardado. Items: ${data.data.items_guardados}`;
   localStorage.removeItem(draftKey());
   resumenLoaded=false;
+  articulosLoaded=false;
   loadResumenMensual();
+  loadArticulosControlados();
 }
 (async function initControlStock(){
-  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=defaultMonth();fecha.value=today();semana.value='AUTO';dia.value='AUTO';
+  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();semana.value='AUTO';dia.value='AUTO';
   [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
   [mes,horaInicio,horaFin,estado].forEach(el=>el.closest('.field').style.display='none');
   await cargarSucursales();
-  loadAbc();loadPlanificacion();loadResumenMensual();loadResponsables();loadPlanilla();
+  loadAbc();loadPlanificacion();loadResumenMensual();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();
 })();
 </script>
 </body>

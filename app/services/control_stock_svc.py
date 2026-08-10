@@ -99,6 +99,37 @@ def _month_range(mes: str | None) -> tuple[str, date, date]:
     )
 
 
+def _current_month_range(mes: str | None) -> tuple[str, date, date]:
+    if mes:
+        return _month_range(mes)
+    today = date.today()
+    year, month = today.year, today.month
+    return (
+        f"{year}-{month:02d}",
+        date(year, month, 1),
+        date(year, month, cal_mod.monthrange(year, month)[1]),
+    )
+
+
+def _previous_month_label(mes: str) -> str:
+    year, month = [int(part) for part in mes.split("-")]
+    month -= 1
+    if month == 0:
+        year -= 1
+        month = 12
+    return f"{year}-{month:02d}"
+
+
+def _business_days_count(ini: date, fin: date) -> int:
+    current = ini
+    count = 0
+    while current <= fin:
+        if current.weekday() < 5:
+            count += 1
+        current = date.fromordinal(current.toordinal() + 1)
+    return count
+
+
 def _sucursal_id(sucursal: str | None) -> str:
     value = str(sucursal or "1").strip().lower()
     if value == "dolores":
@@ -438,19 +469,48 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
     with pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
             cur.execute(
-                """INSERT INTO control_stock_conteos(
-                       mes_abc, sucursal, semana, dia, fecha, responsable,
-                       hora_inicio, hora_fin, observaciones
-                   )
-                   VALUES (
-                       %(mes_abc)s, %(sucursal)s, %(semana)s, %(dia)s, %(fecha)s,
-                       %(responsable)s, %(hora_inicio)s, %(hora_fin)s, %(observaciones)s
-                   )
-                   RETURNING id, mes_abc, sucursal, semana, dia, fecha, responsable,
-                             hora_inicio, hora_fin, observaciones, estado, created_at""",
+                """SELECT id
+                   FROM control_stock_conteos
+                   WHERE mes_abc = %(mes_abc)s
+                     AND sucursal = %(sucursal)s
+                     AND semana = %(semana)s
+                     AND dia = %(dia)s
+                     AND fecha = %(fecha)s
+                     AND responsable = %(responsable)s
+                   ORDER BY id DESC
+                   LIMIT 1""",
                 conteo,
             )
-            saved = dict(cur.fetchone() or {})
+            existing = cur.fetchone()
+            if existing:
+                cur.execute(
+                    """UPDATE control_stock_conteos
+                       SET hora_inicio = COALESCE(%(hora_inicio)s, hora_inicio),
+                           hora_fin = %(hora_fin)s,
+                           observaciones = %(observaciones)s,
+                           updated_at = NOW()
+                       WHERE id = %(id)s
+                       RETURNING id, mes_abc, sucursal, semana, dia, fecha, responsable,
+                                 hora_inicio, hora_fin, observaciones, estado, created_at""",
+                    {**conteo, "id": existing["id"]},
+                )
+                saved = dict(cur.fetchone() or {})
+                cur.execute("DELETE FROM control_stock_conteo_items WHERE conteo_id = %s", (saved["id"],))
+            else:
+                cur.execute(
+                    """INSERT INTO control_stock_conteos(
+                           mes_abc, sucursal, semana, dia, fecha, responsable,
+                           hora_inicio, hora_fin, observaciones
+                       )
+                       VALUES (
+                           %(mes_abc)s, %(sucursal)s, %(semana)s, %(dia)s, %(fecha)s,
+                           %(responsable)s, %(hora_inicio)s, %(hora_fin)s, %(observaciones)s
+                       )
+                       RETURNING id, mes_abc, sucursal, semana, dia, fecha, responsable,
+                                 hora_inicio, hora_fin, observaciones, estado, created_at""",
+                    conteo,
+                )
+                saved = dict(cur.fetchone() or {})
             if rows:
                 psycopg2.extras.execute_values(
                     cur,
@@ -540,11 +600,19 @@ def update_responsable(responsable_id: int, data: dict) -> dict:
 
 def get_resumen_mensual(mes: str | None = None, sucursal: str | None = "1") -> dict:
     ensure_control_stock_tables()
-    mes_label, ini, fin = _month_range(mes)
+    mes_label, ini, fin = _current_month_range(mes)
     suc = _sucursal_id(sucursal)
     with pg_cursor() as cur:
         cur.execute(
             """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.*
+                FROM control_stock_conteos c
+                WHERE c.sucursal = %(sucursal)s
+                  AND c.fecha BETWEEN %(ini)s AND %(fin)s
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            )
             SELECT
                 c.id,
                 c.fecha,
@@ -554,18 +622,24 @@ def get_resumen_mensual(mes: str | None = None, sucursal: str | None = "1") -> d
                 c.hora_inicio,
                 c.hora_fin,
                 COUNT(i.id_articulo) FILTER (WHERE i.stock IS NOT NULL) AS articulos_contados,
+                STRING_AGG(
+                    CONCAT(i.id_articulo::text, ' - ', COALESCE(NULLIF(i.descripcion, ''), 'Sin descripcion')),
+                    E'\n'
+                    ORDER BY i.id_articulo
+                ) FILTER (WHERE i.stock IS NOT NULL) AS articulos_detalle,
                 COALESCE(SUM(i.stock), 0) AS bultos_contados,
                 COALESCE(SUM(i.unidades_sueltas), 0) AS unidades_sueltas,
                 CASE
                   WHEN c.hora_inicio IS NOT NULL AND c.hora_fin IS NOT NULL
-                  THEN EXTRACT(EPOCH FROM (c.hora_fin - c.hora_inicio)) / 60
+                  THEN EXTRACT(EPOCH FROM (
+                    (DATE '2000-01-01' + c.hora_fin) -
+                    (DATE '2000-01-01' + c.hora_inicio)
+                  )) / 60
                   ELSE NULL
                 END AS minutos
-            FROM control_stock_conteos c
+            FROM latest c
             LEFT JOIN control_stock_conteo_items i ON i.conteo_id = c.id
-            WHERE c.sucursal = %(sucursal)s
-              AND c.fecha BETWEEN %(ini)s AND %(fin)s
-            GROUP BY c.id
+            GROUP BY c.id, c.fecha, c.responsable, c.semana, c.dia, c.hora_inicio, c.hora_fin
             ORDER BY c.fecha, c.responsable, c.id
             """,
             {"sucursal": suc, "ini": ini, "fin": fin},
@@ -581,6 +655,7 @@ def get_resumen_mensual(mes: str | None = None, sucursal: str | None = "1") -> d
                 "hora_inicio": str(r.get("hora_inicio") or ""),
                 "hora_fin": str(r.get("hora_fin") or ""),
                 "articulos_contados": int(r.get("articulos_contados") or 0),
+                "articulos_detalle": r.get("articulos_detalle") or "",
                 "bultos_contados": float(r.get("bultos_contados") or 0),
                 "unidades_sueltas": float(r.get("unidades_sueltas") or 0),
                 "minutos": round(float(r["minutos"]), 1) if r.get("minutos") is not None else None,
@@ -614,11 +689,197 @@ def get_resumen_mensual(mes: str | None = None, sucursal: str | None = "1") -> d
         por_controlador[key]["unidades_sueltas"] = round(por_controlador[key]["unidades_sueltas"], 2)
         por_controlador[key]["minutos"] = round(por_controlador[key]["minutos"], 1)
 
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.id
+                FROM control_stock_conteos c
+                WHERE c.sucursal = %(sucursal)s
+                  AND c.fecha BETWEEN %(ini)s AND %(fin)s
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            )
+            SELECT i.id_articulo, COUNT(*) FILTER (WHERE i.stock IS NOT NULL) AS controles
+            FROM latest c
+            JOIN control_stock_conteo_items i ON i.conteo_id = c.id
+            GROUP BY i.id_articulo
+            """,
+            {"sucursal": suc, "ini": ini, "fin": fin},
+        )
+        controles_articulo = {int(r["id_articulo"]): int(r["controles"] or 0) for r in (cur.fetchall() or [])}
+
+    abc_mes = _previous_month_label(mes_label)
+    abc_rows = get_abc_articulos(abc_mes, sucursal=suc)["rows"]
+    objetivo_por_abc = {"A": 4, "B": 3, "C": 1}
+    cumplimiento_abc = {
+        key: {"abc": key, "articulos": 0, "objetivo": 0, "realizados": 0, "pendientes": 0, "vencidos": 0, "cumplimiento_pct": 0.0}
+        for key in ("A", "B", "C")
+    }
+    pendientes_detalle = []
+    for article in abc_rows:
+        abc = str(article.get("abc") or "C")
+        target = objetivo_por_abc.get(abc, 1)
+        done = controles_articulo.get(int(article["id_articulo"]), 0)
+        pending = max(0, target - done)
+        row = cumplimiento_abc.setdefault(abc, {"abc": abc, "articulos": 0, "objetivo": 0, "realizados": 0, "pendientes": 0, "vencidos": 0, "cumplimiento_pct": 0.0})
+        row["articulos"] += 1
+        row["objetivo"] += target
+        row["realizados"] += min(done, target)
+        row["pendientes"] += pending
+        if pending:
+            row["vencidos"] += 1
+            pendientes_detalle.append({
+                "id_articulo": int(article["id_articulo"]),
+                "descripcion": article.get("descripcion") or "",
+                "abc": abc,
+                "objetivo": target,
+                "controles": done,
+                "pendientes": pending,
+            })
+    for row in cumplimiento_abc.values():
+        row["cumplimiento_pct"] = round((row["realizados"] / row["objetivo"] * 100) if row["objetivo"] else 0, 1)
+
+    total_articulos = sum(r["articulos_contados"] for r in diarios)
+    total_minutos = sum(float(r["minutos"] or 0) for r in diarios)
+    dias_controlados = len({r["fecha"] for r in diarios if r["fecha"]})
+    dias_habiles = _business_days_count(ini, fin)
+    kpis = {
+        "abc_mes": abc_mes,
+        "objetivo_controles": sum(r["objetivo"] for r in cumplimiento_abc.values()),
+        "controles_objetivo_realizados": sum(r["realizados"] for r in cumplimiento_abc.values()),
+        "controles_pendientes": sum(r["pendientes"] for r in cumplimiento_abc.values()),
+        "articulos_vencidos": sum(r["vencidos"] for r in cumplimiento_abc.values()),
+        "cumplimiento_pct": round(
+            (sum(r["realizados"] for r in cumplimiento_abc.values()) / sum(r["objetivo"] for r in cumplimiento_abc.values()) * 100)
+            if sum(r["objetivo"] for r in cumplimiento_abc.values()) else 0,
+            1,
+        ),
+        "dias_controlados": dias_controlados,
+        "dias_habiles": dias_habiles,
+        "cobertura_dias_pct": round((dias_controlados / dias_habiles * 100) if dias_habiles else 0, 1),
+        "articulos_por_hora": round((total_articulos / (total_minutos / 60)) if total_minutos else 0, 1),
+    }
+
     return {
         "ok": True,
         "mes": mes_label,
         "sucursal": suc,
         "sucursal_nombre": _sucursal_nombre(suc),
+        "kpis": kpis,
+        "cumplimiento_abc": [cumplimiento_abc[key] for key in ("A", "B", "C")],
+        "pendientes_top": sorted(pendientes_detalle, key=lambda x: ({"A": 0, "B": 1, "C": 2}.get(x["abc"], 3), -x["pendientes"], x["id_articulo"]))[:20],
         "diarios": diarios,
         "por_controlador": sorted(por_controlador.values(), key=lambda x: x["responsable"]),
+    }
+
+
+def get_articulos_controlados(mes: str | None = None, sucursal: str | None = "1") -> dict:
+    ensure_control_stock_tables()
+    mes_label, ini, fin = _current_month_range(mes)
+    suc = _sucursal_id(sucursal)
+    base = get_abc_articulos(mes_label, sucursal=suc)
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.id
+                FROM control_stock_conteos c
+                WHERE c.sucursal = %(sucursal)s
+                  AND c.fecha BETWEEN %(ini)s AND %(fin)s
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            )
+            SELECT
+                i.id_articulo,
+                COUNT(*) FILTER (WHERE i.stock IS NOT NULL) AS controles
+            FROM latest c
+            JOIN control_stock_conteo_items i ON i.conteo_id = c.id
+            GROUP BY i.id_articulo
+            """,
+            {"sucursal": suc, "ini": ini, "fin": fin},
+        )
+        counts = {int(r["id_articulo"]): int(r["controles"] or 0) for r in (cur.fetchall() or [])}
+
+    rows = []
+    for row in base["rows"]:
+        controles = counts.get(int(row["id_articulo"]), 0)
+        item = dict(row)
+        item["controles"] = controles
+        for idx in range(1, 5):
+            item[f"control_{idx}"] = "X" if controles >= idx else ""
+        item["estado_control"] = "OK" if controles else "Pendiente"
+        rows.append(item)
+
+    return {
+        "ok": True,
+        "mes": mes_label,
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "total_articulos": len(rows),
+        "total_controlados": sum(1 for r in rows if r["controles"] > 0),
+        "total_pendientes": sum(1 for r in rows if r["controles"] == 0),
+        "rows": rows,
+    }
+
+
+def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -> dict:
+    today = date.today()
+    year = int(anio or today.year)
+    suc = _sucursal_id(sucursal)
+    month_names = (
+        "enero", "febrero", "marzo", "abril", "mayo", "junio",
+        "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+    )
+    articles: dict[int, dict] = {}
+    max_month = 12 if year < today.year else min(12, today.month)
+    if year > today.year:
+        max_month = 0
+
+    for month in range(1, max_month + 1):
+        mes_label = f"{year}-{month:02d}"
+        data = get_abc_articulos(mes_label, sucursal=suc)
+        for row in data["rows"]:
+            article_id = int(row["id_articulo"])
+            item = articles.setdefault(article_id, {
+                "id_articulo": article_id,
+                "descripcion": row.get("descripcion") or "",
+                "negocio": row.get("negocio") or "",
+                "tipo_producto": row.get("tipo_producto") or "",
+                "meses": {},
+            })
+            if not item["descripcion"] and row.get("descripcion"):
+                item["descripcion"] = row["descripcion"]
+            item["meses"][month_names[month - 1]] = row.get("abc") or ""
+
+    rows = []
+    for item in articles.values():
+        meses = item["meses"]
+        abc_values = [meses.get(name, "") for name in month_names]
+        loaded_values = [value for value in abc_values[:max_month] if value]
+        cambios = sum(1 for prev, curr in zip(loaded_values, loaded_values[1:]) if prev != curr)
+        observaciones = "Vario a lo largo del año" if cambios else "Sin variacion"
+        rows.append({
+            "id_articulo": item["id_articulo"],
+            "descripcion": item["descripcion"],
+            "negocio": item["negocio"],
+            "tipo_producto": item["tipo_producto"],
+            "cambios": cambios,
+            "observaciones": observaciones,
+            **{name: meses.get(name, "") for name in month_names},
+        })
+
+    abc_order = {"A": 0, "B": 1, "C": 2, "": 3}
+    rows.sort(key=lambda r: (abc_order.get(str(r.get("enero") or ""), 3), int(r["id_articulo"])))
+    return {
+        "ok": True,
+        "anio": year,
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "meses": list(month_names),
+        "hasta_mes": max_month,
+        "total_articulos": len(rows),
+        "articulos_con_cambios": sum(1 for r in rows if r["cambios"] > 0),
+        "rows": rows,
     }

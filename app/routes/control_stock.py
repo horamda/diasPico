@@ -73,6 +73,36 @@ def resumen_mensual():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/articulos-controlados")
+@login_required
+def articulos_controlados():
+    try:
+        data = control_stock_svc.get_articulos_controlados(
+            mes=request.args.get("mes"),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/abc-mensual")
+@login_required
+def abc_mensual():
+    try:
+        data = control_stock_svc.get_abc_mensual(
+            anio=request.args.get("anio", type=int),
+            sucursal=request.args.get("sucursal", "1"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.post("/conteos")
 @login_required
 def guardar_conteo():
