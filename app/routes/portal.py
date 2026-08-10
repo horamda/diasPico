@@ -76,6 +76,8 @@ def login_submit():
 
     session['portal_user_id'] = int(user['id'])
     target = request.args.get('next') or url_for('portal.portal_home')
+    if target in {'', '/'}:
+        target = url_for('portal.portal_home')
     if request.is_json:
         return jsonify({'ok': True, 'data': {'redirect': target}})
     return redirect(target)
