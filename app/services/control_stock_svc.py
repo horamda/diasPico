@@ -51,6 +51,8 @@ def ensure_control_stock_tables() -> None:
                         cantidad_2 NUMERIC,
                         cantidad_3 NUMERIC,
                         cantidad_4 NUMERIC,
+                        cantidad_5 NUMERIC,
+                        cantidad_6 NUMERIC,
                         unidades_sueltas NUMERIC,
                         stock NUMERIC,
                         diferencia BOOLEAN NOT NULL DEFAULT FALSE,
@@ -71,6 +73,8 @@ def ensure_control_stock_tables() -> None:
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_2 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_3 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_4 NUMERIC;
+                    ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_5 NUMERIC;
+                    ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_6 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS unidades_sueltas NUMERIC;
                     CREATE INDEX IF NOT EXISTS idx_control_stock_conteos_mes
                         ON control_stock_conteos(mes_abc, sucursal, fecha);
@@ -255,6 +259,9 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
                 COALESCE(NULLIF(TRIM(a.movil), ''), 'SI') AS movil,
                 COALESCE(NULLIF(TRIM(a.anulado), ''), 'NO') AS anulado,
                 COALESCE(a.bultos_por_pallet, 0) AS bultos_por_pallet,
+                COALESCE(a.bultos_por_piso, 0) AS bultos_por_piso,
+                COALESCE(a.pisos, 0) AS pisos,
+                COALESCE(a.apilabilidad, 0) AS apilabilidad,
                 COALESCE(a.unidades_por_bulto, 0) AS unidades_por_bulto,
                 COALESCE(NULLIF(TRIM(a.rotacion_abc), ''), '') AS abc_maestro,
                 COALESCE(SUM(COALESCE(v.bultos, 0)), 0) AS bultos
@@ -268,10 +275,10 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
              AND LOWER(TRIM(COALESCE(v.detalle_documento, ''))) NOT LIKE '%%remit%%'
              AND LOWER(TRIM(COALESCE(v.detalle_documento, ''))) NOT LIKE '%%comod%%'
             WHERE UPPER(TRIM(COALESCE(a.activo, ''))) IN ('SI', 'S', '1', 'TRUE', 'ACTIVO')
-              AND UPPER(TRIM(COALESCE(a.movil, 'SI'))) IN ('SI', 'S', '1', 'TRUE')
-              AND UPPER(TRIM(COALESCE(a.anulado, 'NO'))) IN ('NO', 'N', '0', 'FALSE')
+              AND UPPER(TRIM(COALESCE(NULLIF(a.movil, ''), 'SI'))) IN ('SI', 'S', '1', 'TRUE')
+              AND UPPER(TRIM(COALESCE(NULLIF(a.anulado, ''), 'NO'))) IN ('NO', 'N', '0', 'FALSE')
               AND UPPER(TRIM(COALESCE(a.tipo_producto, ''))) NOT IN ('P.O.P.', 'ENVASE', 'ESQUELETO', 'MERCHANDISING', '')
-            GROUP BY a.id_articulo, a.descripcion, a.unidad_negocio, a.tipo_producto, a.activo_cc, a.activo, a.movil, a.anulado, a.bultos_por_pallet, a.unidades_por_bulto, a.rotacion_abc
+            GROUP BY a.id_articulo, a.descripcion, a.unidad_negocio, a.tipo_producto, a.activo_cc, a.activo, a.movil, a.anulado, a.bultos_por_pallet, a.bultos_por_piso, a.pisos, a.apilabilidad, a.unidades_por_bulto, a.rotacion_abc
             ORDER BY bultos DESC, a.id_articulo
             """,
             params,
@@ -296,6 +303,9 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
             "movil": row.get("movil") or "SI",
             "anulado": row.get("anulado") or "NO",
             "bultos_por_pallet": round(float(row.get("bultos_por_pallet") or 0), 2),
+            "bultos_por_piso": round(float(row.get("bultos_por_piso") or 0), 2),
+            "pisos": round(float(row.get("pisos") or 0), 2),
+            "apilabilidad": round(float(row.get("apilabilidad") or 0), 2),
             "unidades_por_bulto": round(float(row.get("unidades_por_bulto") or 0), 2),
             "bultos": round(bultos, 2),
             "peso_pct": round(peso_pct, 2),
@@ -460,6 +470,8 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
             None if item.get("cantidad_2") in (None, "") else float(item.get("cantidad_2")),
             None if item.get("cantidad_3") in (None, "") else float(item.get("cantidad_3")),
             None if item.get("cantidad_4") in (None, "") else float(item.get("cantidad_4")),
+            None if item.get("cantidad_5") in (None, "") else float(item.get("cantidad_5")),
+            None if item.get("cantidad_6") in (None, "") else float(item.get("cantidad_6")),
             None if item.get("unidades_sueltas") in (None, "") else float(item.get("unidades_sueltas")),
             stock,
             bool(item.get("diferencia")),
@@ -516,7 +528,7 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                     cur,
                     """INSERT INTO control_stock_conteo_items(
                            conteo_id, id_articulo, descripcion, abc, semana, dia,
-                           cantidad_1, cantidad_2, cantidad_3, cantidad_4, unidades_sueltas,
+                           cantidad_1, cantidad_2, cantidad_3, cantidad_4, cantidad_5, cantidad_6, unidades_sueltas,
                            stock, diferencia, observacion
                        )
                        VALUES %s
@@ -525,6 +537,8 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                            cantidad_2 = EXCLUDED.cantidad_2,
                            cantidad_3 = EXCLUDED.cantidad_3,
                            cantidad_4 = EXCLUDED.cantidad_4,
+                           cantidad_5 = EXCLUDED.cantidad_5,
+                           cantidad_6 = EXCLUDED.cantidad_6,
                            unidades_sueltas = EXCLUDED.unidades_sueltas,
                            stock = EXCLUDED.stock,
                            diferencia = EXCLUDED.diferencia,
@@ -820,6 +834,106 @@ def get_articulos_controlados(mes: str | None = None, sucursal: str | None = "1"
         "total_articulos": len(rows),
         "total_controlados": sum(1 for r in rows if r["controles"] > 0),
         "total_pendientes": sum(1 for r in rows if r["controles"] == 0),
+        "rows": rows,
+    }
+
+
+def get_resumen_por_articulo(
+    fecha_control: str | None = None,
+    sucursal: str | None = "1",
+    responsable: str | None = None,
+) -> dict:
+    ensure_control_stock_tables()
+    if not fecha_control:
+        fecha_control = date.today().isoformat()
+    try:
+        fecha_dt = date.fromisoformat(str(fecha_control))
+    except ValueError as exc:
+        raise ValueError("fecha debe tener formato YYYY-MM-DD") from exc
+    suc = _sucursal_id(sucursal)
+    responsable_txt = str(responsable or "").strip()
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.*
+                FROM control_stock_conteos c
+                WHERE c.sucursal = %(sucursal)s
+                  AND c.fecha = %(fecha)s
+                  AND (%(responsable)s = '' OR c.responsable = %(responsable)s)
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            ),
+            detalle AS (
+                SELECT
+                    i.id_articulo,
+                    COALESCE(NULLIF(i.descripcion, ''), 'Sin descripcion') AS descripcion,
+                    COALESCE(NULLIF(i.abc, ''), '-') AS abc,
+                    SUM(COALESCE(i.stock, 0)) AS total_bultos,
+                    SUM(COALESCE(i.unidades_sueltas, 0)) AS total_unidades,
+                    COUNT(*) AS controles,
+                    STRING_AGG(DISTINCT c.responsable, ', ' ORDER BY c.responsable) AS responsables
+                FROM latest c
+                JOIN control_stock_conteo_items i ON i.conteo_id = c.id
+                WHERE i.stock IS NOT NULL
+                GROUP BY i.id_articulo, i.descripcion, i.abc
+            )
+            SELECT *
+            FROM detalle
+            ORDER BY
+                CASE abc WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 ELSE 4 END,
+                id_articulo
+            """,
+            {"sucursal": suc, "fecha": fecha_dt, "responsable": responsable_txt},
+        )
+        rows = []
+        for r in cur.fetchall() or []:
+            rows.append({
+                "id_articulo": int(r["id_articulo"]),
+                "descripcion": r.get("descripcion") or "",
+                "abc": r.get("abc") or "",
+                "total_bultos": float(r.get("total_bultos") or 0),
+                "total_unidades": float(r.get("total_unidades") or 0),
+                "controles": int(r.get("controles") or 0),
+                "responsables": r.get("responsables") or "",
+            })
+
+        cur.execute(
+            """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.*
+                FROM control_stock_conteos c
+                WHERE c.sucursal = %(sucursal)s
+                  AND c.fecha = %(fecha)s
+                  AND (%(responsable)s = '' OR c.responsable = %(responsable)s)
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            )
+            SELECT
+                COUNT(*) AS controles,
+                MIN(hora_inicio) AS hora_inicio,
+                MAX(hora_fin) AS hora_fin,
+                STRING_AGG(DISTINCT responsable, ', ' ORDER BY responsable) AS responsables
+            FROM latest
+            """,
+            {"sucursal": suc, "fecha": fecha_dt, "responsable": responsable_txt},
+        )
+        header = dict(cur.fetchone() or {})
+
+    return {
+        "ok": True,
+        "fecha": fecha_dt.isoformat(),
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "responsable": responsable_txt,
+        "controles": int(header.get("controles") or 0),
+        "hora_inicio": str(header.get("hora_inicio") or ""),
+        "hora_fin": str(header.get("hora_fin") or ""),
+        "responsables": header.get("responsables") or "",
+        "total_articulos": len(rows),
+        "total_bultos": round(sum(r["total_bultos"] for r in rows), 2),
+        "total_unidades": round(sum(r["total_unidades"] for r in rows), 2),
         "rows": rows,
     }
 

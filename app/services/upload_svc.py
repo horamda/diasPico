@@ -22,6 +22,7 @@ import openpyxl
 from psycopg2.extras import execute_values
 
 from app.database import pg_conn
+from app.services.articulos_svc import ensure_articulos_table
 from app.services.transportes_svc import ensure_transportes_table
 from app.services.ventas_svc import ensure_ventas_detalle_table
 from app.utils.coerce import to_date, to_dec, to_int, to_time
@@ -169,6 +170,27 @@ def _parse_csv(file_bytes: bytes, col_map: dict[str, list[str]] | None = None) -
 
 
 # ── Excel parser ──────────────────────────────────────────────
+
+def _looks_like_xlsx(file_bytes: bytes) -> bool:
+    return file_bytes[:2] == b'PK'
+
+
+def _parse_articulos_excel(file_bytes: bytes) -> list[dict]:
+    wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
+    ws = wb['Artículos'] if 'Artículos' in wb.sheetnames else wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    next(rows_iter, None)
+    raw_headers = [str(v or '').strip() for v in (next(rows_iter, None) or [])]
+    cm = map_headers(raw_headers, ARTICULOS_MAP)
+    result = []
+    for row in rows_iter:
+        if all(v is None for v in row):
+            continue
+        item = {col: row[idx] if idx < len(row) else None for col, idx in cm.items()}
+        if item.get('id_articulo') is not None:
+            result.append(item)
+    return result
+
 
 def _parse_excel(file_bytes: bytes, fecha_col: str,
                  col_map: dict) -> list[tuple[date, dict]]:
@@ -525,6 +547,7 @@ def load_transportes(file_bytes: bytes) -> UploadResult:
 
 _ART_COLS = [
     'id_articulo', 'descripcion', 'activo', 'bultos_por_pallet',
+    'pisos', 'apilabilidad', 'bultos_por_piso',
     'presentacion_bulto', 'unidades_por_bulto', 'unidad_medida',
     'desc_unidad_medida', 'valor_unidad_medida', 'peso', 'alcoholico',
     'division', 'familia', 'marca', 'tipo_producto', 'unidad_negocio',
@@ -535,6 +558,9 @@ _ART_CONFLICT = """
 ON CONFLICT (id_articulo) DO UPDATE SET
     descripcion=EXCLUDED.descripcion, activo=EXCLUDED.activo,
     bultos_por_pallet=EXCLUDED.bultos_por_pallet,
+    pisos=EXCLUDED.pisos,
+    apilabilidad=EXCLUDED.apilabilidad,
+    bultos_por_piso=EXCLUDED.bultos_por_piso,
     presentacion_bulto=EXCLUDED.presentacion_bulto,
     unidades_por_bulto=EXCLUDED.unidades_por_bulto,
     unidad_medida=EXCLUDED.unidad_medida,
@@ -553,11 +579,23 @@ ON CONFLICT (id_articulo) DO UPDATE SET
 
 
 def _art_row(r: dict) -> tuple:
+    bultos_pallet = to_dec(r.get('bultos_por_pallet'))
+    pisos = to_dec(r.get('pisos'))
+    bultos_piso = to_dec(r.get('bultos_por_piso'))
+    if bultos_piso is None and bultos_pallet is not None and pisos not in (None, 0):
+        bultos_piso = bultos_pallet / pisos
+    anulado = str(r.get('anulado', '') or '').strip().upper()
+    activo = str(r.get('activo', '') or '').strip()
+    if not activo and anulado in {'NO', 'N', '0', 'FALSE'}:
+        activo = 'SI'
     return (
         to_int(r.get('id_articulo')),
         str(r.get('descripcion', ''))[:255],
-        str(r.get('activo', ''))[:10],
-        to_dec(r.get('bultos_por_pallet')),
+        activo[:10],
+        bultos_pallet,
+        pisos,
+        to_dec(r.get('apilabilidad')),
+        bultos_piso,
         to_int(r.get('presentacion_bulto')),
         to_dec(r.get('unidades_por_bulto')),
         str(r.get('unidad_medida', ''))[:50],
@@ -588,7 +626,7 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
     typed: list[tuple] = []
     parse_errors = 0
     for r in rows:
-        if not r.get('id_articulo'):
+        if to_int(r.get('id_articulo')) is None:
             parse_errors += 1
             continue
         try:
@@ -602,6 +640,7 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
     if not typed:
         raise ValueError('Sin filas validas: no se encontro una columna Articulo/id_articulo con datos')
 
+    ensure_articulos_table()
     with pg_conn() as conn:
         with conn.cursor() as cur:
             cur.execute("DELETE FROM articulos")
@@ -611,6 +650,77 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
             result.inserted = ins
             result.errors  += err
 
+    result.elapsed_s = time.perf_counter() - t0
+    return result
+
+
+_ART_FALTANTES_COLS = [
+    'id_articulo', 'bultos_por_pallet', 'pisos', 'apilabilidad',
+    'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado',
+]
+
+
+def _art_faltantes_row(r: dict) -> tuple:
+    bultos_pallet = to_dec(r.get('bultos_por_pallet'))
+    pisos = to_dec(r.get('pisos'))
+    bultos_piso = to_dec(r.get('bultos_por_piso'))
+    if bultos_piso is None and bultos_pallet is not None and pisos not in (None, 0):
+        bultos_piso = bultos_pallet / pisos
+    return (
+        to_int(r.get('id_articulo')),
+        bultos_pallet,
+        pisos,
+        to_dec(r.get('apilabilidad')),
+        bultos_piso,
+        to_dec(r.get('unidades_por_bulto')),
+        str(r.get('movil', '') or '')[:20],
+        str(r.get('anulado', '') or '')[:20],
+    )
+
+
+def load_articulos_faltantes(file_bytes: bytes) -> UploadResult:
+    t0 = time.perf_counter()
+    rows = _parse_articulos_excel(file_bytes) if _looks_like_xlsx(file_bytes) else _parse_csv(file_bytes, ARTICULOS_MAP)
+
+    typed: list[tuple] = []
+    parse_errors = 0
+    for r in rows:
+        if to_int(r.get('id_articulo')) is None:
+            parse_errors += 1
+            continue
+        try:
+            typed.append(_art_faltantes_row(r))
+        except Exception:
+            parse_errors += 1
+
+    result = UploadResult(errors=parse_errors)
+    if not typed:
+        raise ValueError('Sin filas validas para completar datos de articulos')
+
+    ensure_articulos_table()
+    sql = f"""
+        UPDATE articulos a SET
+            bultos_por_pallet = CASE WHEN COALESCE(a.bultos_por_pallet, 0) = 0 THEN v.bultos_por_pallet ELSE a.bultos_por_pallet END,
+            pisos = CASE WHEN COALESCE(a.pisos, 0) = 0 THEN v.pisos ELSE a.pisos END,
+            apilabilidad = CASE WHEN COALESCE(a.apilabilidad, 0) = 0 THEN v.apilabilidad ELSE a.apilabilidad END,
+            bultos_por_piso = CASE WHEN COALESCE(a.bultos_por_piso, 0) = 0 THEN v.bultos_por_piso ELSE a.bultos_por_piso END,
+            unidades_por_bulto = CASE WHEN COALESCE(a.unidades_por_bulto, 0) = 0 THEN v.unidades_por_bulto ELSE a.unidades_por_bulto END,
+            movil = COALESCE(NULLIF(a.movil, ''), NULLIF(v.movil, '')),
+            anulado = COALESCE(NULLIF(a.anulado, ''), NULLIF(v.anulado, '')),
+            actualizado = NOW()
+        FROM (VALUES %s) AS v ({', '.join(_ART_FALTANTES_COLS)})
+        WHERE a.id_articulo = v.id_articulo
+    """
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            execute_values(cur, sql, typed, page_size=BATCH_SIZE)
+            result.inserted = cur.rowcount if cur.rowcount is not None else 0
+
+    result.metadata = {
+        'modo': 'completar_faltantes',
+        'campos': ['bultos_por_pallet', 'pisos', 'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado'],
+        'filas_leidas': len(typed),
+    }
     result.elapsed_s = time.perf_counter() - t0
     return result
 

@@ -88,6 +88,22 @@ def articulos_controlados():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/resumen-articulo")
+@login_required
+def resumen_articulo():
+    try:
+        data = control_stock_svc.get_resumen_por_articulo(
+            fecha_control=request.args.get("fecha"),
+            sucursal=request.args.get("sucursal", "1"),
+            responsable=request.args.get("responsable", ""),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/abc-mensual")
 @login_required
 def abc_mensual():

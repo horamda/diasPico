@@ -21,6 +21,9 @@ def ensure_articulos_table() -> None:
                     descripcion         VARCHAR(255),
                     activo              VARCHAR(10),
                     bultos_por_pallet   DECIMAL(10,4),
+                    pisos               DECIMAL(10,4),
+                    apilabilidad         DECIMAL(10,4),
+                    bultos_por_piso     DECIMAL(10,4),
                     presentacion_bulto  INTEGER,
                     unidades_por_bulto  DECIMAL(10,4),
                     unidad_medida       VARCHAR(50),
@@ -42,6 +45,9 @@ def ensure_articulos_table() -> None:
                     actualizado         TIMESTAMP DEFAULT NOW()
                 );
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bultos_por_pallet DECIMAL(10,4);
+                ALTER TABLE articulos ADD COLUMN IF NOT EXISTS pisos DECIMAL(10,4);
+                ALTER TABLE articulos ADD COLUMN IF NOT EXISTS apilabilidad DECIMAL(10,4);
+                ALTER TABLE articulos ADD COLUMN IF NOT EXISTS bultos_por_piso DECIMAL(10,4);
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS presentacion_bulto INTEGER;
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS unidades_por_bulto DECIMAL(10,4);
                 ALTER TABLE articulos ADD COLUMN IF NOT EXISTS desc_unidad_medida VARCHAR(100);

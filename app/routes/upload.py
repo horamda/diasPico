@@ -31,6 +31,19 @@ def articulos():
         return jsonify({'error': str(e)}), 422
 
 
+@bp.post('/articulos-faltantes')
+def articulos_faltantes():
+    f = request.files.get('file')
+    if not f:
+        return jsonify({'error': 'No file'}), 400
+    try:
+        result = upload_svc.load_articulos_faltantes(f.read())
+        cache_svc.clear()
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 422
+
+
 @bp.post('/resumen')
 def resumen():
     f = request.files.get('file')

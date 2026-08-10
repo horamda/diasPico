@@ -93,6 +93,7 @@ def create_app(env: str | None = None) -> Flask:
         return render_template('frescura_oportunidades.html')
 
     @app.get('/importaciones-datos')
+    @app.get('/importaciones')
     def importaciones_datos():
         guarded = _guard()
         if guarded:

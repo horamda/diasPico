@@ -19,12 +19,15 @@ def _norm_header(value: str) -> str:
 
 
 ARTICULOS_MAP: dict[str, list[str]] = {
-    'id_articulo': ['id articulo', 'id_articulo', 'articulo', 'cod articulo', 'codigo articulo'],
+    'id_articulo': ['id articulo', 'id_articulo', 'articulo', 'cod articulo', 'codigo articulo', 'codigo', 'código'],
     'descripcion': ['descripcion', 'descripcion articulo'],
     'activo': ['activo'],
-    'bultos_por_pallet': ['bultos por pallet', 'bultos_por_pallet'],
+    'bultos_por_pallet': ['bultos por pallet', 'bultos_por_pallet', 'bultos x pallet'],
+    'pisos': ['pisos'],
+    'apilabilidad': ['apilabilidad'],
+    'bultos_por_piso': ['bultos por piso', 'bultos_por_piso', 'bultos x piso'],
     'presentacion_bulto': ['presentacion bulto', 'presentacion_bulto'],
-    'unidades_por_bulto': ['unidades por bulto', 'unidades_por_bulto'],
+    'unidades_por_bulto': ['unidades por bulto', 'unidades_por_bulto', 'unidad x bulto', 'unid x bulto'],
     'unidad_medida': ['unidad de medida', 'unidad medida', 'unidad_medida', 'um'],
     'desc_unidad_medida': [
         'descripcion unidad de medida',
@@ -37,13 +40,13 @@ ARTICULOS_MAP: dict[str, list[str]] = {
     'division': ['division'],
     'familia': ['familia'],
     'marca': ['marca'],
-    'tipo_producto': ['tipo de producto', 'tipo producto', 'tipo_producto'],
+    'tipo_producto': ['tipo de producto', 'tipo producto', 'tipo_producto', 'desc tipo mercaderia', 'desc tipo mercancía', 'desc.tipo mercadería'],
     'unidad_negocio': ['unidad de negocio', 'unidad negocio', 'unidad_negocio'],
     'rotacion_abc': ['rotacion a-b-c', 'rotacion abc', 'rotacion_abc'],
     'grupos_productos': ['grupos de productos', 'grupo de productos', 'grupos_productos'],
     'activo_cc': ['articulos casa central', 'activo cc', 'activo_cc'],
     'activo_dolores': ['articulos sucursal dolores', 'activo dolores', 'activo_dolores'],
-    'movil': ['usado en dispositivo movil', 'usado en dispositivo móvil', 'dispositivo movil', 'dispositivo móvil', 'movil', 'móvil'],
+    'movil': ['usado en dispositivo movil', 'usado en disp movil', 'usado en disp móvil', 'usado en dispositivo móvil', 'dispositivo movil', 'dispositivo móvil', 'movil', 'móvil'],
     'anulado': ['anulado'],
 }
 
