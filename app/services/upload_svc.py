@@ -155,7 +155,12 @@ def _decode_csv_bytes(file_bytes: bytes) -> str:
 
 def _parse_csv(file_bytes: bytes, col_map: dict[str, list[str]] | None = None) -> list[dict]:
     content = _decode_csv_bytes(file_bytes)
-    delim   = ';' if content.count(';') > content.count(',') else ','
+    sample = content[:8192]
+    try:
+        delim = csv.Sniffer().sniff(sample, delimiters=';,\t|').delimiter
+    except csv.Error:
+        first_line = sample.splitlines()[0] if sample.splitlines() else sample
+        delim = ';' if first_line.count(';') >= first_line.count(',') else ','
     reader  = csv.DictReader(io.StringIO(content), delimiter=delim)
     rows    = list(reader)
     if col_map is None:
@@ -657,6 +662,7 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
 _ART_FALTANTES_COLS = [
     'id_articulo', 'bultos_por_pallet', 'pisos', 'apilabilidad',
     'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado',
+    'unidad_negocio', 'tipo_producto',
 ]
 
 
@@ -675,6 +681,8 @@ def _art_faltantes_row(r: dict) -> tuple:
         to_dec(r.get('unidades_por_bulto')),
         str(r.get('movil', '') or '')[:20],
         str(r.get('anulado', '') or '')[:20],
+        str(r.get('unidad_negocio', '') or '')[:100],
+        str(r.get('tipo_producto', '') or '')[:100],
     )
 
 
@@ -707,6 +715,12 @@ def load_articulos_faltantes(file_bytes: bytes) -> UploadResult:
             unidades_por_bulto = CASE WHEN COALESCE(a.unidades_por_bulto, 0) = 0 THEN v.unidades_por_bulto ELSE a.unidades_por_bulto END,
             movil = COALESCE(NULLIF(a.movil, ''), NULLIF(v.movil, '')),
             anulado = COALESCE(NULLIF(a.anulado, ''), NULLIF(v.anulado, '')),
+            unidad_negocio = COALESCE(NULLIF(a.unidad_negocio, ''), NULLIF(v.unidad_negocio, '')),
+            tipo_producto = CASE
+                WHEN NULLIF(TRIM(COALESCE(a.tipo_producto, '')), '') IS NULL OR UPPER(TRIM(a.tipo_producto)) = 'GENERAL'
+                THEN COALESCE(NULLIF(v.tipo_producto, ''), a.tipo_producto)
+                ELSE a.tipo_producto
+            END,
             actualizado = NOW()
         FROM (VALUES %s) AS v ({', '.join(_ART_FALTANTES_COLS)})
         WHERE a.id_articulo = v.id_articulo
@@ -718,8 +732,51 @@ def load_articulos_faltantes(file_bytes: bytes) -> UploadResult:
 
     result.metadata = {
         'modo': 'completar_faltantes',
-        'campos': ['bultos_por_pallet', 'pisos', 'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado'],
+        'campos': ['bultos_por_pallet', 'pisos', 'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado', 'unidad_negocio', 'tipo_producto'],
         'filas_leidas': len(typed),
+    }
+    result.elapsed_s = time.perf_counter() - t0
+    return result
+
+
+def completar_articulos_desde_ventas() -> UploadResult:
+    t0 = time.perf_counter()
+    ensure_articulos_table()
+    ensure_ventas_detalle_table()
+    result = UploadResult()
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                WITH src AS (
+                    SELECT DISTINCT ON (v.id_articulo)
+                        v.id_articulo,
+                        COALESCE(NULLIF(TRIM(v.descripcion_unidad_negocio), ''), NULLIF(TRIM(v.unidad_negocio), '')) AS unidad_negocio,
+                        'MERCADERIA'::varchar AS tipo_producto
+                    FROM ventas_detalle v
+                    WHERE v.id_articulo IS NOT NULL
+                      AND COALESCE(NULLIF(TRIM(v.descripcion_unidad_negocio), ''), NULLIF(TRIM(v.unidad_negocio), '')) IS NOT NULL
+                    ORDER BY v.id_articulo, v.fecha DESC NULLS LAST
+                )
+                UPDATE articulos a SET
+                    unidad_negocio = COALESCE(NULLIF(TRIM(a.unidad_negocio), ''), src.unidad_negocio),
+                    tipo_producto = CASE
+                        WHEN NULLIF(TRIM(COALESCE(a.tipo_producto, '')), '') IS NULL OR UPPER(TRIM(a.tipo_producto)) = 'GENERAL'
+                        THEN src.tipo_producto
+                        ELSE a.tipo_producto
+                    END,
+                    actualizado = NOW()
+                FROM src
+                WHERE a.id_articulo = src.id_articulo
+                  AND (
+                    NULLIF(TRIM(COALESCE(a.unidad_negocio, '')), '') IS NULL
+                    OR NULLIF(TRIM(COALESCE(a.tipo_producto, '')), '') IS NULL
+                    OR UPPER(TRIM(a.tipo_producto)) = 'GENERAL'
+                  )
+            """)
+            result.inserted = cur.rowcount if cur.rowcount is not None else 0
+    result.metadata = {
+        'modo': 'completar_desde_ventas',
+        'campos': ['unidad_negocio', 'tipo_producto'],
     }
     result.elapsed_s = time.perf_counter() - t0
     return result

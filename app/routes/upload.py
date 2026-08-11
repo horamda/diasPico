@@ -44,6 +44,16 @@ def articulos_faltantes():
         return jsonify({'error': str(e)}), 422
 
 
+@bp.post('/articulos-completar-desde-ventas')
+def articulos_completar_desde_ventas():
+    try:
+        result = upload_svc.completar_articulos_desde_ventas()
+        cache_svc.clear()
+        return jsonify(result.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.post('/resumen')
 def resumen():
     f = request.files.get('file')

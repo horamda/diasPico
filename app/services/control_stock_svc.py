@@ -254,7 +254,7 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
                 a.id_articulo,
                 COALESCE(NULLIF(TRIM(a.descripcion), ''), MAX(v.descripcion_articulo), '') AS descripcion,
                 COALESCE(NULLIF(TRIM(a.unidad_negocio), ''), NULLIF(TRIM(MAX(v.descripcion_unidad_negocio)), ''), NULLIF(TRIM(MAX(v.unidad_negocio)), ''), '') AS negocio,
-                COALESCE(NULLIF(TRIM(a.tipo_producto), ''), '') AS tipo_producto,
+                COALESCE(NULLIF(NULLIF(TRIM(a.tipo_producto), ''), 'GENERAL'), 'MERCADERIA') AS tipo_producto,
                 COALESCE(NULLIF(TRIM(a.activo_cc), ''), NULLIF(TRIM(a.activo), ''), '') AS activo_cc,
                 COALESCE(NULLIF(TRIM(a.movil), ''), 'SI') AS movil,
                 COALESCE(NULLIF(TRIM(a.anulado), ''), 'NO') AS anulado,
@@ -965,6 +965,10 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
             })
             if not item["descripcion"] and row.get("descripcion"):
                 item["descripcion"] = row["descripcion"]
+            if not item["negocio"] and row.get("negocio"):
+                item["negocio"] = row["negocio"]
+            if (not item["tipo_producto"] or item["tipo_producto"] == "GENERAL") and row.get("tipo_producto"):
+                item["tipo_producto"] = row["tipo_producto"]
             item["meses"][month_names[month - 1]] = row.get("abc") or ""
 
     rows = []
