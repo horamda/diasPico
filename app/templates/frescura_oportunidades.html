@@ -44,7 +44,7 @@
     }
 
     .hero {
-      background: linear-gradient(135deg, rgba(31, 41, 55, .9), rgba(15, 23, 42, .96));
+      background: linear-gradient(135deg, rgba(21, 128, 61, .22), rgba(15, 23, 42, .96));
       border: 1px solid var(--line);
       border-radius: 18px;
       padding: 18px 20px;
@@ -79,6 +79,14 @@
       min-width: 280px;
     }
 
+    .hero-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      width: 100%;
+    }
+
     .badge {
       display: inline-flex;
       align-items: center;
@@ -103,6 +111,7 @@
       padding: 10px 14px;
       cursor: pointer;
       transition: transform .15s ease, border-color .15s ease, background .15s ease;
+      min-height: 40px;
     }
 
     .btn:hover { transform: translateY(-1px); border-color: var(--line-2); }
@@ -180,6 +189,8 @@
       flex-wrap: wrap;
     }
 
+    .filter-actions .btn { min-width: 112px; }
+
     .cards {
       padding: 14px;
       display: grid;
@@ -196,6 +207,8 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
+      align-items: center;
+      text-align: center;
     }
 
     .card .label {
@@ -263,6 +276,67 @@
     .table-wrap {
       overflow: auto;
     }
+
+    .mobile-list {
+      display: none;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    .article-mobile-card,
+    .error-mobile-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: rgba(255,255,255,.025);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .mobile-card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .mobile-card-head strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .mobile-card-head small,
+    .mobile-card-desc {
+      color: var(--txt-soft);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .mobile-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .mobile-metrics span {
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 10px;
+      background: rgba(255,255,255,.025);
+      padding: 8px 6px;
+      text-align: center;
+      color: var(--txt-soft);
+      font-size: 11px;
+    }
+
+    .mobile-metrics b {
+      display: block;
+      color: var(--txt-main);
+      font: 700 16px/1.15 var(--mono);
+      margin-bottom: 3px;
+    }
+
+    .mobile-card-action .btn { width: 100%; justify-content: center; }
 
     table {
       width: 100%;
@@ -604,21 +678,55 @@
     .neg { color: var(--red) !important; font-weight: 700; }
 
     @media (max-width: 1280px) {
-      .filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+      .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .panel-grid { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 760px) {
-      .page { padding: 12px; }
-      .hero { flex-direction: column; align-items: flex-start; }
-      .hero-meta { width: 100%; justify-content: flex-start; min-width: 0; }
+      .page { padding: 10px; gap: 10px; }
+      .hero { flex-direction: column; align-items: stretch; border-radius: 14px; padding: 14px; }
+      .hero h1 { font-size: 20px; }
+      .hero p { font-size: 12px; }
+      .hero-meta { width: 100%; justify-content: stretch; min-width: 0; }
+      .hero-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .hero-actions .btn { width: 100%; }
+      .badge { width: 100%; justify-content: center; white-space: normal; text-align: center; }
+      .tabs-bar { overflow-x: auto; border-radius: 12px; padding: 4px; }
+      .tab-btn { min-width: max-content; padding: 9px 12px; }
       .filters { grid-template-columns: 1fr; }
+      .filters { border-radius: 14px; padding: 10px; gap: 8px; }
+      .field label { font-size: 10px; }
+      .field input,.field select,.field textarea { min-height: 42px; font-size: 14px; }
+      .filter-actions { display: grid; grid-template-columns: 1fr 1fr; }
+      .filter-actions .btn { width: 100%; min-width: 0; }
+      .filter-actions .btn:last-child { grid-column: 1 / -1; }
       .cards { grid-template-columns: 1fr; }
+      .cards { padding: 10px; gap: 8px; }
+      .card { min-height: 82px; padding: 12px; }
+      .card .value { font-size: 24px; }
+      .section-header { align-items: flex-start; flex-direction: column; padding: 12px; }
+      .section-header .meta { justify-content: flex-start; font-size: 11px; }
+      #tabFrescura .content-grid .table-wrap { display: none; }
+      #articlesMobile { display: grid; }
+      #tabErrores .table-wrap { display: none; }
+      #erroresMobile { display: grid; }
       .detail-grid { grid-template-columns: 1fr; }
       .drawer { width: 100%; }
+      .drawer-header { padding: 12px; }
+      .drawer-header h3 { font-size: 16px; }
+      .drawer-body { padding: 10px; gap: 10px; }
+      .detail-card { text-align: center; }
+      .panel-grid { grid-template-columns: 1fr; }
+      .opportunities-table { min-width: 620px; }
       table { min-width: 1120px; }
+    }
+
+    @media (max-width: 420px) {
+      .hero-actions,.filter-actions,.mobile-metrics { grid-template-columns: 1fr; }
+      .mobile-card-head { flex-direction: column; align-items: center; text-align: center; }
+      .mobile-card-desc { text-align: center; }
     }
   </style>
 </head>
@@ -634,8 +742,10 @@
       </div>
       <div class="hero-meta">
         <span class="badge" id="lastSync">Ultima sincronizacion: -</span>
-        <button class="btn primary" id="syncBtn" onclick="syncFreshness()">Sincronizar</button>
-        <button class="btn ghost" onclick="loadArticles(true)">Solo criticos</button>
+        <div class="hero-actions">
+          <button class="btn primary" id="syncBtn" onclick="syncFreshness()">Sincronizar</button>
+          <button class="btn ghost" onclick="loadArticles(true)">Solo criticos</button>
+        </div>
       </div>
     </section>
 
@@ -712,7 +822,7 @@
       </div>
       <div class="filter-actions" style="grid-column: 1 / -1;">
         <button class="btn small" onclick="resetFilters()">Limpiar</button>
-        <button class="btn small primary" onclick="loadArticles()">Actualizar</button>
+        <button class="btn small primary" id="refreshBtn" onclick="loadArticles(false, true)">Actualizar</button>
         <button class="btn small" onclick="saveConfig()" title="Guardar ventana de cobertura como valor predeterminado">Guardar configuración</button>
       </div>
     </section>
@@ -758,6 +868,7 @@
             </tbody>
           </table>
         </div>
+        <div class="mobile-list" id="articlesMobile"></div>
       </div>
     </section>
   </div>
@@ -810,6 +921,7 @@
           </tbody>
         </table>
       </div>
+      <div class="mobile-list" id="erroresMobile"></div>
     </div>
   </div><!-- /tabErrores -->
 
@@ -1005,6 +1117,11 @@
         btn.disabled = value;
         btn.textContent = value ? label : 'Sincronizar';
       }
+      const refreshBtn = document.getElementById('refreshBtn');
+      if (refreshBtn) {
+        refreshBtn.disabled = value;
+        refreshBtn.textContent = value ? 'Actualizando...' : 'Actualizar';
+      }
     }
 
     function currentFilters() {
@@ -1108,6 +1225,7 @@
       const tbody = document.getElementById('articlesTbody');
       if (!items || !items.length) {
         tbody.innerHTML = '<tr><td colspan="17" class="empty">No hay articulos para los filtros seleccionados.</td></tr>';
+        renderArticleCards([]);
         return;
       }
       tbody.innerHTML = items.map((row) => {
@@ -1148,6 +1266,54 @@
       tbody.querySelectorAll('[data-open-articulo="1"]').forEach((btn) => {
         btn.addEventListener('click', () => openArticulo(btn.dataset.codigo, btn.dataset.sucursal));
       });
+      renderArticleCards(items);
+    }
+
+    function renderArticleCards(items) {
+      const mobile = document.getElementById('articlesMobile');
+      if (!mobile) return;
+      if (!items || !items.length) {
+        mobile.innerHTML = '<div class="empty">No hay articulos para los filtros seleccionados.</div>';
+        return;
+      }
+      mobile.innerHTML = items.map((row) => {
+        const stateName = String(row.estado_frescura || 'SIN_FECHA').toUpperCase();
+        const coverage = Number(row.cobertura_comercial_porcentaje || 0);
+        const lotes = Array.isArray(row.lotes) ? row.lotes : [];
+        const uxb = Number(row.uxb || 0);
+        const bultosTot = Number(row.stock_bultos_total || 0);
+        const unidTot = Number(row.stock_unidades_total || 0);
+        const bultosDisp = bultosTot > 0 ? bultosTot
+                         : (unidTot > 0 && uxb > 0 ? Math.round(unidTot / uxb * 10) / 10
+                         : Number(row.stock_actual || 0));
+        const unidDisp = unidTot > 0 ? fmt.format(unidTot) : '-';
+        return `
+          <article class="article-mobile-card">
+            <div class="mobile-card-head">
+              <div>
+                <strong>${esc(row.codigo_articulo || '-')} · ${esc(row.descripcion_articulo || '-')}</strong>
+                <small>${esc(row.sucursal_nombre || row.sucursal_id || '-')} · ${esc(row.marca || '-')} · ${esc(row.categoria || '-')}</small>
+              </div>
+              <span class="chip ${chipClass(stateName)}">${stateLabel(stateName)}</span>
+            </div>
+            <div class="mobile-metrics">
+              <span><b>${fmt.format(bultosDisp)}</b>Bultos</span>
+              <span><b>${unidDisp}</b>Unidades</span>
+              <span title="${esc(lotTitle(lotes))}"><b>${fmtInt.format(Number(row.lotes_count || lotes.length || 0))}</b>Lotes</span>
+              <span><b>${formatDate(row.proximo_vencimiento || row.fecha_vencimiento)}</b>Vto.</span>
+              <span><b>${row.dias_frescura_restantes == null ? '-' : fmtInt.format(Number(row.dias_frescura_restantes || 0))}</b>Dias</span>
+              <span><b>${fmt.format(coverage)}%</b>Cobertura</span>
+            </div>
+            <div class="mobile-card-desc">${esc(row.accion_sugerida || row.prioridad_accion || '-')}</div>
+            <div class="mobile-card-action">
+              <button class="btn small" data-open-articulo="1" data-codigo="${esc(row.codigo_articulo || '')}" data-sucursal="${esc(row.sucursal_id || '')}">Ver oportunidades</button>
+            </div>
+          </article>
+        `;
+      }).join('');
+      mobile.querySelectorAll('[data-open-articulo="1"]').forEach((btn) => {
+        btn.addEventListener('click', () => openArticulo(btn.dataset.codigo, btn.dataset.sucursal));
+      });
     }
 
     function renderOptions(data) {
@@ -1181,8 +1347,11 @@
       return payload;
     }
 
-    async function loadArticles(forceCritical = false) {
-      const query = buildQuery(forceCritical ? { estado: 'CRITICO,ALERTA' } : {});
+    async function loadArticles(forceCritical = false, bypassCache = false) {
+      const query = buildQuery({
+        ...(forceCritical ? { estado: 'CRITICO,ALERTA' } : {}),
+        ...(bypassCache ? { _refresh: Date.now() } : {}),
+      });
       try {
         setLoading(true, 'Actualizando...');
         const payload = await api(`/api/frescura/articulos?${query}`);
@@ -1348,6 +1517,7 @@
 
       // Tabla
       const tbody = document.getElementById('erroresTbody');
+      renderErrorCards(items);
       if (!items.length) {
         tbody.innerHTML = '<tr><td colspan="10" class="empty" style="color:var(--grn)">✓ Sin lotes con stock negativo.</td></tr>';
         return;
@@ -1367,6 +1537,35 @@
             <td class="mono" style="font-size:11px;color:var(--txt-soft)">${row.fecha_actualizacion ? new Date(row.fecha_actualizacion).toLocaleString('es-AR') : '-'}</td>
             <td style="font-size:12px;color:var(--acc)">Verificar en ERP · corregir ajuste de inventario</td>
           </tr>
+        `;
+      }).join('');
+    }
+
+    function renderErrorCards(items) {
+      const mobile = document.getElementById('erroresMobile');
+      if (!mobile) return;
+      if (!items || !items.length) {
+        mobile.innerHTML = '<div class="empty" style="color:var(--grn)">Sin lotes con stock negativo.</div>';
+        return;
+      }
+      mobile.innerHTML = items.map(row => {
+        const stock = Number(row.stock_actual || 0);
+        return `
+          <article class="error-mobile-card">
+            <div class="mobile-card-head">
+              <div>
+                <strong>${esc(row.codigo_articulo || '-')} · ${esc(row.descripcion_articulo || '-')}</strong>
+                <small>${esc(row.sucursal_nombre || row.sucursal_id || '-')} · ${esc(row.marca || '-')}</small>
+              </div>
+              <span class="chip ${chipClass(row.estado_frescura)}">${stateLabel(row.estado_frescura)}</span>
+            </div>
+            <div class="mobile-metrics">
+              <span><b class="neg">${fmt.format(stock)}</b>Stock</span>
+              <span><b>${esc(row.lote || 'SIN_LOTE')}</b>Lote</span>
+              <span><b>${formatDate(row.fecha_vencimiento)}</b>Vto.</span>
+            </div>
+            <div class="mobile-card-desc">Verificar en ERP · corregir ajuste de inventario</div>
+          </article>
         `;
       }).join('');
     }

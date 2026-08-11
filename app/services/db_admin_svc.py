@@ -27,7 +27,7 @@ PROTECTED_TABLES = {
 MODULES = [
     {
         'id': 'admin',
-        'nombre': 'Panel proyecto',
+        'nombre': 'Portal_Logistica',
         'url': '/dashboard',
         'api': '/api/admin-proyecto/dashboard',
         'health_api': '/api/admin-proyecto/dashboard',

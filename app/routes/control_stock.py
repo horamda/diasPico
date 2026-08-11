@@ -135,6 +135,18 @@ def guardar_conteo():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.post("/conteos/validar-dispersion")
+@login_required
+def validar_dispersion_conteo():
+    try:
+        data = control_stock_svc.validar_dispersion_conteo(request.get_json(force=True) or {})
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/responsables")
 @login_required
 def responsables():

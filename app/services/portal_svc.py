@@ -55,7 +55,7 @@ _DEFAULT_MODULES = (
     },
     {
         'codigo': 'panel_proyecto',
-        'titulo': 'Panel Proyecto',
+        'titulo': 'Portal_Logistica',
         'descripcion': 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
         'ruta': '/dashboard',
         'image_url': 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=60',
@@ -121,6 +121,14 @@ def ensure_tables() -> None:
                            ON CONFLICT (codigo) DO NOTHING""",
                         mod,
                     )
+                cur.execute(
+                    """UPDATE portal_modulos
+                       SET titulo = 'Portal_Logistica',
+                           descripcion = 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
+                           updated_at = NOW()
+                       WHERE codigo = 'panel_proyecto'
+                         AND titulo IN ('Panel Proyecto', 'Panel proyecto')"""
+                )
 
                 # Conservar acceso para usuarios ya creados en modulos
                 # operativos agregados despues del setup inicial.

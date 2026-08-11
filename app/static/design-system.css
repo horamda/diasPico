@@ -1,5 +1,5 @@
 /*
- * Design System — Logística Distribuidores DPO
+ * Design System — Portal_Logistica
  * Canonical tokens, typography, and shared components.
  * Every template imports this file; inline :root vars are removed.
  */
@@ -72,6 +72,91 @@
   --t-slow: .22s ease;
 }
 
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg:    #eef3f8;
+  --surf:  #ffffff;
+  --surf2: #f7fafc;
+  --surf3: #edf3f8;
+  --surf4: #d8e2ec;
+
+  --brd:  #c8d4df;
+  --brd2: #9fb0c1;
+
+  --txt:   #0f172a;
+  --txt2:  #334155;
+  --muted: #64748b;
+
+  --acc:    #2563eb;
+  --acc-dk: #1d4ed8;
+  --acc-bg: rgba(37,99,235,.10);
+  --acc-bd: rgba(37,99,235,.28);
+
+  --grn:    #15803d;
+  --grn-bg: #dcfce7;
+  --grn-bd: #86efac;
+
+  --red:    #b91c1c;
+  --red-bg: #fee2e2;
+  --red-bd: #fecaca;
+
+  --blu:    #2563eb;
+  --blu-bg: #dbeafe;
+  --blu-bd: #bfdbfe;
+
+  --pur:    #6d28d9;
+  --pur-bg: #f3e8ff;
+  --pur-bd: #ddd6fe;
+
+  --ora:    #b45309;
+  --ora-bg: #fef3c7;
+  --ora-bd: #fde68a;
+
+  --shadow-sm: 0 1px 2px rgba(15,23,42,.08);
+  --shadow:    0 2px 10px rgba(15,23,42,.10);
+  --shadow-lg: 0 10px 30px rgba(15,23,42,.18);
+}
+
+:root[data-theme="dark"] {
+  --surface: var(--surf);
+  --surface2: var(--surf2);
+  --border: var(--brd);
+  --text: var(--txt);
+  --accent: var(--acc);
+  --green: var(--grn);
+  --amber: var(--ora);
+  --panel: var(--surf);
+  --panel-2: var(--surf2);
+  --line: var(--brd);
+  --line-2: var(--brd2);
+  --txt-main: var(--txt);
+  --txt-soft: var(--muted);
+  --shadow-soft: var(--shadow);
+}
+
+:root[data-theme="light"] {
+  --surface: var(--surf);
+  --surface2: var(--surf2);
+  --border: var(--brd);
+  --text: var(--txt);
+  --accent: var(--acc);
+  --green: var(--grn);
+  --amber: var(--ora);
+  --panel: var(--surf);
+  --panel-2: var(--surf2);
+  --line: var(--brd);
+  --line-2: var(--brd2);
+  --txt-main: var(--txt);
+  --txt-soft: var(--muted);
+  --shadow-soft: var(--shadow);
+}
+
 /* ── RESET & BASE ────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -84,6 +169,190 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   min-height: 100vh;
+}
+
+.theme-toggle {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 9999;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 0 13px;
+  border: 1px solid var(--brd2);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surf) 92%, transparent);
+  color: var(--txt);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
+  font: 700 12px var(--sans);
+  cursor: pointer;
+}
+.theme-toggle:hover {
+  background: var(--surf2);
+}
+.theme-toggle .theme-icon {
+  font-size: 15px;
+  line-height: 1;
+}
+
+:root[data-theme="light"] body {
+  background: var(--bg) !important;
+  color: var(--txt) !important;
+}
+
+:root[data-theme="light"] .shell,
+:root[data-theme="light"] .page,
+:root[data-theme="light"] .main {
+  background: var(--bg);
+  color: var(--txt);
+}
+
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .card,
+:root[data-theme="light"] .box,
+:root[data-theme="light"] .section,
+:root[data-theme="light"] .toolbar,
+:root[data-theme="light"] .tabs,
+:root[data-theme="light"] .table-wrap,
+:root[data-theme="light"] .chart-panel,
+:root[data-theme="light"] .kpi-card,
+:root[data-theme="light"] .mobile-card,
+:root[data-theme="light"] .drawer,
+:root[data-theme="light"] .sidebar,
+:root[data-theme="light"] .topbar {
+  background-color: var(--surf) !important;
+  color: var(--txt) !important;
+  border-color: var(--brd) !important;
+}
+
+:root[data-theme="light"] .tabs,
+:root[data-theme="light"] .toolbar,
+:root[data-theme="light"] .mobile-group,
+:root[data-theme="light"] .stats {
+  background-color: var(--surf3) !important;
+}
+
+:root[data-theme="light"] input,
+:root[data-theme="light"] select,
+:root[data-theme="light"] textarea {
+  background-color: #fff !important;
+  color: var(--txt) !important;
+  border-color: var(--brd2) !important;
+}
+
+:root[data-theme="light"] select option {
+  background: #fff !important;
+  color: var(--txt) !important;
+}
+
+:root[data-theme="light"] table,
+:root[data-theme="light"] td {
+  color: var(--txt) !important;
+}
+
+:root[data-theme="light"] th {
+  background: #d8e6f0 !important;
+  color: #003b73 !important;
+}
+
+:root[data-theme="light"] tbody tr:nth-child(even) td {
+  background: #f8fafc;
+}
+
+:root[data-theme="light"] tbody tr:hover td {
+  background: #eef6ff !important;
+}
+
+:root[data-theme="dark"] body {
+  background: var(--bg) !important;
+  color: var(--txt) !important;
+}
+
+:root[data-theme="dark"] .shell,
+:root[data-theme="dark"] .page,
+:root[data-theme="dark"] .main {
+  background: var(--bg);
+  color: var(--txt);
+}
+
+:root[data-theme="dark"] .panel,
+:root[data-theme="dark"] .card,
+:root[data-theme="dark"] .box,
+:root[data-theme="dark"] .section,
+:root[data-theme="dark"] .toolbar,
+:root[data-theme="dark"] .tabs,
+:root[data-theme="dark"] .table-wrap,
+:root[data-theme="dark"] .chart-panel,
+:root[data-theme="dark"] .kpi-card,
+:root[data-theme="dark"] .mobile-card,
+:root[data-theme="dark"] .drawer,
+:root[data-theme="dark"] .sidebar,
+:root[data-theme="dark"] .topbar,
+:root[data-theme="dark"] .save-footer,
+:root[data-theme="dark"] .abc-mobile-card {
+  background-color: var(--surf) !important;
+  color: var(--txt) !important;
+  border-color: var(--brd) !important;
+}
+
+:root[data-theme="dark"] .tabs,
+:root[data-theme="dark"] .toolbar,
+:root[data-theme="dark"] .mobile-group,
+:root[data-theme="dark"] .stats,
+:root[data-theme="dark"] .pill,
+:root[data-theme="dark"] .bar-track,
+:root[data-theme="dark"] .pending-row,
+:root[data-theme="dark"] .abc-month-pill,
+:root[data-theme="dark"] .abc-mobile-obs {
+  background-color: var(--surf2) !important;
+  color: var(--txt2) !important;
+  border-color: var(--brd) !important;
+}
+
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea {
+  background-color: var(--surf2) !important;
+  color: var(--txt) !important;
+  border-color: var(--brd2) !important;
+}
+
+:root[data-theme="dark"] select option {
+  background: var(--surf2) !important;
+  color: var(--txt) !important;
+}
+
+:root[data-theme="dark"] table,
+:root[data-theme="dark"] td {
+  background-color: var(--surf) !important;
+  color: var(--txt) !important;
+}
+
+:root[data-theme="dark"] th {
+  background: var(--surf3) !important;
+  color: var(--txt2) !important;
+}
+
+:root[data-theme="dark"] tbody tr:nth-child(even) td {
+  background: var(--surf2) !important;
+}
+
+:root[data-theme="dark"] tbody tr:hover td {
+  background: var(--surf3) !important;
+}
+
+@media (max-width: 760px) {
+  .theme-toggle {
+    right: 10px;
+    bottom: 10px;
+    min-height: 38px;
+    padding: 0 11px;
+    font-size: 11px;
+  }
 }
 
 /* ── SCROLLBAR ───────────────────────────────────────────────── */

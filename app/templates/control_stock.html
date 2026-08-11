@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Control de stock · DPO</title>
+  <title>Control de stock · Portal_Logistica</title>
   {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
   <style>
@@ -240,7 +240,7 @@
       <div class="save-title">Finalizar control</div>
       <div class="save-sub" id="saveFooterSummary">Revisá las cantidades antes de guardar.</div>
     </div>
-    <button class="btn ok save-btn" onclick="guardarConteo()">Guardar control y finalizar</button>
+    <button class="btn ok save-btn" id="guardarConteoBtn" onclick="guardarConteo()">Guardar control y finalizar</button>
   </section>
   </section>
 
@@ -400,6 +400,9 @@ let articulosLoaded = false;
 let abcMensualLoaded = false;
 let respLoaded = false;
 let mobileIndex = 0;
+let conteoGuardado = false;
+let guardandoConteo = false;
+let dispersionReviewKey = '';
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function cargarSucursales(){
@@ -829,6 +832,7 @@ function actualizarTotales(markTime=true){
   if(err) err.style.display='none';
   const now=new Date().toTimeString().slice(0,5);
   if(markTime){
+    dispersionReviewKey='';
     if(!horaInicio.value) horaInicio.value=now;
   }
   let totalGeneral=0;
@@ -868,6 +872,23 @@ function showMobileValidation(){
   const err=document.getElementById('mobileError');
   if(card) card.classList.add('invalid');
   if(err) err.style.display='block';
+}
+function dispersionSignature(payload){
+  return JSON.stringify({
+    mes:payload.mes,
+    sucursal:payload.sucursal,
+    semana:payload.semana,
+    dia:payload.dia,
+    fecha:payload.fecha,
+    responsable:payload.responsable,
+    items:payload.items.map(i=>[i.id_articulo,i.stock,i.unidades_sueltas,i.cantidad_1,i.cantidad_2,i.cantidad_3,i.cantidad_4,i.cantidad_5,i.cantidad_6])
+  });
+}
+async function validarDispersionAntesDeGuardar(payload){
+  const res=await fetch('/api/control-stock/conteos/validar-dispersion',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await res.json();
+  if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo validar dispersion');
+  return data.data||{};
 }
 function renderMobileCards(){
   if(!currentRows.length){cards.innerHTML='';return}
@@ -943,6 +964,13 @@ function cargarBorradorLocal(){
 async function loadPlanilla(){
   const f=filtrosEfectivos();
   const params=new URLSearchParams({mes:mes.value||defaultMonth(),sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value});
+  conteoGuardado=false;
+  guardandoConteo=false;
+  dispersionReviewKey='';
+  if(typeof guardarConteoBtn!=='undefined'&&guardarConteoBtn){
+    guardarConteoBtn.disabled=false;
+    guardarConteoBtn.textContent='Guardar control y finalizar';
+  }
   status.textContent='Cargando planilla...';
   const res=await fetch('/api/control-stock/planilla?'+params);
   const data=await res.json();
@@ -997,6 +1025,17 @@ async function loadPlanilla(){
   }
 }
 async function guardarConteo(){
+  if(conteoGuardado){
+    alert('Este control ya fue guardado. No se puede volver a grabar el mismo conteo.');
+    status.textContent='Este control ya fue guardado. Para hacer otro conteo cambia fecha, sucursal o responsable y actualiza la planilla.';
+    return;
+  }
+  if(guardandoConteo) return;
+  if(!responsable.value){
+    status.textContent='Selecciona el responsable antes de guardar.';
+    responsable.focus();
+    return;
+  }
   const faltante=currentRows.find(r=>!rowTouched(r));
   if(faltante){
     mobileIndex=Math.max(0,currentRows.findIndex(r=>r.id_articulo===faltante.id_articulo));
@@ -1008,12 +1047,70 @@ async function guardarConteo(){
   const items=currentRows.map(r=>{const a=cantidadInputs(r.id_articulo);const b=cantidadInputs(String(r.id_articulo)+'m');const chosen=(a.total||a.unidades)?a:b;const norm=normalizarConteo(r,chosen);return {id_articulo:r.id_articulo,descripcion:r.descripcion,abc:r.abc,semana:rowSemana(r),dia:rowDia(r),cantidad_1:chosen.values[0],cantidad_2:chosen.values[1],cantidad_3:chosen.values[2],cantidad_4:chosen.values[3],cantidad_5:chosen.values[4],cantidad_6:chosen.values[5],unidades_sueltas:norm.unidades,stock:norm.bultos,diferencia:false,observacion:`Bultos: ${chosen.values.join(' + ')} | Unidades cargadas: ${chosen.unidades} | Convierte: ${norm.bultosDesdeUnidades} bultos | Total: ${norm.bultos} bultos con ${norm.unidades} unidades`}});
   const f=filtrosEfectivos();
   const payload={mes:mes.value,sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value,fecha:fecha.value,responsable:responsable.value,hora_inicio:horaInicio.value,hora_fin:horaFin.value,observaciones:observaciones.value,items};
+  const sig=dispersionSignature(payload);
+  estado.value='Validando...';
+  try{
+    const validacion=await validarDispersionAntesDeGuardar(payload);
+    const alertas=validacion.alertas_dispersion||[];
+    if(alertas.length&&dispersionReviewKey!==sig){
+      dispersionReviewKey=sig;
+      const lista=alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n');
+      const firstId=Number(alertas[0].id_articulo);
+      const idx=currentRows.findIndex(r=>Number(r.id_articulo)===firstId);
+      if(idx>=0&&isMobileConteo()){
+        mobileIndex=idx;
+        renderMobileCards();
+      }
+      estado.value='Revisar dispersion';
+      status.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante antes de guardar.`;
+      alert(`Antes de guardar, volve a controlar estos articulos:\n\n${lista}${alertas.length>8?'\n...':''}\n\nNo se muestra el stock esperado. Revisalos fisicamente y luego volve a guardar.`);
+      return;
+    }
+    if(alertas.length&&!confirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)){
+      estado.value='Sin guardar';
+      status.textContent='Conteo sin guardar. Revisar articulos con dispersion.';
+      return;
+    }
+  }catch(error){
+    estado.value='Error';
+    status.textContent='Error: '+(error.message||'No se pudo validar dispersion');
+    return;
+  }
+  const cargados=saveFooterSummary?.dataset?.loaded||currentRows.length;
+  if(!confirm(`Vas a finalizar y guardar este control con ${cargados} articulos. Despues no se podra volver a grabar el mismo conteo. Confirmas?`)) return;
+  guardandoConteo=true;
+  if(guardarConteoBtn){
+    guardarConteoBtn.disabled=true;
+    guardarConteoBtn.textContent='Guardando...';
+  }
   estado.value='Guardando...';
   const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const data=await res.json();
-  if(!res.ok||data.ok===false){estado.value='Error';status.textContent='Error: '+(data.error||'No se pudo guardar');return}
+  if(!res.ok||data.ok===false){
+    estado.value='Error';
+    const msg=data.error||'No se pudo guardar';
+    status.textContent='Error: '+msg;
+    if(String(msg).toLowerCase().includes('ya existe')){
+      conteoGuardado=true;
+      if(guardarConteoBtn) guardarConteoBtn.textContent='Conteo ya guardado';
+      alert(msg);
+    }else if(guardarConteoBtn){
+      guardarConteoBtn.disabled=false;
+      guardarConteoBtn.textContent='Guardar control y finalizar';
+    }
+    guardandoConteo=false;
+    return;
+  }
+  conteoGuardado=true;
   estado.value=`Guardado #${data.data.id}`;
-  status.textContent=`Control guardado. Items: ${data.data.items_guardados}`;
+  const alertasDispersion=Number(data.data.total_alertas_dispersion||0);
+  status.textContent=alertasDispersion
+    ? `Control guardado correctamente. Items: ${data.data.items_guardados}. Atencion: ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Revisar con supervisor.`
+    : `Control guardado correctamente. Items: ${data.data.items_guardados}. No se puede volver a grabar el mismo conteo.`;
+  if(guardarConteoBtn) guardarConteoBtn.textContent='Control guardado';
+  alert(alertasDispersion
+    ? `Control guardado correctamente. Hay ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Avisar o revisar con supervisor.`
+    : `Control guardado correctamente. Se registraron ${data.data.items_guardados} articulos.`);
   localStorage.removeItem(draftKey());
   resumenLoaded=false;
   resumenArticuloLoaded=false;
@@ -1021,6 +1118,7 @@ async function guardarConteo(){
   loadResumenMensual();
   loadResumenArticulo();
   loadArticulosControlados();
+  guardandoConteo=false;
 }
 (async function initControlStock(){
   mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();fechaResumenArticulo.value=today();semana.value='AUTO';dia.value='AUTO';

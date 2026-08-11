@@ -3,132 +3,173 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Administrar accesos</title>
-{% include 'partials/head_icons.html' %}
+  <title>Usuarios y accesos · Portal_Logistica</title>
+  {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="/static/design-system.css">
   <style>
-    /* map legacy variables to dark theme tokens */
     :root {
-      --panel:     var(--surf);
-      --line:      var(--brd);
-      --line-soft: var(--brd);
-      --text:      var(--txt);
-      --primary:   var(--acc);
-      --danger:    var(--red);
+      --panel: var(--surf);
+      --panel-2: var(--surf2);
+      --line: var(--brd);
+      --line-2: var(--brd2);
+      --text: var(--txt);
+      --soft: var(--muted);
+      --primary: var(--acc);
+      --danger: var(--red);
+      --ok: var(--grn);
     }
-    body { background: var(--bg); }
-    .shell { width: min(1360px, 100%); margin: 0 auto; padding: 16px; display: grid; gap: 12px; }
-    .top {
-      display: grid;
-      grid-template-columns: minmax(260px, 1fr) auto;
-      gap: 10px;
-      align-items: center;
-    }
-    h1 { margin: 0; font-size: 23px; }
-    .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+    body { background: var(--bg); color: var(--text); }
+    button, input, select, textarea { font: inherit; }
+    .shell { width: min(1440px, 100%); margin: 0 auto; padding: 16px; display: grid; gap: 14px; }
+    .top { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: 12px; align-items: end; }
+    .eyebrow { font: 800 11px var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--primary); }
+    h1 { margin: 3px 0; font-size: 26px; line-height: 1.1; }
+    .sub { color: var(--soft); font-size: 13px; }
     .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .btn {
-      min-height: 34px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fff;
-      color: var(--text);
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 7px 12px;
-      font-size: 13px;
-      font-weight: 700;
-      cursor: pointer;
+      min-height: 38px; border: 1px solid var(--line-2); border-radius: 8px;
+      background: var(--panel); color: var(--text); text-decoration: none;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 8px 12px; font-size: 13px; font-weight: 800; cursor: pointer;
     }
+    .btn:hover { background: var(--panel-2); }
     .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
     .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
-    .layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .btn.ghost { background: transparent; }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+    .kpi {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 13px;
+      min-height: 94px; display: grid; align-content: space-between; text-align: center;
+    }
+    .kpi .label { color: var(--soft); font-size: 11px; font-weight: 850; text-transform: uppercase; }
+    .kpi .value { font: 850 26px/1 var(--mono); }
+    .kpi .note { color: var(--soft); font-size: 12px; }
+    .tabs {
+      display: flex; gap: 4px; overflow-x: auto; padding: 4px; border: 1px solid var(--line);
+      border-radius: 10px; background: var(--panel);
+    }
+    .tab {
+      flex: 0 0 auto; min-height: 38px; border: 0; border-radius: 8px; background: transparent;
+      color: var(--soft); padding: 8px 13px; font-size: 13px; font-weight: 850; cursor: pointer;
+    }
+    .tab.active { background: var(--panel-2); color: var(--text); box-shadow: var(--shadow-sm); }
+    .view { display: none; gap: 12px; }
+    .view.active { display: grid; }
+    .grid-2 { display: grid; grid-template-columns: minmax(0, .95fr) minmax(360px, .75fr); gap: 12px; align-items: start; }
     .panel {
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--panel);
-      min-width: 0;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; overflow: hidden;
     }
     .panel-head {
-      min-height: 48px;
-      padding: 12px 14px;
-      border-bottom: 1px solid var(--line-soft);
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      min-height: 54px; padding: 12px 14px; border-bottom: 1px solid var(--line);
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
     }
-    .panel-title { font-size: 15px; font-weight: 800; }
-    .panel-body { padding: 12px 14px; }
-    .meta { color: var(--muted); font-size: 12px; font-family: Consolas, "SFMono-Regular", monospace; }
+    .panel-title { font-size: 15px; font-weight: 900; }
+    .meta { color: var(--soft); font-size: 12px; font-family: var(--mono); }
+    .panel-body { padding: 14px; }
+    .hint {
+      border: 1px solid var(--blu-bd); background: var(--blu-bg); color: var(--blu);
+      border-radius: 9px; padding: 10px 12px; font-size: 12px; line-height: 1.45; margin-bottom: 12px;
+    }
     .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; color: var(--muted); }
-    input, textarea, select {
-      min-height: 36px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px 10px;
-      outline: none;
-      font: inherit;
+    label.field { display: grid; gap: 5px; font-size: 11px; font-weight: 850; color: var(--soft); text-transform: uppercase; }
+    .field input, .field textarea, .field select {
+      width: 100%; min-height: 40px; border: 1px solid var(--line-2); border-radius: 8px;
+      padding: 8px 10px; outline: none; background: var(--panel-2); color: var(--text);
+      text-transform: none; font-size: 13px; font-weight: 500;
     }
-    textarea { min-height: 78px; resize: vertical; }
-    input:focus, textarea:focus, select:focus {
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, .12);
-    }
-    .check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
-    .check input { min-height: auto; width: auto; }
-    .table-wrap { width: 100%; overflow: auto; border-top: 1px solid var(--line-soft); }
-    table { width: 100%; border-collapse: collapse; min-width: 680px; }
-    th {
-      background: #f6f9fd;
-      height: 36px;
-      padding: 6px 10px;
-      font-size: 11px;
-      color: var(--muted);
-      text-align: left;
-      text-transform: uppercase;
-      border-bottom: 1px solid var(--line);
-    }
-    td {
-      padding: 8px 10px;
-      border-bottom: 1px solid var(--line-soft);
-      font-size: 13px;
-      white-space: nowrap;
-    }
-    .ops { display: inline-flex; gap: 6px; }
-    .ops button { min-height: 28px; padding: 4px 8px; font-size: 12px; }
+    textarea { min-height: 82px; resize: vertical; }
+    .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--acc-bg); }
+    .check { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text); font-size: 13px; font-weight: 750; text-transform: none; }
+    .check input { width: 18px; height: 18px; min-height: 0; }
     .full { grid-column: 1 / -1; }
-    .acc-list {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 8px;
-      max-height: 260px;
-      overflow: auto;
-      padding: 4px 2px;
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .toolbar input, .toolbar select {
+      min-height: 38px; border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 10px;
+      background: var(--panel-2); color: var(--text); min-width: 210px;
     }
-    .acc-item {
+    .table-wrap { width: 100%; overflow: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; }
+    th {
+      position: sticky; top: 0; z-index: 1; background: var(--panel-2); color: var(--soft);
+      height: 38px; padding: 8px 10px; text-align: left; text-transform: uppercase; font-size: 10px; border-bottom: 1px solid var(--line);
+    }
+    td { padding: 8px 10px; border-bottom: 1px solid var(--line); font-size: 13px; white-space: nowrap; }
+    .ops { display: inline-flex; gap: 6px; }
+    .ops .btn { min-height: 30px; padding: 5px 8px; font-size: 12px; }
+    .chip {
+      display: inline-flex; align-items: center; justify-content: center; min-height: 24px;
+      border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 850;
       border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px;
-      display: grid;
-      gap: 4px;
     }
-    .error {
-      border: 1px solid #ffc9c2;
-      background: #fff0ed;
-      color: #9b1c1c;
-      border-radius: 8px;
-      padding: 10px;
-      font-size: 13px;
+    .chip.ok { color: var(--ok); background: var(--grn-bg); border-color: var(--grn-bd); }
+    .chip.warn { color: var(--ora); background: var(--ora-bg); border-color: var(--ora-bd); }
+    .chip.off { color: var(--danger); background: var(--red-bg); border-color: var(--red-bd); }
+    .access-layout { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+    .user-picker { display: grid; gap: 8px; }
+    .user-card {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px; cursor: pointer;
+      background: var(--panel); display: grid; gap: 4px;
     }
-    @media (max-width: 1080px) { .layout { grid-template-columns: 1fr; } }
+    .user-card.active { border-color: var(--primary); box-shadow: 0 0 0 3px var(--acc-bg); }
+    .user-card strong { font-size: 14px; }
+    .user-card small { color: var(--soft); font-size: 12px; }
+    .acc-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .acc-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 9px; }
+    .acc-item {
+      border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 5px;
+      background: var(--panel); cursor: pointer;
+    }
+    .acc-item.enabled { border-color: var(--grn-bd); background: var(--grn-bg); }
+    .acc-item .check { min-height: 0; align-items: flex-start; }
+    .acc-item .meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mobile-list { display: none; padding: 10px; gap: 8px; }
+    .mobile-row-card {
+      border: 1px solid var(--line); border-radius: 10px; padding: 11px; display: grid; gap: 8px;
+      background: var(--panel);
+    }
+    .mobile-head { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+    .mobile-head strong { display: block; font-size: 14px; }
+    .mobile-head small { display: block; color: var(--soft); font-size: 12px; margin-top: 2px; }
+    .error, .toast {
+      border-radius: 9px; padding: 10px 12px; font-size: 13px; line-height: 1.4;
+      border: 1px solid var(--red-bd); background: var(--red-bg); color: var(--danger);
+    }
+    .toast { border-color: var(--grn-bd); background: var(--grn-bg); color: var(--ok); }
+    .modal-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 200;
+      display: none; align-items: center; justify-content: center; padding: 14px;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      width: min(560px, 100%); max-height: calc(100vh - 28px); overflow: auto;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-lg);
+    }
+    .modal-head { padding: 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .modal-title { font-size: 16px; font-weight: 900; }
+    .modal-body { padding: 14px; }
+    @media (max-width: 1080px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .grid-2, .access-layout { grid-template-columns: 1fr; }
+    }
     @media (max-width: 720px) {
-      .top { grid-template-columns: 1fr; }
-      .actions { justify-content: flex-start; }
+      .shell { padding: 10px; gap: 10px; }
+      .top { grid-template-columns: 1fr; align-items: start; }
+      .actions { justify-content: stretch; display: grid; grid-template-columns: 1fr 1fr; }
+      .actions .btn { width: 100%; }
+      h1 { font-size: 22px; }
+      .summary { grid-template-columns: 1fr; }
+      .tabs { margin: 0 -2px; }
+      .tab { min-width: max-content; }
+      .panel-head { flex-direction: column; align-items: stretch; }
+      .toolbar { display: grid; grid-template-columns: 1fr; }
+      .toolbar input, .toolbar select, .toolbar .btn { width: 100%; min-width: 0; }
       .form-grid { grid-template-columns: 1fr; }
+      .table-wrap { display: none; }
+      .mobile-list { display: grid; }
+      .acc-tools { display: grid; grid-template-columns: 1fr 1fr; }
+      .acc-tools .btn:last-child { grid-column: 1 / -1; }
+      .acc-list { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -136,8 +177,9 @@
   <main class="shell">
     <header class="top">
       <div>
-        <h1>Administracion de accesos</h1>
-        <div class="sub">{{ user.nombre }} (admin)</div>
+        <div class="eyebrow">Portal · Seguridad</div>
+        <h1>Usuarios y accesos</h1>
+        <div class="sub">Administra usuarios, permisos por modulo y disponibilidad del portal. Sesion: {{ user.nombre }}.</div>
       </div>
       <div class="actions">
         <a class="btn" href="/portal">Volver al portal</a>
@@ -145,61 +187,136 @@
       </div>
     </header>
 
-    <section class="layout">
-      <article class="panel">
-        <div class="panel-head"><div class="panel-title">Modulos</div><div class="meta" id="modMeta"></div></div>
-        <div class="panel-body">
-          <form id="moduleForm" class="form-grid">
-            <label>Codigo<input id="mCodigo" required></label>
-            <label>Titulo<input id="mTitulo" required></label>
-            <label class="full">Descripcion<textarea id="mDescripcion"></textarea></label>
-            <label>Ruta<input id="mRuta" required placeholder="/ruta-modulo"></label>
-            <label>Imagen URL<input id="mImage"></label>
-            <label>Orden<input id="mOrden" type="number" value="100"></label>
-            <label class="check"><input id="mActivo" type="checkbox" checked>Activo</label>
-            <div class="full"><button class="btn primary" type="submit">Crear modulo</button></div>
-          </form>
-        </div>
-        <div class="table-wrap"><table id="modulesTable"></table></div>
-      </article>
+    <section class="summary" id="summaryCards">
+      <article class="kpi"><div class="label">Usuarios</div><div class="value" id="kUsers">0</div><div class="note">total creados</div></article>
+      <article class="kpi"><div class="label">Activos</div><div class="value" id="kActive">0</div><div class="note">pueden iniciar sesion</div></article>
+      <article class="kpi"><div class="label">Administradores</div><div class="value" id="kAdmins">0</div><div class="note">ven todos los modulos</div></article>
+      <article class="kpi"><div class="label">Modulos</div><div class="value" id="kModules">0</div><div class="note">publicados en portal</div></article>
+    </section>
 
+    <nav class="tabs" aria-label="Administracion de accesos">
+      <button class="tab active" data-view="users" type="button">Usuarios</button>
+      <button class="tab" data-view="access" type="button">Accesos por usuario</button>
+      <button class="tab" data-view="modules" type="button">Modulos del portal</button>
+    </nav>
+
+    <section class="view active" id="view-users">
+      <div class="grid-2">
+        <article class="panel">
+          <div class="panel-head">
+            <div><div class="panel-title">Usuarios</div><div class="meta" id="usrMeta">Cargando...</div></div>
+            <div class="toolbar">
+              <input id="userSearch" placeholder="Buscar usuario o nombre">
+              <select id="userStatus"><option value="">Todos</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option><option value="admin">Administradores</option></select>
+            </div>
+          </div>
+          <div class="table-wrap"><table id="usersTable"></table></div>
+          <div class="mobile-list" id="usersMobile"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><div class="panel-title" id="userFormTitle">Crear usuario</div><div class="meta">Password minimo 6 caracteres</div></div>
+          <div class="panel-body">
+            <div class="hint">Un usuario administrador ve todos los modulos aunque no tenga permisos marcados. Para usuarios normales, los permisos se definen en la solapa Accesos por usuario.</div>
+            <form id="userForm" class="form-grid">
+              <input id="uId" type="hidden">
+              <label class="field">Nombre<input id="uNombre" required placeholder="Nombre y apellido"></label>
+              <label class="field">Usuario<input id="uUsername" required placeholder="usuario"></label>
+              <label class="field">Password<input id="uPassword" type="password" placeholder="Solo completar para crear o cambiar"></label>
+              <label class="check"><input id="uAdmin" type="checkbox">Administrador</label>
+              <label class="check"><input id="uActivo" type="checkbox" checked>Usuario activo</label>
+              <div class="full actions">
+                <button class="btn primary" id="saveUserBtn" type="submit">Crear usuario</button>
+                <button class="btn ghost" id="cancelUserBtn" type="button">Limpiar</button>
+              </div>
+            </form>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="view" id="view-access">
       <article class="panel">
-        <div class="panel-head"><div class="panel-title">Usuarios</div><div class="meta" id="usrMeta"></div></div>
-        <div class="panel-body">
-          <form id="userForm" class="form-grid">
-            <label>Nombre<input id="uNombre" required></label>
-            <label>Usuario<input id="uUsername" required></label>
-            <label>Password<input id="uPassword" type="password" required></label>
-            <label class="check"><input id="uAdmin" type="checkbox">Es admin</label>
-            <label class="check"><input id="uActivo" type="checkbox" checked>Activo</label>
-            <div class="full"><button class="btn primary" type="submit">Crear usuario</button></div>
-          </form>
+        <div class="panel-head">
+          <div><div class="panel-title">Accesos por usuario</div><div class="meta" id="accMeta">Selecciona un usuario</div></div>
+          <button class="btn primary" id="saveAccBtn" type="button">Guardar accesos</button>
         </div>
-        <div class="table-wrap"><table id="usersTable"></table></div>
+        <div class="panel-body">
+          <div class="hint">Marca los modulos que el usuario puede abrir desde el portal. Si el usuario es administrador, el sistema le permite ver todos los modulos activos.</div>
+          <div class="access-layout">
+            <aside class="user-picker" id="accessUsers"></aside>
+            <section>
+              <div class="acc-tools">
+                <input id="accessSearch" placeholder="Buscar modulo">
+                <button class="btn" id="selectAllAccess" type="button">Marcar todos</button>
+                <button class="btn" id="clearAccess" type="button">Limpiar accesos</button>
+              </div>
+              <div class="acc-list" id="accList"></div>
+            </section>
+          </div>
+        </div>
       </article>
     </section>
 
-    <article class="panel">
-      <div class="panel-head"><div class="panel-title">Asignacion de accesos</div><div class="meta" id="accMeta"></div></div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <label>Usuario
-            <select id="accUser"></select>
-          </label>
-          <div class="full acc-list" id="accList"></div>
-          <div class="full">
-            <button class="btn primary" id="saveAccBtn" type="button">Guardar accesos</button>
+    <section class="view" id="view-modules">
+      <div class="grid-2">
+        <article class="panel">
+          <div class="panel-head">
+            <div><div class="panel-title">Modulos del portal</div><div class="meta" id="modMeta">Cargando...</div></div>
+            <div class="toolbar">
+              <input id="moduleSearch" placeholder="Buscar modulo o ruta">
+              <select id="moduleStatus"><option value="">Todos</option><option value="activo">Activos</option><option value="inactivo">Inactivos</option></select>
+            </div>
           </div>
+          <div class="table-wrap"><table id="modulesTable"></table></div>
+          <div class="mobile-list" id="modulesMobile"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-head"><div class="panel-title" id="moduleFormTitle">Crear modulo</div><div class="meta">Define como aparece en el portal</div></div>
+          <div class="panel-body">
+            <div class="hint">Usa modulos activos para que aparezcan en el portal. La ruta debe empezar con / y apuntar a una pantalla existente.</div>
+            <form id="moduleForm" class="form-grid">
+              <input id="mId" type="hidden">
+              <label class="field">Codigo<input id="mCodigo" required placeholder="control_stock"></label>
+              <label class="field">Titulo<input id="mTitulo" required placeholder="Control de stock"></label>
+              <label class="field full">Descripcion<textarea id="mDescripcion" placeholder="Descripcion corta para el portal"></textarea></label>
+              <label class="field">Ruta<input id="mRuta" required placeholder="/control-stock"></label>
+              <label class="field">Imagen URL<input id="mImage" placeholder="Opcional"></label>
+              <label class="field">Orden<input id="mOrden" type="number" value="100"></label>
+              <label class="check"><input id="mActivo" type="checkbox" checked>Modulo activo</label>
+              <div class="full actions">
+                <button class="btn primary" id="saveModuleBtn" type="submit">Crear modulo</button>
+                <button class="btn ghost" id="cancelModuleBtn" type="button">Limpiar</button>
+              </div>
+            </form>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <div id="feedback"></div>
+  </main>
+
+  <div class="modal-backdrop" id="confirmModal">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title" id="confirmTitle">Confirmar accion</div>
+        <button class="btn ghost" type="button" id="confirmClose">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <p class="sub" id="confirmText"></p>
+        <div class="actions" style="margin-top:14px">
+          <button class="btn ghost" type="button" id="confirmCancel">Cancelar</button>
+          <button class="btn danger" type="button" id="confirmOk">Confirmar</button>
         </div>
       </div>
-    </article>
-
-    <div id="errorBox"></div>
-  </main>
+    </div>
+  </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
-    const state = { modules: [], users: [], selectedUser: null, selectedAccess: new Set() };
+    const state = { modules: [], users: [], accessMaps: new Map(), selectedUser: null, selectedAccess: new Set(), view: "users" };
 
     async function api(path, options) {
       const res = await fetch(path, options);
@@ -207,111 +324,170 @@
       if (!res.ok || body.ok === false) throw new Error(body.error || `HTTP ${res.status}`);
       return body.data;
     }
+    const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const num = (v) => Number(v || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+    const norm = (v) => String(v ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
-    function esc(value) {
-      return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    function feedback(msg, tone = "ok") {
+      $("feedback").innerHTML = msg ? `<div class="${tone === "ok" ? "toast" : "error"}">${esc(msg)}</div>` : "";
+      if (msg && tone === "ok") setTimeout(() => { $("feedback").innerHTML = ""; }, 2600);
     }
 
-    function num(v) {
-      return Number(v || 0).toLocaleString("es-AR", { maximumFractionDigits: 0 });
+    function badge(value, yes = "Activo", no = "Inactivo") {
+      return value ? `<span class="chip ok">${yes}</span>` : `<span class="chip off">${no}</span>`;
     }
 
-    function showError(msg) {
-      $("errorBox").innerHTML = msg ? `<div class="error">${esc(msg)}</div>` : "";
+    function adminBadge(value) {
+      return value ? '<span class="chip warn">Admin</span>' : '<span class="chip">Usuario</span>';
     }
 
-    async function loadData() {
-      showError("");
-      try {
-        const [mods, users] = await Promise.all([
-          api("/api/portal/admin/modulos"),
-          api("/api/portal/admin/usuarios"),
-        ]);
-        state.modules = mods || [];
-        state.users = users || [];
-        if (!state.selectedUser && state.users.length) {
-          state.selectedUser = state.users[0].id;
-        }
-        renderModules();
-        renderUsers();
-        renderAccessUsers();
-        await loadAccessMap();
-      } catch (error) {
-        showError(error.message);
-      }
+    function filteredUsers() {
+      const q = norm($("userSearch")?.value || "");
+      const status = $("userStatus")?.value || "";
+      return state.users.filter((u) => {
+        const txt = norm(`${u.username} ${u.nombre}`);
+        if (q && !txt.includes(q)) return false;
+        if (status === "activo" && !u.activo) return false;
+        if (status === "inactivo" && u.activo) return false;
+        if (status === "admin" && !u.es_admin) return false;
+        return true;
+      });
     }
 
-    function renderModules() {
-      $("modMeta").textContent = `${num(state.modules.length)} modulos`;
-      $("modulesTable").innerHTML = `
-        <thead><tr><th>ID</th><th>Codigo</th><th>Titulo</th><th>Ruta</th><th>Orden</th><th>Activo</th><th>Acciones</th></tr></thead>
-        <tbody>${state.modules.map((m) => `
-          <tr>
-            <td>${m.id}</td>
-            <td>${esc(m.codigo)}</td>
-            <td>${esc(m.titulo)}</td>
-            <td>${esc(m.ruta)}</td>
-            <td>${m.orden}</td>
-            <td>${m.activo ? "si" : "no"}</td>
-            <td>
-              <div class="ops">
-                <button class="btn" data-act="edit-mod" data-id="${m.id}" type="button">Editar</button>
-                <button class="btn danger" data-act="del-mod" data-id="${m.id}" type="button">Eliminar</button>
-              </div>
-            </td>
-          </tr>
-        `).join("")}</tbody>
-      `;
+    function filteredModules() {
+      const q = norm($("moduleSearch")?.value || "");
+      const status = $("moduleStatus")?.value || "";
+      return state.modules.filter((m) => {
+        const txt = norm(`${m.codigo} ${m.titulo} ${m.ruta}`);
+        if (q && !txt.includes(q)) return false;
+        if (status === "activo" && !m.activo) return false;
+        if (status === "inactivo" && m.activo) return false;
+        return true;
+      });
+    }
+
+    function updateSummary() {
+      $("kUsers").textContent = num(state.users.length);
+      $("kActive").textContent = num(state.users.filter((u) => u.activo).length);
+      $("kAdmins").textContent = num(state.users.filter((u) => u.es_admin).length);
+      $("kModules").textContent = num(state.modules.filter((m) => m.activo).length);
     }
 
     function renderUsers() {
-      $("usrMeta").textContent = `${num(state.users.length)} usuarios`;
+      const rows = filteredUsers();
+      $("usrMeta").textContent = `${num(rows.length)} de ${num(state.users.length)} usuarios`;
       $("usersTable").innerHTML = `
-        <thead><tr><th>ID</th><th>Usuario</th><th>Nombre</th><th>Admin</th><th>Activo</th><th>Acciones</th></tr></thead>
-        <tbody>${state.users.map((u) => `
-          <tr>
-            <td>${u.id}</td>
-            <td>${esc(u.username)}</td>
+        <thead><tr><th>Usuario</th><th>Nombre</th><th>Tipo</th><th>Estado</th><th>Accesos</th><th>Acciones</th></tr></thead>
+        <tbody>${rows.map((u) => {
+          const access = u.es_admin ? "Todos" : num((u.module_count ?? accessCount(u.id)));
+          return `<tr>
+            <td><strong>${esc(u.username)}</strong><div class="meta">ID ${u.id}</div></td>
             <td>${esc(u.nombre)}</td>
-            <td>${u.es_admin ? "si" : "no"}</td>
-            <td>${u.activo ? "si" : "no"}</td>
-            <td>
-              <div class="ops">
-                <button class="btn" data-act="edit-user" data-id="${u.id}" type="button">Editar</button>
-                <button class="btn" data-act="pass-user" data-id="${u.id}" type="button">Password</button>
-              </div>
-            </td>
-          </tr>
-        `).join("")}</tbody>
-      `;
+            <td>${adminBadge(u.es_admin)}</td>
+            <td>${badge(u.activo)}</td>
+            <td>${access}</td>
+            <td><div class="ops"><button class="btn" data-act="edit-user" data-id="${u.id}" type="button">Editar</button><button class="btn" data-act="access-user" data-id="${u.id}" type="button">Accesos</button></div></td>
+          </tr>`;
+        }).join("")}</tbody>`;
+      $("usersMobile").innerHTML = rows.map((u) => `
+        <article class="mobile-row-card">
+          <div class="mobile-head"><div><strong>${esc(u.nombre)}</strong><small>${esc(u.username)} · ID ${u.id}</small></div><div>${adminBadge(u.es_admin)}</div></div>
+          <div class="toolbar">${badge(u.activo)}<span class="chip">${u.es_admin ? "Todos los modulos" : `${num(accessCount(u.id))} accesos`}</span></div>
+          <div class="actions"><button class="btn" data-act="edit-user" data-id="${u.id}" type="button">Editar</button><button class="btn primary" data-act="access-user" data-id="${u.id}" type="button">Accesos</button></div>
+        </article>`).join("") || '<div class="meta">Sin usuarios para el filtro.</div>';
+    }
+
+    function renderModules() {
+      const rows = filteredModules();
+      $("modMeta").textContent = `${num(rows.length)} de ${num(state.modules.length)} modulos`;
+      $("modulesTable").innerHTML = `
+        <thead><tr><th>Modulo</th><th>Ruta</th><th>Orden</th><th>Estado</th><th>Acciones</th></tr></thead>
+        <tbody>${rows.map((m) => `
+          <tr>
+            <td><strong>${esc(m.titulo)}</strong><div class="meta">${esc(m.codigo)}</div></td>
+            <td>${esc(m.ruta)}</td>
+            <td>${num(m.orden)}</td>
+            <td>${badge(m.activo)}</td>
+            <td><div class="ops"><button class="btn" data-act="edit-mod" data-id="${m.id}" type="button">Editar</button><button class="btn danger" data-act="del-mod" data-id="${m.id}" type="button">Eliminar</button></div></td>
+          </tr>`).join("")}</tbody>`;
+      $("modulesMobile").innerHTML = rows.map((m) => `
+        <article class="mobile-row-card">
+          <div class="mobile-head"><div><strong>${esc(m.titulo)}</strong><small>${esc(m.codigo)} · ${esc(m.ruta)}</small></div>${badge(m.activo)}</div>
+          <div class="meta">Orden ${num(m.orden)}</div>
+          <div class="actions"><button class="btn" data-act="edit-mod" data-id="${m.id}" type="button">Editar</button><button class="btn danger" data-act="del-mod" data-id="${m.id}" type="button">Eliminar</button></div>
+        </article>`).join("") || '<div class="meta">Sin modulos para el filtro.</div>';
+    }
+
+    function accessCount(userId) {
+      const user = state.users.find((u) => Number(u.id) === Number(userId));
+      if (user?.es_admin) return state.modules.filter((m) => m.activo).length;
+      return Number(state.accessMaps.get(Number(userId))?.size || 0);
     }
 
     function renderAccessUsers() {
-      $("accUser").innerHTML = state.users.map((u) => `
-        <option value="${u.id}" ${Number(state.selectedUser) === Number(u.id) ? "selected" : ""}>
-          ${esc(u.username)} - ${esc(u.nombre)}
-        </option>
-      `).join("");
-      $("accMeta").textContent = state.selectedUser ? `usuario #${state.selectedUser}` : "-";
+      $("accessUsers").innerHTML = state.users.map((u) => `
+        <button class="user-card ${Number(state.selectedUser) === Number(u.id) ? "active" : ""}" data-act="pick-access-user" data-id="${u.id}" type="button">
+          <strong>${esc(u.nombre)}</strong>
+          <small>${esc(u.username)} · ${u.es_admin ? "Admin: todos los modulos" : `${num(accessCount(u.id))} accesos guardados`}</small>
+          <span>${badge(u.activo)} ${adminBadge(u.es_admin)}</span>
+        </button>`).join("");
+      const user = state.users.find((u) => Number(u.id) === Number(state.selectedUser));
+      $("accMeta").textContent = user ? `${user.nombre} · ${user.es_admin ? "administrador" : "usuario normal"}` : "Selecciona un usuario";
     }
 
     function renderAccessList() {
-      $("accList").innerHTML = state.modules.map((m) => `
-        <label class="acc-item">
+      const q = norm($("accessSearch")?.value || "");
+      const rows = state.modules.filter((m) => !q || norm(`${m.codigo} ${m.titulo} ${m.ruta}`).includes(q));
+      $("accList").innerHTML = rows.map((m) => {
+        const enabled = state.selectedAccess.has(Number(m.id));
+        return `<label class="acc-item ${enabled ? "enabled" : ""}">
           <span class="check">
-            <input type="checkbox" class="acc-mod" value="${m.id}" ${state.selectedAccess.has(Number(m.id)) ? "checked" : ""}>
-            <strong>${esc(m.titulo)}</strong>
+            <input type="checkbox" class="acc-mod" value="${m.id}" ${enabled ? "checked" : ""}>
+            <span><strong>${esc(m.titulo)}</strong><span class="meta">${esc(m.codigo)} · ${esc(m.ruta)}</span></span>
           </span>
-          <span class="meta">${esc(m.ruta)}</span>
-        </label>
-      `).join("");
+          <span>${badge(m.activo)}</span>
+        </label>`;
+      }).join("") || '<div class="meta">Sin modulos para el filtro.</div>';
       document.querySelectorAll(".acc-mod").forEach((el) => {
         el.addEventListener("change", () => {
           const id = Number(el.value);
           if (el.checked) state.selectedAccess.add(id);
           else state.selectedAccess.delete(id);
+          renderAccessList();
         });
       });
+    }
+
+    async function loadData() {
+      feedback("");
+      try {
+        const [mods, users] = await Promise.all([api("/api/portal/admin/modulos"), api("/api/portal/admin/usuarios")]);
+        state.modules = mods || [];
+        state.users = users || [];
+        if (!state.selectedUser && state.users.length) state.selectedUser = state.users[0].id;
+        const accessResults = await Promise.allSettled(
+          state.users.map((u) => api(`/api/portal/admin/usuarios/${u.id}/accesos`).then((data) => [u.id, data.module_ids || []]))
+        );
+        state.accessMaps = new Map();
+        accessResults.forEach((result) => {
+          if (result.status === "fulfilled") {
+            const [userId, ids] = result.value;
+            state.accessMaps.set(Number(userId), new Set(ids.map(Number)));
+          }
+        });
+        updateSummary();
+        renderUsers();
+        renderModules();
+        renderAccessUsers();
+        if (state.selectedUser && state.accessMaps.has(Number(state.selectedUser))) {
+          state.selectedAccess = new Set(state.accessMaps.get(Number(state.selectedUser)));
+          renderAccessList();
+        } else {
+          await loadAccessMap();
+        }
+      } catch (error) {
+        feedback(error.message, "error");
+      }
     }
 
     async function loadAccessMap() {
@@ -325,159 +501,208 @@
         state.selectedAccess = new Set((data.module_ids || []).map(Number));
         renderAccessList();
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, "error");
       }
     }
 
-    async function createModule(event) {
+    function resetUserForm() {
+      $("userForm").reset();
+      $("uId").value = "";
+      $("uActivo").checked = true;
+      $("uPassword").required = true;
+      $("uUsername").disabled = false;
+      $("userFormTitle").textContent = "Crear usuario";
+      $("saveUserBtn").textContent = "Crear usuario";
+    }
+
+    function editUser(id) {
+      const u = state.users.find((x) => Number(x.id) === Number(id));
+      if (!u) return;
+      $("uId").value = u.id;
+      $("uNombre").value = u.nombre || "";
+      $("uUsername").value = u.username || "";
+      $("uUsername").disabled = false;
+      $("uPassword").value = "";
+      $("uPassword").required = false;
+      $("uAdmin").checked = !!u.es_admin;
+      $("uActivo").checked = !!u.activo;
+      $("userFormTitle").textContent = `Editar usuario: ${u.username}`;
+      $("saveUserBtn").textContent = "Guardar cambios";
+      openView("users");
+      $("uNombre").focus();
+    }
+
+    async function saveUser(event) {
       event.preventDefault();
+      const id = $("uId").value;
+      const payload = {
+        nombre: $("uNombre").value.trim(),
+        username: $("uUsername").value.trim(),
+        es_admin: $("uAdmin").checked,
+        activo: $("uActivo").checked,
+      };
+      const pass = $("uPassword").value;
+      if (!id || pass) payload.password = pass;
       try {
-        await api("/api/portal/admin/modulos", {
-          method: "POST",
+        await api(id ? `/api/portal/admin/usuarios/${id}` : "/api/portal/admin/usuarios", {
+          method: id ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            codigo: $("mCodigo").value.trim(),
-            titulo: $("mTitulo").value.trim(),
-            descripcion: $("mDescripcion").value.trim(),
-            ruta: $("mRuta").value.trim(),
-            image_url: $("mImage").value.trim(),
-            orden: Number($("mOrden").value || 100),
-            activo: $("mActivo").checked,
-          }),
+          body: JSON.stringify(payload),
         });
-        event.target.reset();
-        $("mOrden").value = "100";
-        $("mActivo").checked = true;
+        feedback(id ? "Usuario actualizado." : "Usuario creado.");
+        resetUserForm();
         await loadData();
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, "error");
       }
     }
 
-    async function createUser(event) {
+    function resetModuleForm() {
+      $("moduleForm").reset();
+      $("mId").value = "";
+      $("mOrden").value = "100";
+      $("mActivo").checked = true;
+      $("mCodigo").disabled = false;
+      $("moduleFormTitle").textContent = "Crear modulo";
+      $("saveModuleBtn").textContent = "Crear modulo";
+    }
+
+    function editModule(id) {
+      const m = state.modules.find((x) => Number(x.id) === Number(id));
+      if (!m) return;
+      $("mId").value = m.id;
+      $("mCodigo").value = m.codigo || "";
+      $("mTitulo").value = m.titulo || "";
+      $("mDescripcion").value = m.descripcion || "";
+      $("mRuta").value = m.ruta || "";
+      $("mImage").value = m.image_url || "";
+      $("mOrden").value = m.orden || 100;
+      $("mActivo").checked = !!m.activo;
+      $("moduleFormTitle").textContent = `Editar modulo: ${m.titulo}`;
+      $("saveModuleBtn").textContent = "Guardar cambios";
+      openView("modules");
+      $("mTitulo").focus();
+    }
+
+    async function saveModule(event) {
       event.preventDefault();
+      const id = $("mId").value;
+      const payload = {
+        codigo: $("mCodigo").value.trim(),
+        titulo: $("mTitulo").value.trim(),
+        descripcion: $("mDescripcion").value.trim(),
+        ruta: $("mRuta").value.trim(),
+        image_url: $("mImage").value.trim(),
+        orden: Number($("mOrden").value || 100),
+        activo: $("mActivo").checked,
+      };
       try {
-        await api("/api/portal/admin/usuarios", {
-          method: "POST",
+        await api(id ? `/api/portal/admin/modulos/${id}` : "/api/portal/admin/modulos", {
+          method: id ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            nombre: $("uNombre").value.trim(),
-            username: $("uUsername").value.trim(),
-            password: $("uPassword").value,
-            es_admin: $("uAdmin").checked,
-            activo: $("uActivo").checked,
-          }),
+          body: JSON.stringify(payload),
         });
-        event.target.reset();
-        $("uActivo").checked = true;
+        feedback(id ? "Modulo actualizado." : "Modulo creado.");
+        resetModuleForm();
         await loadData();
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, "error");
       }
     }
 
-    async function onTableClick(event) {
-      const button = event.target.closest("button[data-act]");
-      if (!button) return;
-      const action = button.dataset.act;
-      const id = Number(button.dataset.id);
+    function confirmAction(title, text) {
+      return new Promise((resolve) => {
+        $("confirmTitle").textContent = title;
+        $("confirmText").textContent = text;
+        $("confirmModal").classList.add("open");
+        const done = (value) => {
+          $("confirmModal").classList.remove("open");
+          $("confirmOk").onclick = null;
+          $("confirmCancel").onclick = null;
+          $("confirmClose").onclick = null;
+          resolve(value);
+        };
+        $("confirmOk").onclick = () => done(true);
+        $("confirmCancel").onclick = () => done(false);
+        $("confirmClose").onclick = () => done(false);
+      });
+    }
 
+    async function deleteModule(id) {
+      const m = state.modules.find((x) => Number(x.id) === Number(id));
+      if (!m) return;
+      const ok = await confirmAction("Eliminar modulo", `Se eliminara "${m.titulo}". Los permisos asociados tambien dejaran de existir.`);
+      if (!ok) return;
       try {
-        if (action === "del-mod") {
-          if (!confirm("Eliminar modulo?")) return;
-          await api(`/api/portal/admin/modulos/${id}`, { method: "DELETE" });
-          await loadData();
-          return;
-        }
-
-        if (action === "edit-mod") {
-          const mod = state.modules.find((m) => Number(m.id) === id);
-          if (!mod) return;
-          const titulo = prompt("Titulo", mod.titulo);
-          if (titulo === null) return;
-          const descripcion = prompt("Descripcion", mod.descripcion || "");
-          if (descripcion === null) return;
-          const ruta = prompt("Ruta", mod.ruta);
-          if (ruta === null) return;
-          const image = prompt("Imagen URL", mod.image_url || "");
-          if (image === null) return;
-          const orden = prompt("Orden", String(mod.orden || 100));
-          if (orden === null) return;
-          await api(`/api/portal/admin/modulos/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              titulo: titulo.trim(),
-              descripcion: descripcion.trim(),
-              ruta: ruta.trim(),
-              image_url: image.trim(),
-              orden: Number(orden || 100),
-            }),
-          });
-          await loadData();
-          return;
-        }
-
-        if (action === "edit-user") {
-          const user = state.users.find((u) => Number(u.id) === id);
-          if (!user) return;
-          const nombre = prompt("Nombre", user.nombre);
-          if (nombre === null) return;
-          const activo = confirm("Aceptar = activo | Cancelar = inactivo");
-          const es_admin = confirm("Aceptar = admin | Cancelar = usuario normal");
-          await api(`/api/portal/admin/usuarios/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ nombre: nombre.trim(), activo, es_admin }),
-          });
-          await loadData();
-          return;
-        }
-
-        if (action === "pass-user") {
-          const pass = prompt("Nuevo password (min 6)");
-          if (pass === null) return;
-          await api(`/api/portal/admin/usuarios/${id}`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ password: pass }),
-          });
-          await loadData();
-        }
+        await api(`/api/portal/admin/modulos/${id}`, { method: "DELETE" });
+        feedback("Modulo eliminado.");
+        await loadData();
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, "error");
       }
     }
 
     async function saveAccess() {
-      if (!state.selectedUser) return;
+      if (!state.selectedUser) return feedback("Selecciona un usuario.", "error");
       try {
         await api(`/api/portal/admin/usuarios/${state.selectedUser}/accesos`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ module_ids: Array.from(state.selectedAccess) }),
         });
-        await loadAccessMap();
+        feedback("Accesos guardados.");
+        await loadData();
       } catch (error) {
-        showError(error.message);
+        feedback(error.message, "error");
+      }
+    }
+
+    function openView(view) {
+      state.view = view;
+      document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("active", b.dataset.view === view));
+      document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${view}`));
+    }
+
+    async function handleAction(event) {
+      const button = event.target.closest("[data-act]");
+      if (!button) return;
+      const action = button.dataset.act;
+      const id = Number(button.dataset.id);
+      if (action === "edit-user") editUser(id);
+      if (action === "access-user") {
+        state.selectedUser = id;
+        openView("access");
+        renderAccessUsers();
+        await loadAccessMap();
+      }
+      if (action === "edit-mod") editModule(id);
+      if (action === "del-mod") await deleteModule(id);
+      if (action === "pick-access-user") {
+        state.selectedUser = id;
+        renderAccessUsers();
+        await loadAccessMap();
       }
     }
 
     function bind() {
-      $("moduleForm").addEventListener("submit", createModule);
-      $("userForm").addEventListener("submit", createUser);
-      $("modulesTable").addEventListener("click", onTableClick);
-      $("usersTable").addEventListener("click", onTableClick);
+      document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => openView(btn.dataset.view)));
+      $("userForm").addEventListener("submit", saveUser);
+      $("moduleForm").addEventListener("submit", saveModule);
+      $("cancelUserBtn").addEventListener("click", resetUserForm);
+      $("cancelModuleBtn").addEventListener("click", resetModuleForm);
       $("saveAccBtn").addEventListener("click", saveAccess);
-      $("accUser").addEventListener("change", async () => {
-        state.selectedUser = Number($("accUser").value || 0) || null;
-        renderAccessUsers();
-        await loadAccessMap();
-      });
+      $("selectAllAccess").addEventListener("click", () => { state.modules.forEach((m) => state.selectedAccess.add(Number(m.id))); renderAccessList(); });
+      $("clearAccess").addEventListener("click", () => { state.selectedAccess.clear(); renderAccessList(); });
+      ["userSearch", "userStatus"].forEach((id) => $(id).addEventListener("input", renderUsers));
+      ["moduleSearch", "moduleStatus"].forEach((id) => $(id).addEventListener("input", renderModules));
+      $("accessSearch").addEventListener("input", renderAccessList);
+      document.body.addEventListener("click", handleAction);
     }
 
     document.addEventListener("DOMContentLoaded", async () => {
       bind();
+      resetUserForm();
+      resetModuleForm();
       await loadData();
     });
   </script>

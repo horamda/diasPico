@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Importaciones de datos · DPO</title>
+  <title>Importaciones de datos · Portal_Logistica</title>
   {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
   <style>
@@ -20,7 +20,7 @@
   </div>
   <nav class="tabs"><button class="tab active" data-tab="general">Archivos generales</button><button class="tab" data-tab="segmentacion">Segmentación</button><button class="tab" data-tab="operacion">Operación y Sheets</button><button class="tab" data-tab="configuracion">Configuración</button></nav>
 
-  <section class="section active" id="general"><div class="section-head"><h2>Archivos generales</h2><p>Maestros y movimientos compartidos por Días Pico, Frescura, Drop Size y Segmentación.</p></div><div class="grid">
+  <section class="section active" id="general"><div class="section-head"><h2>Archivos generales</h2><p>Maestros y movimientos compartidos por Portal_Logistica: Días Pico, Frescura, Drop Size y Segmentación.</p></div><div class="grid">
     <article class="card" data-name="articulos maestro original csv"><h3>Artículos - maestro original</h3><p>Importación original del maestro de artículos. Reemplaza la tabla de artículos con el archivo CSV original.</p><div class="meta"><span class="pill">En base: <strong id="articulos-count">…</strong></span><span class="pill">Sin clasificar: <strong id="articulos-missing">…</strong></span></div><div class="row"><input type="file" id="f-articulos" accept=".csv"><button class="btn" onclick="uploadGeneral('articulos')">Importar maestro</button></div><div class="status" id="s-articulos"></div></article>
     <article class="card" data-name="articulos datos faltantes excel stock pisos bultos por piso"><h3>Datos faltantes de artículos</h3><p>Completa solamente datos faltantes del maestro: bultos por pallet, pisos, bultos por piso, unidades por bulto, móvil y anulado. No carga ventas y no reemplaza el maestro.</p><div class="row"><input type="file" id="f-articulos-faltantes" accept=".xlsx,.xlsm,.csv"><button class="btn" onclick="uploadGeneral('articulos-faltantes')">Completar faltantes</button></div><div class="hint">Usar la plantilla AR de artículos. Hoja esperada: Artículos.</div><div class="status" id="s-articulos-faltantes"></div></article>
     <article class="card" data-name="resumen repartos excel"><h3>Resumen de repartos</h3><p>Resumen operativo por reparto. Permite reemplazar meses históricos.</p><div class="row"><input type="file" id="f-resumen" accept=".xlsx,.xlsm"><button class="btn" onclick="uploadGeneral('resumen')">Importar</button><button class="btn danger" onclick="uploadGeneral('resumen',true)">Force</button></div><div class="status" id="s-resumen"></div></article>

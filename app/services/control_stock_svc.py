@@ -13,6 +13,8 @@ from app.services.ventas_svc import ensure_ventas_detalle_table
 
 _CONTROL_STOCK_READY = False
 _CONTROL_STOCK_LOCK = Lock()
+_DISPERSION_MIN_BULTOS = 5.0
+_DISPERSION_PCT = 0.20
 
 
 def ensure_control_stock_tables() -> None:
@@ -150,6 +152,91 @@ def _sucursal_nombre(sucursal: str | None) -> str:
     if suc == "2":
         return "Dolores"
     return suc
+
+
+def _stock_frescura_por_articulo(sucursal: str, ids: list[int]) -> dict[int, float]:
+    if not ids:
+        return {}
+    try:
+        with pg_cursor() as cur:
+            cur.execute(
+                """SELECT codigo_articulo,
+                          SUM(COALESCE(stock_bultos, stock_actual, 0)) AS stock_bultos
+                   FROM frescura_articulos
+                   WHERE sucursal_id = %s
+                     AND codigo_articulo = ANY(%s)
+                   GROUP BY codigo_articulo""",
+                (sucursal, [str(i) for i in sorted(set(ids))]),
+            )
+            rows = cur.fetchall() or []
+    except Exception:
+        return {}
+    result: dict[int, float] = {}
+    for row in rows:
+        try:
+            result[int(row["codigo_articulo"])] = float(row["stock_bultos"] or 0)
+        except Exception:
+            continue
+    return result
+
+
+def _marcar_dispersion_frescura(rows: list[tuple], sucursal: str) -> tuple[list[tuple], list[dict]]:
+    esperado_por_articulo = _stock_frescura_por_articulo(sucursal, [int(row[0]) for row in rows])
+    if not esperado_por_articulo:
+        return rows, []
+    adjusted: list[tuple] = []
+    alertas: list[dict] = []
+    for row in rows:
+        id_articulo = int(row[0])
+        contado = float(row[12] or 0)
+        esperado = float(esperado_por_articulo.get(id_articulo, 0) or 0)
+        base = max(abs(esperado), 1.0)
+        diferencia_abs = abs(contado - esperado)
+        tiene_alerta = diferencia_abs >= _DISPERSION_MIN_BULTOS and (diferencia_abs / base) >= _DISPERSION_PCT
+        if tiene_alerta:
+            alertas.append({
+                "id_articulo": id_articulo,
+                "descripcion": row[1],
+                "stock_contado": round(contado, 2),
+                "severidad": "alta" if diferencia_abs >= max(_DISPERSION_MIN_BULTOS * 2, base * 0.50) else "media",
+                "mensaje": "Diferencia importante contra stock de Frescura. Revisar con supervisor.",
+            })
+            row = (
+                *row[:13],
+                True,
+                (str(row[14] or "") + " | Alerta: dispersion importante contra Frescura").strip(" |"),
+            )
+        adjusted.append(row)
+    return adjusted, alertas
+
+
+def _rows_conteo_desde_items(items: list) -> list[tuple]:
+    rows = []
+    for item in items:
+        try:
+            id_articulo = int(item.get("id_articulo"))
+        except Exception:
+            continue
+        stock_raw = item.get("stock")
+        stock = None if stock_raw in (None, "") else float(stock_raw)
+        rows.append((
+            id_articulo,
+            str(item.get("descripcion") or "")[:255],
+            str(item.get("abc") or "")[:5],
+            str(item.get("semana") or "")[:20],
+            str(item.get("dia") or "")[:20],
+            None if item.get("cantidad_1") in (None, "") else float(item.get("cantidad_1")),
+            None if item.get("cantidad_2") in (None, "") else float(item.get("cantidad_2")),
+            None if item.get("cantidad_3") in (None, "") else float(item.get("cantidad_3")),
+            None if item.get("cantidad_4") in (None, "") else float(item.get("cantidad_4")),
+            None if item.get("cantidad_5") in (None, "") else float(item.get("cantidad_5")),
+            None if item.get("cantidad_6") in (None, "") else float(item.get("cantidad_6")),
+            None if item.get("unidades_sueltas") in (None, "") else float(item.get("unidades_sueltas")),
+            stock,
+            bool(item.get("diferencia")),
+            str(item.get("observacion") or ""),
+        ))
+    return rows
 
 
 def _abc(acum_pct: float) -> str:
@@ -452,31 +539,9 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
         "observaciones": str(payload.get("observaciones") or ""),
     }
 
-    rows = []
-    for item in items:
-        try:
-            id_articulo = int(item.get("id_articulo"))
-        except Exception:
-            continue
-        stock_raw = item.get("stock")
-        stock = None if stock_raw in (None, "") else float(stock_raw)
-        rows.append((
-            id_articulo,
-            str(item.get("descripcion") or "")[:255],
-            str(item.get("abc") or "")[:5],
-            str(item.get("semana") or "")[:20],
-            str(item.get("dia") or "")[:20],
-            None if item.get("cantidad_1") in (None, "") else float(item.get("cantidad_1")),
-            None if item.get("cantidad_2") in (None, "") else float(item.get("cantidad_2")),
-            None if item.get("cantidad_3") in (None, "") else float(item.get("cantidad_3")),
-            None if item.get("cantidad_4") in (None, "") else float(item.get("cantidad_4")),
-            None if item.get("cantidad_5") in (None, "") else float(item.get("cantidad_5")),
-            None if item.get("cantidad_6") in (None, "") else float(item.get("cantidad_6")),
-            None if item.get("unidades_sueltas") in (None, "") else float(item.get("unidades_sueltas")),
-            stock,
-            bool(item.get("diferencia")),
-            str(item.get("observacion") or ""),
-        ))
+    rows = _rows_conteo_desde_items(items)
+
+    rows, alertas_dispersion = _marcar_dispersion_frescura(rows, conteo["sucursal"])
 
     with pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -495,19 +560,10 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
             )
             existing = cur.fetchone()
             if existing:
-                cur.execute(
-                    """UPDATE control_stock_conteos
-                       SET hora_inicio = COALESCE(%(hora_inicio)s, hora_inicio),
-                           hora_fin = %(hora_fin)s,
-                           observaciones = %(observaciones)s,
-                           updated_at = NOW()
-                       WHERE id = %(id)s
-                       RETURNING id, mes_abc, sucursal, semana, dia, fecha, responsable,
-                                 hora_inicio, hora_fin, observaciones, estado, created_at""",
-                    {**conteo, "id": existing["id"]},
+                raise ValueError(
+                    "Ya existe un conteo guardado para esta sucursal, fecha, semana, dia y responsable. "
+                    "No se puede volver a grabar el mismo conteo."
                 )
-                saved = dict(cur.fetchone() or {})
-                cur.execute("DELETE FROM control_stock_conteo_items WHERE conteo_id = %s", (saved["id"],))
             else:
                 cur.execute(
                     """INSERT INTO control_stock_conteos(
@@ -547,7 +603,25 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                     [(saved["id"], *row) for row in rows],
                 )
     saved["items_guardados"] = len(rows)
+    saved["alertas_dispersion"] = alertas_dispersion
+    saved["total_alertas_dispersion"] = len(alertas_dispersion)
     return saved
+
+
+def validar_dispersion_conteo(payload: dict) -> dict:
+    ensure_control_stock_tables()
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        raise ValueError("items debe ser una lista")
+    sucursal = _sucursal_id(payload.get("sucursal"))
+    rows = _rows_conteo_desde_items(items)
+    _, alertas = _marcar_dispersion_frescura(rows, sucursal)
+    return {
+        "sucursal": sucursal,
+        "total_items": len(rows),
+        "total_alertas_dispersion": len(alertas),
+        "alertas_dispersion": alertas,
+    }
 
 
 def list_responsables(sucursal: str | None = "1", incluir_inactivos: bool = False) -> list[dict]:
@@ -947,7 +1021,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
         "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
     )
     articles: dict[int, dict] = {}
-    max_month = 12 if year < today.year else min(12, today.month)
+    max_month = 12 if year < today.year else max(0, min(12, today.month - 1))
     if year > today.year:
         max_month = 0
 
@@ -974,7 +1048,8 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
     rows = []
     for item in articles.values():
         meses = item["meses"]
-        abc_values = [meses.get(name, "") for name in month_names]
+        visible_months = month_names[:max_month]
+        abc_values = [meses.get(name, "") for name in visible_months]
         loaded_values = [value for value in abc_values[:max_month] if value]
         cambios = sum(1 for prev, curr in zip(loaded_values, loaded_values[1:]) if prev != curr)
         observaciones = "Vario a lo largo del año" if cambios else "Sin variacion"
@@ -985,7 +1060,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
             "tipo_producto": item["tipo_producto"],
             "cambios": cambios,
             "observaciones": observaciones,
-            **{name: meses.get(name, "") for name in month_names},
+            **{name: meses.get(name, "") for name in visible_months},
         })
 
     abc_order = {"A": 0, "B": 1, "C": 2, "": 3}
@@ -995,7 +1070,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
         "anio": year,
         "sucursal": suc,
         "sucursal_nombre": _sucursal_nombre(suc),
-        "meses": list(month_names),
+        "meses": list(month_names[:max_month]),
         "hasta_mes": max_month,
         "total_articulos": len(rows),
         "articulos_con_cambios": sum(1 for r in rows if r["cambios"] > 0),
