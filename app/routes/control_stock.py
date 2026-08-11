@@ -43,6 +43,22 @@ def planilla():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/control-externo/sorteo")
+@login_required
+def control_externo_sorteo():
+    try:
+        data = control_stock_svc.generar_control_externo(
+            mes=request.args.get("mes"),
+            sucursal=request.args.get("sucursal", "1"),
+            cantidad=request.args.get("cantidad", type=int) or 6,
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/planificacion")
 @login_required
 def planificacion():
@@ -113,6 +129,17 @@ def abc_mensual():
             sucursal=request.args.get("sucursal", "1"),
         )
         return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/frescura-status")
+@login_required
+def frescura_status():
+    try:
+        return jsonify(control_stock_svc.get_frescura_status(request.args.get("fecha")))
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:

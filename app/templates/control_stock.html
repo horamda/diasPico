@@ -28,6 +28,9 @@
     .stock-input:focus{border-color:#2563eb!important;box-shadow:0 0 0 3px rgba(37,99,235,.18)!important}
     #viewConteo .panel{position:sticky;top:0;z-index:5;box-shadow:0 2px 8px rgba(15,23,42,.08)}
     #viewConteo .pill{background:#e0f2fe;border-color:#7dd3fc;color:#0c4a6e}
+    .frescura-pill{border-color:#7dd3fc!important;background:#e0f2fe!important;color:#0c4a6e!important}
+    .frescura-pill.ok{border-color:#86efac!important;background:#dcfce7!important;color:#166534!important}
+    .frescura-pill.alert{border-color:#fca5a5!important;background:#fee2e2!important;color:#991b1b!important}
     #viewConteo th{background:#0f4c81;color:#fff}
     #viewConteo td{background:#fff;color:#0f172a}
     #viewConteo tbody tr:nth-child(even) td{background:#f8fafc}
@@ -140,6 +143,7 @@
     <button class="tab active" id="tabAbc" onclick="openTab('abc')">Analisis ABC</button>
     <button class="tab" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
     <button class="tab" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
+    <button class="tab" id="tabExterno" onclick="openTab('externo')">Control externo</button>
     <button class="tab" id="tabResumenArticulo" onclick="openTab('resumenArticulo')">Resumen por articulo</button>
     <button class="tab" id="tabArticulos" onclick="openTab('articulos')">Articulos controlados</button>
     <button class="tab" id="tabAbcMensual" onclick="openTab('abcMensual')">ABC mensual</button>
@@ -211,7 +215,7 @@
       <div class="field"><label>Semana</label><select id="semana"><option value="AUTO">Automatica</option><option value="TODAS">TODAS</option><option value="semana1">Semana 1</option><option value="semana2">Semana 2</option><option value="semana3">Semana 3</option><option value="semana4">Semana 4</option></select></div>
       <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option></select></div>
       <div class="field"><label>ABC</label><select id="abc"><option>TODOS</option><option>A</option><option>B</option><option>C</option></select></div>
-      <div class="field"><label>Fecha</label><input id="fecha" type="date"></div>
+      <div class="field"><label>Fecha</label><input id="fecha" type="date" onchange="actualizarEstadoFrescura(this.value,'pFrescura')"></div>
       <div class="field"><label>Responsable control stock</label><select id="responsable"></select></div>
       <div class="field auto-field"><label>Hora inicio</label><input id="horaInicio" type="time"></div>
       <div class="field auto-field"><label>Hora fin</label><input id="horaFin" type="time"></div>
@@ -223,6 +227,7 @@
       <span class="pill" id="pArt">Artículos: -</span>
       <span class="pill" id="pDia">Dia: -</span>
       <span class="pill" id="pTotalCant">Total: 0 bultos · 0 unidades</span>
+      <span class="pill frescura-pill" id="pFrescura">Frescura: -</span>
     </div>
   </section>
 
@@ -242,6 +247,42 @@
     </div>
     <button class="btn ok save-btn" id="guardarConteoBtn" onclick="guardarConteo()">Guardar control y finalizar</button>
   </section>
+  </section>
+
+  <section class="view" id="viewExterno">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalExterno" onchange="syncSucursal('externo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Mes ABC</label><input id="mesExterno" type="month"></div>
+        <div class="field"><label>Fecha</label><input id="fechaExterno" type="date" onchange="actualizarEstadoFrescura(this.value,'extFrescura')"></div>
+        <div class="field"><label>Responsable externo</label><input id="responsableExterno" placeholder="Nombre y area"></div>
+        <div class="field"><label>Cantidad</label><select id="cantidadExterno"><option value="5">5 productos</option><option value="6" selected>6 productos</option></select></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="generarControlExterno()">Generar sorteo</button></div>
+        <div class="field w2"><label>Observaciones</label><input id="observacionesExterno" placeholder="Opcional"></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="extMes">Mes: -</span>
+        <span class="pill" id="extArt">Articulos: -</span>
+        <span class="pill" id="extTotal">Total: 0 bultos con 0 unidades</span>
+        <span class="pill frescura-pill" id="extFrescura">Frescura: -</span>
+      </div>
+    </section>
+    <div class="time-note">Control aleatorio para personas externas al sector. El stock esperado de Frescura no se muestra; si hay dispersion, se pide revisar antes de guardar.</div>
+    <div class="status" id="externoStatus">Genera un sorteo para comenzar.</div>
+    <section class="table-wrap" id="externoTableWrap">
+      <table>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th></tr></thead>
+        <tbody id="externoBody"></tbody>
+      </table>
+    </section>
+    <section id="externoCards"></section>
+    <section class="save-footer ready">
+      <div>
+        <div class="save-title">Finalizar control externo</div>
+        <div class="save-sub" id="externoFooterSummary">Genera el sorteo y carga todos los articulos.</div>
+      </div>
+      <button class="btn ok save-btn" id="guardarExternoBtn" onclick="guardarControlExterno()">Guardar control externo</button>
+    </section>
   </section>
 
   <section class="view" id="viewResumenArticulo">
@@ -403,6 +444,9 @@ let mobileIndex = 0;
 let conteoGuardado = false;
 let guardandoConteo = false;
 let dispersionReviewKey = '';
+let externalRows = [];
+let externalGuardado = false;
+let externalReviewKey = '';
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 async function cargarSucursales(){
@@ -411,7 +455,7 @@ async function cargarSucursales(){
     const rows=await res.json();
     if(Array.isArray(rows)&&rows.length) sucursalesDisponibles=rows.filter(r=>r.activa!==false).map(r=>({value:String(r.value??r.id),label:String(r.label??r.nombre??r.value??r.id)}));
   }catch(_){}
-  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalResumenArticulo,sucursalResumen,sucursalArticulos,sucursalAbcMensual,sucursalResp];
+  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalExterno,sucursalResumenArticulo,sucursalResumen,sucursalArticulos,sucursalAbcMensual,sucursalResp];
   ids.forEach(sel=>{
     const keep=sel.value||'1';
     sel.innerHTML=sucursalesDisponibles.map(s=>`<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('');
@@ -421,6 +465,38 @@ async function cargarSucursales(){
 function defaultMonth(){const d=new Date();d.setMonth(d.getMonth()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function currentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function today(){return new Date().toISOString().slice(0,10)}
+function formatDateTime(value){
+  if(!value) return '-';
+  const d=new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleString('es-AR');
+}
+async function actualizarEstadoFrescura(fechaValue,targetId){
+  const el=document.getElementById(targetId);
+  if(!el) return;
+  el.classList.remove('ok','alert');
+  el.textContent='Frescura: consultando...';
+  try{
+    const res=await fetch('/api/control-stock/frescura-status?fecha='+encodeURIComponent(fechaValue||today()));
+    const data=await res.json();
+    if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo consultar Frescura');
+    const last=data.last_sync;
+    const diff=data.dias_diferencia;
+    const isOk=data.estado_alerta==='ok';
+    el.classList.toggle('ok',isOk);
+    el.classList.toggle('alert',!isOk);
+    if(last&&last.finished_at){
+      el.textContent=`Frescura: ${formatDateTime(last.finished_at)} · ${diff ?? '-'} dia(s)`;
+      el.title=`Ultima actualizacion de Frescura: ${formatDateTime(last.finished_at)}. Fecha de control: ${data.fecha_control}. Diferencia: ${diff ?? '-'} dia(s).`;
+    }else{
+      el.textContent='Frescura: sin datos';
+      el.title='Sin datos de actualizacion de Frescura.';
+    }
+  }catch(error){
+    el.classList.add('alert');
+    el.textContent='Frescura: error';
+    el.title=error.message||'No se pudo consultar Frescura';
+  }
+}
 function parseLocalDate(value){
   if(!value) return new Date();
   const [y,m,d]=value.split('-').map(Number);
@@ -450,6 +526,7 @@ function usarHoy(){
   fecha.value=today();
   semana.value='AUTO';
   dia.value='AUTO';
+  actualizarEstadoFrescura(fecha.value,'pFrescura');
   loadPlanilla();
 }
 function syncSucursal(origin){
@@ -459,6 +536,7 @@ function syncSucursal(origin){
   if(origin==='abc') sucursalResumenArticulo.value=sucursalAbc.value;
   if(origin==='abc') sucursalArticulos.value=sucursalAbc.value;
   if(origin==='abc') sucursalAbcMensual.value=sucursalAbc.value;
+  if(origin==='abc') sucursalExterno.value=sucursalAbc.value;
   if(origin==='abc') sucursalResp.value=sucursalAbc.value;
   if(origin==='conteo') sucursalAbc.value=sucursalConteo.value;
   if(origin==='conteo') sucursalPlan.value=sucursalConteo.value;
@@ -466,19 +544,22 @@ function syncSucursal(origin){
   if(origin==='conteo') sucursalResumenArticulo.value=sucursalConteo.value;
   if(origin==='conteo') sucursalArticulos.value=sucursalConteo.value;
   if(origin==='conteo') sucursalAbcMensual.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalExterno.value=sucursalConteo.value;
   if(origin==='conteo') sucursalResp.value=sucursalConteo.value;
   if(origin==='plan') { sucursalAbc.value=sucursalPlan.value; sucursalConteo.value=sucursalPlan.value; }
   if(origin==='plan') sucursalResumen.value=sucursalPlan.value;
   if(origin==='plan') sucursalResumenArticulo.value=sucursalPlan.value;
   if(origin==='plan') sucursalArticulos.value=sucursalPlan.value;
   if(origin==='plan') sucursalAbcMensual.value=sucursalPlan.value;
+  if(origin==='plan') sucursalExterno.value=sucursalPlan.value;
   if(origin==='plan') sucursalResp.value=sucursalPlan.value;
-  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; sucursalResumenArticulo.value=sucursalResumen.value; sucursalArticulos.value=sucursalResumen.value; sucursalAbcMensual.value=sucursalResumen.value; }
+  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; sucursalExterno.value=sucursalResumen.value; sucursalResumenArticulo.value=sucursalResumen.value; sucursalArticulos.value=sucursalResumen.value; sucursalAbcMensual.value=sucursalResumen.value; }
   if(origin==='resumen') sucursalResp.value=sucursalResumen.value;
-  if(origin==='resumenArticulo') { sucursalAbc.value=sucursalResumenArticulo.value; sucursalPlan.value=sucursalResumenArticulo.value; sucursalConteo.value=sucursalResumenArticulo.value; sucursalResumen.value=sucursalResumenArticulo.value; sucursalArticulos.value=sucursalResumenArticulo.value; sucursalAbcMensual.value=sucursalResumenArticulo.value; sucursalResp.value=sucursalResumenArticulo.value; }
-  if(origin==='articulos') { sucursalAbc.value=sucursalArticulos.value; sucursalPlan.value=sucursalArticulos.value; sucursalConteo.value=sucursalArticulos.value; sucursalResumen.value=sucursalArticulos.value; sucursalResumenArticulo.value=sucursalArticulos.value; sucursalAbcMensual.value=sucursalArticulos.value; sucursalResp.value=sucursalArticulos.value; }
-  if(origin==='abcMensual') { sucursalAbc.value=sucursalAbcMensual.value; sucursalPlan.value=sucursalAbcMensual.value; sucursalConteo.value=sucursalAbcMensual.value; sucursalResumen.value=sucursalAbcMensual.value; sucursalResumenArticulo.value=sucursalAbcMensual.value; sucursalArticulos.value=sucursalAbcMensual.value; sucursalResp.value=sucursalAbcMensual.value; }
-  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; sucursalResumenArticulo.value=sucursalResp.value; sucursalArticulos.value=sucursalResp.value; sucursalAbcMensual.value=sucursalResp.value; }
+  if(origin==='resumenArticulo') { sucursalAbc.value=sucursalResumenArticulo.value; sucursalPlan.value=sucursalResumenArticulo.value; sucursalConteo.value=sucursalResumenArticulo.value; sucursalExterno.value=sucursalResumenArticulo.value; sucursalResumen.value=sucursalResumenArticulo.value; sucursalArticulos.value=sucursalResumenArticulo.value; sucursalAbcMensual.value=sucursalResumenArticulo.value; sucursalResp.value=sucursalResumenArticulo.value; }
+  if(origin==='articulos') { sucursalAbc.value=sucursalArticulos.value; sucursalPlan.value=sucursalArticulos.value; sucursalConteo.value=sucursalArticulos.value; sucursalExterno.value=sucursalArticulos.value; sucursalResumen.value=sucursalArticulos.value; sucursalResumenArticulo.value=sucursalArticulos.value; sucursalAbcMensual.value=sucursalArticulos.value; sucursalResp.value=sucursalArticulos.value; }
+  if(origin==='abcMensual') { sucursalAbc.value=sucursalAbcMensual.value; sucursalPlan.value=sucursalAbcMensual.value; sucursalConteo.value=sucursalAbcMensual.value; sucursalExterno.value=sucursalAbcMensual.value; sucursalResumen.value=sucursalAbcMensual.value; sucursalResumenArticulo.value=sucursalAbcMensual.value; sucursalArticulos.value=sucursalAbcMensual.value; sucursalResp.value=sucursalAbcMensual.value; }
+  if(origin==='externo') { sucursalAbc.value=sucursalExterno.value; sucursalPlan.value=sucursalExterno.value; sucursalConteo.value=sucursalExterno.value; sucursalResumen.value=sucursalExterno.value; sucursalResumenArticulo.value=sucursalExterno.value; sucursalArticulos.value=sucursalExterno.value; sucursalAbcMensual.value=sucursalExterno.value; sucursalResp.value=sucursalExterno.value; }
+  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalExterno.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; sucursalResumenArticulo.value=sucursalResp.value; sucursalArticulos.value=sucursalResp.value; sucursalAbcMensual.value=sucursalResp.value; }
   abcLoaded=false;
   planLoaded=false;
   resumenLoaded=false;
@@ -499,6 +580,7 @@ function openTab(name){
   tabAbc.classList.toggle('active', name==='abc');
   tabPlan.classList.toggle('active', name==='plan');
   tabConteo.classList.toggle('active', name==='conteo');
+  tabExterno.classList.toggle('active', name==='externo');
   tabResumenArticulo.classList.toggle('active', name==='resumenArticulo');
   tabResumen.classList.toggle('active', name==='resumen');
   tabArticulos.classList.toggle('active', name==='articulos');
@@ -507,6 +589,7 @@ function openTab(name){
   viewAbc.classList.toggle('active', name==='abc');
   viewPlan.classList.toggle('active', name==='plan');
   viewConteo.classList.toggle('active', name==='conteo');
+  viewExterno.classList.toggle('active', name==='externo');
   viewResumenArticulo.classList.toggle('active', name==='resumenArticulo');
   viewResumen.classList.toggle('active', name==='resumen');
   viewArticulos.classList.toggle('active', name==='articulos');
@@ -939,6 +1022,52 @@ function mobileNext(){
     status.textContent='Faltan articulos por cargar. Si no hay stock, escribí 0.';
   }
 }
+function cantidadInputsExterno(id){
+  const values=[1,2,3,4,5,6].map(n=>{const el=document.querySelector(`[data-ext-cant="${id}-${n}"]`);return el&&el.value!==''?Number(el.value):0});
+  const unidEl=document.querySelector(`[data-ext-unid="${id}"]`);
+  const unidades=unidEl&&unidEl.value!==''?Number(unidEl.value):0;
+  const touched=values.some(v=>v!==0)||(unidEl&&unidEl.value!=='');
+  return {values,total:values.reduce((a,b)=>a+b,0),unidades,touched};
+}
+function actualizarTotalesExterno(){
+  externalReviewKey='';
+  let total=0, unidades=0, cargados=0;
+  externalRows.forEach(r=>{const input=cantidadInputsExterno(r.id_articulo);if(input.touched)cargados+=1;const norm=normalizarConteo(r,input);total+=norm.bultos;unidades+=norm.unidades;document.querySelectorAll(`[data-ext-total="${r.id_articulo}"]`).forEach(el=>el.textContent=fmt.format(norm.bultos));document.querySelectorAll(`[data-ext-unidades="${r.id_articulo}"]`).forEach(el=>el.textContent=fmt.format(norm.unidades))});
+  extTotal.textContent=`Total: ${fmt.format(total)} bultos con ${fmt.format(unidades)} unidades`;
+  externoFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(externalRows.length)} articulos cargados`;
+}
+function renderControlExterno(){
+  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${fmt.format(r.bultos_por_pallet||0)}</td><td class="num">${fmt.format(r.unidades_por_bulto||0)}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
+  externoCards.innerHTML=externalRows.map(r=>`<article class="mobile-card"><div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · ${esc(r.abc)}</span></div><div class="mobile-article-desc">${esc(r.descripcion)}</div><div class="mobile-logistics"><span>Bultos/Pallet<strong>${fmt.format(r.bultos_por_pallet||0)}</strong></span><span>Unid/Bulto<strong>${fmt.format(r.unidades_por_bulto||0)}</strong></span></div><div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-row five">${[1,2,3,4,5,6].map(n=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div><div class="mobile-group units"><div class="mobile-group-title">Unidades</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div><div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div></article>`).join('');
+  actualizarTotalesExterno();
+}
+async function generarControlExterno(){
+  externoStatus.textContent='Generando sorteo...';externalGuardado=false;externalReviewKey='';if(guardarExternoBtn){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo'}
+  actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
+  const params=new URLSearchParams({mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,cantidad:cantidadExterno.value||6});
+  const res=await fetch('/api/control-stock/control-externo/sorteo?'+params);const data=await res.json();
+  if(!res.ok||data.ok===false){externoStatus.textContent='Error: '+(data.error||'No se pudo generar');return}
+  externalRows=data.rows||[];extMes.textContent=`Mes: ${data.mes}`;extArt.textContent=`Articulos: ${externalRows.length}`;externoStatus.textContent=`Sorteo generado: ${externalRows.length} articulos.`;renderControlExterno();
+}
+function externalPayload(){
+  const items=externalRows.map(r=>{const input=cantidadInputsExterno(r.id_articulo);const norm=normalizarConteo(r,input);return {id_articulo:r.id_articulo,descripcion:r.descripcion,abc:r.abc,semana:'externo',dia:'Externo',cantidad_1:input.values[0],cantidad_2:input.values[1],cantidad_3:input.values[2],cantidad_4:input.values[3],cantidad_5:input.values[4],cantidad_6:input.values[5],unidades_sueltas:norm.unidades,stock:norm.bultos,diferencia:false,observacion:`Control externo | Total: ${norm.bultos} bultos con ${norm.unidades} unidades`}})
+  return {tipo_conteo:'externo',mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,semana:'externo',dia:'Externo',fecha:fechaExterno.value||today(),responsable:responsableExterno.value.trim(),hora_inicio:new Date().toTimeString().slice(0,5),hora_fin:new Date().toTimeString().slice(0,5),observaciones:observacionesExterno.value,items};
+}
+async function guardarControlExterno(){
+  if(externalGuardado){alert('Este control externo ya fue guardado.');return}
+  if(!externalRows.length){externoStatus.textContent='Primero genera un sorteo.';return}
+  if(!responsableExterno.value.trim()){externoStatus.textContent='Ingresa el responsable externo.';responsableExterno.focus();return}
+  const faltante=externalRows.find(r=>!cantidadInputsExterno(r.id_articulo).touched);
+  if(faltante){externoStatus.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribi 0.`;return}
+  const payload=externalPayload();const sig=dispersionSignature(payload);const validacion=await validarDispersionAntesDeGuardar(payload);const alertas=validacion.alertas_dispersion||[];
+  if(alertas.length&&externalReviewKey!==sig){externalReviewKey=sig;alert(`Antes de guardar, volve a controlar estos articulos:\n\n${alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n')}\n\nNo se muestra el stock esperado.`);externoStatus.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante.`;return}
+  if(alertas.length&&!confirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)) return;
+  if(!confirm(`Guardar control externo con ${externalRows.length} articulos?`)) return;
+  guardarExternoBtn.disabled=true;guardarExternoBtn.textContent='Guardando...';
+  const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();
+  if(!res.ok||data.ok===false){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo';externoStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
+  externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado. Items: ${data.data.items_guardados}.`;alert('Control externo guardado correctamente.');
+}
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
   let data={horaInicio:horaInicio.value,responsable:responsable.value,observaciones:observaciones.value,values:{},unidades:{}};
@@ -964,6 +1093,7 @@ function cargarBorradorLocal(){
 async function loadPlanilla(){
   const f=filtrosEfectivos();
   const params=new URLSearchParams({mes:mes.value||defaultMonth(),sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value});
+  actualizarEstadoFrescura(fecha.value,'pFrescura');
   conteoGuardado=false;
   guardandoConteo=false;
   dispersionReviewKey='';
@@ -1121,10 +1251,12 @@ async function guardarConteo(){
   guardandoConteo=false;
 }
 (async function initControlStock(){
-  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();fechaResumenArticulo.value=today();semana.value='AUTO';dia.value='AUTO';
+  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesExterno.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();fechaExterno.value=today();fechaResumenArticulo.value=today();semana.value='AUTO';dia.value='AUTO';
   [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
   [mes,horaInicio,horaFin,estado].forEach(el=>el.closest('.field').style.display='none');
   await cargarSucursales();
+  actualizarEstadoFrescura(fecha.value,'pFrescura');
+  actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
   loadAbc();loadPlanificacion();loadResumenMensual();loadResumenArticulo();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();
 })();
 </script>

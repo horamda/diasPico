@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import calendar as cal_mod
-from datetime import date
+import random
+from datetime import date, datetime
 from threading import Lock
 
 import psycopg2.extras
@@ -38,6 +39,7 @@ def ensure_control_stock_tables() -> None:
                         hora_inicio TIME,
                         hora_fin TIME,
                         observaciones TEXT,
+                        tipo_conteo VARCHAR(20) NOT NULL DEFAULT 'mensual',
                         estado VARCHAR(20) NOT NULL DEFAULT 'guardado',
                         created_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         updated_at TIMESTAMP NOT NULL DEFAULT NOW()
@@ -78,6 +80,7 @@ def ensure_control_stock_tables() -> None:
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_5 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_6 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS unidades_sueltas NUMERIC;
+                    ALTER TABLE control_stock_conteos ADD COLUMN IF NOT EXISTS tipo_conteo VARCHAR(20) NOT NULL DEFAULT 'mensual';
                     CREATE INDEX IF NOT EXISTS idx_control_stock_conteos_mes
                         ON control_stock_conteos(mes_abc, sucursal, fecha);
                     CREATE INDEX IF NOT EXISTS idx_control_stock_responsables_sucursal
@@ -124,6 +127,62 @@ def _previous_month_label(mes: str) -> str:
         year -= 1
         month = 12
     return f"{year}-{month:02d}"
+
+
+def get_frescura_status(fecha_control: str | None = None) -> dict:
+    ensure_control_stock_tables()
+    control_date = date.today()
+    if fecha_control:
+        try:
+            control_date = date.fromisoformat(str(fecha_control)[:10])
+        except Exception:
+            control_date = date.today()
+    try:
+        with pg_cursor() as cur:
+            cur.execute(
+                """SELECT id, started_at, finished_at, estado, total_items, saved_rows
+                   FROM frescura_sync_log
+                   ORDER BY started_at DESC, id DESC
+                   LIMIT 1"""
+            )
+            row = cur.fetchone()
+    except Exception:
+        row = None
+    if not row:
+        return {
+            "ok": True,
+            "fecha_control": control_date.isoformat(),
+            "last_sync": None,
+            "dias_diferencia": None,
+            "estado_alerta": "sin_datos",
+            "mensaje": "Sin datos de actualizacion de Frescura",
+        }
+    finished = row.get("finished_at") or row.get("started_at")
+    if isinstance(finished, datetime):
+        sync_date = finished.date()
+        finished_text = finished.isoformat()
+    elif isinstance(finished, date):
+        sync_date = finished
+        finished_text = finished.isoformat()
+    else:
+        sync_date = None
+        finished_text = str(finished or "")
+    diff = abs((control_date - sync_date).days) if sync_date else None
+    stale = diff is None or diff > 1
+    return {
+        "ok": True,
+        "fecha_control": control_date.isoformat(),
+        "last_sync": {
+            "id": int(row.get("id") or 0),
+            "finished_at": finished_text,
+            "estado": row.get("estado") or "",
+            "total_items": int(row.get("total_items") or 0),
+            "saved_rows": int(row.get("saved_rows") or 0),
+        },
+        "dias_diferencia": diff,
+        "estado_alerta": "desactualizado" if stale else "ok",
+        "mensaje": "Frescura desactualizada para esta fecha de control" if stale else "Frescura actualizada",
+    }
 
 
 def _business_days_count(ini: date, fin: date) -> int:
@@ -464,6 +523,42 @@ def get_planilla(
     return data
 
 
+def generar_control_externo(mes: str | None = None, sucursal: str | None = "1", cantidad: int = 6) -> dict:
+    cantidad = max(1, min(20, int(cantidad or 6)))
+    suc = _sucursal_id(sucursal)
+    data = get_abc_articulos(mes=mes, sucursal=suc)
+    rows = [row for row in data.get("rows", []) if row.get("participa") == "SI"]
+    grupos = {
+        "A": [row for row in rows if row.get("abc") == "A"],
+        "B": [row for row in rows if row.get("abc") == "B"],
+        "C": [row for row in rows if row.get("abc") == "C"],
+    }
+    selected: list[dict] = []
+    target_por_abc = {"A": 2, "B": 2, "C": 2} if cantidad >= 6 else {}
+    for abc_key, target in target_por_abc.items():
+        pool = grupos.get(abc_key, [])
+        if pool:
+            selected.extend(random.sample(pool, min(target, len(pool))))
+    selected_ids = {int(row["id_articulo"]) for row in selected}
+    faltan = cantidad - len(selected)
+    if faltan > 0:
+        restantes = [row for row in rows if int(row["id_articulo"]) not in selected_ids]
+        if restantes:
+            selected.extend(random.sample(restantes, min(faltan, len(restantes))))
+    random.shuffle(selected)
+    for row in selected:
+        row["control_semana"] = "externo"
+        row["control_dia"] = "Externo"
+    return {
+        "ok": True,
+        "mes": data.get("mes"),
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "cantidad": len(selected),
+        "rows": selected,
+    }
+
+
 def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dict:
     data = get_abc_articulos(mes, sucursal=sucursal)
     semanas = ("semana1", "semana2", "semana3", "semana4")
@@ -537,6 +632,7 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
         "hora_inicio": payload.get("hora_inicio") or None,
         "hora_fin": payload.get("hora_fin") or None,
         "observaciones": str(payload.get("observaciones") or ""),
+        "tipo_conteo": str(payload.get("tipo_conteo") or "mensual").strip().lower()[:20] or "mensual",
     }
 
     rows = _rows_conteo_desde_items(items)
@@ -554,6 +650,7 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                      AND dia = %(dia)s
                      AND fecha = %(fecha)s
                      AND responsable = %(responsable)s
+                     AND tipo_conteo = %(tipo_conteo)s
                    ORDER BY id DESC
                    LIMIT 1""",
                 conteo,
@@ -568,14 +665,14 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                 cur.execute(
                     """INSERT INTO control_stock_conteos(
                            mes_abc, sucursal, semana, dia, fecha, responsable,
-                           hora_inicio, hora_fin, observaciones
+                           hora_inicio, hora_fin, observaciones, tipo_conteo
                        )
                        VALUES (
                            %(mes_abc)s, %(sucursal)s, %(semana)s, %(dia)s, %(fecha)s,
-                           %(responsable)s, %(hora_inicio)s, %(hora_fin)s, %(observaciones)s
+                           %(responsable)s, %(hora_inicio)s, %(hora_fin)s, %(observaciones)s, %(tipo_conteo)s
                        )
                        RETURNING id, mes_abc, sucursal, semana, dia, fecha, responsable,
-                                 hora_inicio, hora_fin, observaciones, estado, created_at""",
+                                 hora_inicio, hora_fin, observaciones, tipo_conteo, estado, created_at""",
                     conteo,
                 )
                 saved = dict(cur.fetchone() or {})
