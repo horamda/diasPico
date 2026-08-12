@@ -317,3 +317,22 @@ GET /api/rechazos/diario/resumen
 GET /api/rechazos/diario/detalle
 ```
 
+## Endpoint 4: Rechazos por Cliente
+
+Devuelve un ranking de clientes con rechazo real en el rango seleccionado.
+
+```http
+GET /api/rechazos/por-cliente?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS&limit=50
+```
+
+Campos principales: `cliente`, `descripcion_cliente`, `sucursal`, `pedidos_rechazo`, `ocurrencias`, `bultos_rechazo`, `hl_rechazo`, `pallets_rechazo`, `motivos`.
+
+## Endpoint 5: Rechazos por Motivo
+
+Devuelve un ranking de motivos de rechazo real en el rango seleccionado.
+
+```http
+GET /api/rechazos/por-motivo?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS&limit=50
+```
+
+Campos principales: `sector`, `motivo`, `pedidos_rechazo`, `clientes_rechazo`, `ocurrencias`, `bultos_rechazo`, `hl_rechazo`, `pallets_rechazo`.

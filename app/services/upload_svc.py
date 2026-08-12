@@ -332,6 +332,23 @@ def _str_lim(value, limit: int) -> str:
     return str(value or '').strip()[:limit]
 
 
+def _hl_dec(value, bultos=None) -> float | None:
+    parsed = to_dec(value)
+    if parsed is None:
+        return None
+
+    bultos_parsed = to_dec(bultos)
+    if (
+        isinstance(value, int)
+        and abs(parsed) >= 100
+        and bultos_parsed
+        and abs(parsed / bultos_parsed) > 10
+    ):
+        return parsed / 1000
+
+    return parsed
+
+
 def _ventas_det_row(fecha: date, g: dict, sucursal: str) -> tuple:
     return (
         _str_lim(sucursal, 50),
@@ -349,8 +366,8 @@ def _ventas_det_row(fecha: date, g: dict, sucursal: str) -> tuple:
         to_dec(g.get('bultos_rechazados')),
         to_dec(g.get('importe_neto')),
         to_dec(g.get('importe_neto_rechazado')),
-        to_dec(g.get('unidad_medida')),
-        to_dec(g.get('unidad_medida_rechazado')),
+        _hl_dec(g.get('unidad_medida'), g.get('bultos')),
+        _hl_dec(g.get('unidad_medida_rechazado'), g.get('bultos_rechazados')),
         to_dec(g.get('unidad_paquete')),
         to_dec(g.get('unidad_paquete_rechazado')),
         fecha,

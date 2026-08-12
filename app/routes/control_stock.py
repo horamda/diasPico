@@ -174,6 +174,24 @@ def validar_dispersion_conteo():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.put("/conteos/<int:conteo_id>/items/<int:id_articulo>")
+@login_required
+def editar_conteo_item(conteo_id: int, id_articulo: int):
+    try:
+        user = getattr(g, "portal_user", None) or {}
+        data = control_stock_svc.editar_conteo_item(
+            conteo_id,
+            id_articulo,
+            request.get_json(force=True) or {},
+            editado_por=str(user.get("nombre") or user.get("username") or ""),
+        )
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/responsables")
 @login_required
 def responsables():

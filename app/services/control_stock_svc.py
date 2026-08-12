@@ -73,6 +73,32 @@ def ensure_control_stock_tables() -> None:
                         updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         UNIQUE (sucursal, nombre)
                     );
+                    CREATE TABLE IF NOT EXISTS control_stock_conteo_item_audit (
+                        id BIGSERIAL PRIMARY KEY,
+                        conteo_id BIGINT NOT NULL,
+                        id_articulo INTEGER NOT NULL,
+                        cantidad_1_old NUMERIC,
+                        cantidad_2_old NUMERIC,
+                        cantidad_3_old NUMERIC,
+                        cantidad_4_old NUMERIC,
+                        cantidad_5_old NUMERIC,
+                        cantidad_6_old NUMERIC,
+                        unidades_sueltas_old NUMERIC,
+                        stock_old NUMERIC,
+                        observacion_old TEXT,
+                        cantidad_1_new NUMERIC,
+                        cantidad_2_new NUMERIC,
+                        cantidad_3_new NUMERIC,
+                        cantidad_4_new NUMERIC,
+                        cantidad_5_new NUMERIC,
+                        cantidad_6_new NUMERIC,
+                        unidades_sueltas_new NUMERIC,
+                        stock_new NUMERIC,
+                        observacion_new TEXT,
+                        motivo TEXT NOT NULL,
+                        editado_por VARCHAR(120),
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    );
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_1 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_2 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_3 NUMERIC;
@@ -85,6 +111,8 @@ def ensure_control_stock_tables() -> None:
                         ON control_stock_conteos(mes_abc, sucursal, fecha);
                     CREATE INDEX IF NOT EXISTS idx_control_stock_responsables_sucursal
                         ON control_stock_responsables(sucursal, activo, nombre);
+                    CREATE INDEX IF NOT EXISTS idx_control_stock_item_audit_item
+                        ON control_stock_conteo_item_audit(conteo_id, id_articulo, created_at);
                 """)
         _CONTROL_STOCK_READY = True
 
@@ -721,6 +749,117 @@ def validar_dispersion_conteo(payload: dict) -> dict:
     }
 
 
+def editar_conteo_item(conteo_id: int, id_articulo: int, payload: dict, editado_por: str = "") -> dict:
+    ensure_control_stock_tables()
+    motivo = str(payload.get("motivo") or "").strip()
+    if not motivo:
+        raise ValueError("motivo es obligatorio")
+
+    def _num(key: str) -> float | None:
+        value = payload.get(key)
+        if value in (None, ""):
+            return None
+        number = float(value)
+        if number < 0:
+            raise ValueError("las cantidades no pueden ser negativas")
+        return number
+
+    values = {f"cantidad_{idx}": _num(f"cantidad_{idx}") for idx in range(1, 7)}
+    unidades_sueltas = _num("unidades_sueltas")
+    stock = sum(float(v or 0) for v in values.values())
+    observacion = str(payload.get("observacion") or "").strip()
+
+    with pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """SELECT c.id AS conteo_id, c.fecha, c.responsable, c.sucursal, c.estado,
+                          i.id_articulo, i.descripcion, i.abc, i.semana, i.dia,
+                          i.cantidad_1, i.cantidad_2, i.cantidad_3, i.cantidad_4, i.cantidad_5, i.cantidad_6,
+                          i.unidades_sueltas, i.stock, i.observacion
+                   FROM control_stock_conteos c
+                   JOIN control_stock_conteo_items i ON i.conteo_id = c.id
+                   WHERE c.id = %s AND i.id_articulo = %s
+                   FOR UPDATE""",
+                (conteo_id, id_articulo),
+            )
+            current = cur.fetchone()
+            if not current:
+                raise ValueError("item de control no encontrado")
+
+            cur.execute(
+                """INSERT INTO control_stock_conteo_item_audit(
+                       conteo_id, id_articulo,
+                       cantidad_1_old, cantidad_2_old, cantidad_3_old, cantidad_4_old, cantidad_5_old, cantidad_6_old,
+                       unidades_sueltas_old, stock_old, observacion_old,
+                       cantidad_1_new, cantidad_2_new, cantidad_3_new, cantidad_4_new, cantidad_5_new, cantidad_6_new,
+                       unidades_sueltas_new, stock_new, observacion_new,
+                       motivo, editado_por
+                   )
+                   VALUES (
+                       %(conteo_id)s, %(id_articulo)s,
+                       %(cantidad_1_old)s, %(cantidad_2_old)s, %(cantidad_3_old)s, %(cantidad_4_old)s, %(cantidad_5_old)s, %(cantidad_6_old)s,
+                       %(unidades_sueltas_old)s, %(stock_old)s, %(observacion_old)s,
+                       %(cantidad_1_new)s, %(cantidad_2_new)s, %(cantidad_3_new)s, %(cantidad_4_new)s, %(cantidad_5_new)s, %(cantidad_6_new)s,
+                       %(unidades_sueltas_new)s, %(stock_new)s, %(observacion_new)s,
+                       %(motivo)s, %(editado_por)s
+                   )""",
+                {
+                    "conteo_id": conteo_id,
+                    "id_articulo": id_articulo,
+                    "cantidad_1_old": current.get("cantidad_1"),
+                    "cantidad_2_old": current.get("cantidad_2"),
+                    "cantidad_3_old": current.get("cantidad_3"),
+                    "cantidad_4_old": current.get("cantidad_4"),
+                    "cantidad_5_old": current.get("cantidad_5"),
+                    "cantidad_6_old": current.get("cantidad_6"),
+                    "unidades_sueltas_old": current.get("unidades_sueltas"),
+                    "stock_old": current.get("stock"),
+                    "observacion_old": current.get("observacion"),
+                    "cantidad_1_new": values["cantidad_1"],
+                    "cantidad_2_new": values["cantidad_2"],
+                    "cantidad_3_new": values["cantidad_3"],
+                    "cantidad_4_new": values["cantidad_4"],
+                    "cantidad_5_new": values["cantidad_5"],
+                    "cantidad_6_new": values["cantidad_6"],
+                    "unidades_sueltas_new": unidades_sueltas,
+                    "stock_new": stock,
+                    "observacion_new": observacion,
+                    "motivo": motivo,
+                    "editado_por": editado_por[:120],
+                },
+            )
+            cur.execute(
+                """UPDATE control_stock_conteo_items
+                   SET cantidad_1 = %(cantidad_1)s,
+                       cantidad_2 = %(cantidad_2)s,
+                       cantidad_3 = %(cantidad_3)s,
+                       cantidad_4 = %(cantidad_4)s,
+                       cantidad_5 = %(cantidad_5)s,
+                       cantidad_6 = %(cantidad_6)s,
+                       unidades_sueltas = %(unidades_sueltas)s,
+                       stock = %(stock)s,
+                       observacion = %(observacion)s,
+                       updated_at = NOW()
+                   WHERE conteo_id = %(conteo_id)s AND id_articulo = %(id_articulo)s
+                   RETURNING conteo_id, id_articulo, cantidad_1, cantidad_2, cantidad_3, cantidad_4,
+                             cantidad_5, cantidad_6, unidades_sueltas, stock, observacion, updated_at""",
+                {
+                    "conteo_id": conteo_id,
+                    "id_articulo": id_articulo,
+                    **values,
+                    "unidades_sueltas": unidades_sueltas,
+                    "stock": stock,
+                    "observacion": observacion,
+                },
+            )
+            updated = dict(cur.fetchone() or {})
+            cur.execute("UPDATE control_stock_conteos SET updated_at = NOW() WHERE id = %s", (conteo_id,))
+
+    updated["stock"] = float(updated.get("stock") or 0)
+    updated["unidades_sueltas"] = float(updated.get("unidades_sueltas") or 0)
+    return updated
+
+
 def list_responsables(sucursal: str | None = "1", incluir_inactivos: bool = False) -> list[dict]:
     ensure_control_stock_tables()
     suc = _sucursal_id(sucursal)
@@ -1044,7 +1183,25 @@ def get_resumen_por_articulo(
                     SUM(COALESCE(i.stock, 0)) AS total_bultos,
                     SUM(COALESCE(i.unidades_sueltas, 0)) AS total_unidades,
                     COUNT(*) AS controles,
-                    STRING_AGG(DISTINCT c.responsable, ', ' ORDER BY c.responsable) AS responsables
+                    STRING_AGG(DISTINCT c.responsable, ', ' ORDER BY c.responsable) AS responsables,
+                    JSON_AGG(
+                        JSON_BUILD_OBJECT(
+                            'conteo_id', c.id,
+                            'responsable', c.responsable,
+                            'semana', c.semana,
+                            'dia', c.dia,
+                            'cantidad_1', i.cantidad_1,
+                            'cantidad_2', i.cantidad_2,
+                            'cantidad_3', i.cantidad_3,
+                            'cantidad_4', i.cantidad_4,
+                            'cantidad_5', i.cantidad_5,
+                            'cantidad_6', i.cantidad_6,
+                            'unidades_sueltas', i.unidades_sueltas,
+                            'stock', i.stock,
+                            'observacion', i.observacion
+                        )
+                        ORDER BY c.responsable, c.id
+                    ) AS controles_detalle
                 FROM latest c
                 JOIN control_stock_conteo_items i ON i.conteo_id = c.id
                 WHERE i.stock IS NOT NULL
@@ -1068,6 +1225,7 @@ def get_resumen_por_articulo(
                 "total_unidades": float(r.get("total_unidades") or 0),
                 "controles": int(r.get("controles") or 0),
                 "responsables": r.get("responsables") or "",
+                "controles_detalle": r.get("controles_detalle") or [],
             })
 
         cur.execute(
@@ -1145,8 +1303,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
     rows = []
     for item in articles.values():
         meses = item["meses"]
-        visible_months = month_names[:max_month]
-        abc_values = [meses.get(name, "") for name in visible_months]
+        abc_values = [meses.get(name, "") for name in month_names[:max_month]]
         loaded_values = [value for value in abc_values[:max_month] if value]
         cambios = sum(1 for prev, curr in zip(loaded_values, loaded_values[1:]) if prev != curr)
         observaciones = "Vario a lo largo del año" if cambios else "Sin variacion"
@@ -1157,7 +1314,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
             "tipo_producto": item["tipo_producto"],
             "cambios": cambios,
             "observaciones": observaciones,
-            **{name: meses.get(name, "") for name in visible_months},
+            **{name: meses.get(name, "") for name in month_names},
         })
 
     abc_order = {"A": 0, "B": 1, "C": 2, "": 3}
@@ -1167,7 +1324,7 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
         "anio": year,
         "sucursal": suc,
         "sucursal_nombre": _sucursal_nombre(suc),
-        "meses": list(month_names[:max_month]),
+        "meses": list(month_names),
         "hasta_mes": max_month,
         "total_articulos": len(rows),
         "articulos_con_cambios": sum(1 for r in rows if r["cambios"] > 0),

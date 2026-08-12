@@ -181,6 +181,31 @@ DETALLE_DIARIO_CAMPOS = [
 ]
 
 
+RECHAZOS_CLIENTE_CAMPOS = [
+    'cliente',
+    'descripcion_cliente',
+    'sucursal',
+    'pedidos_rechazo',
+    'ocurrencias',
+    'bultos_rechazo',
+    'hl_rechazo',
+    'pallets_rechazo',
+    'motivos',
+]
+
+
+RECHAZOS_MOTIVO_CAMPOS = [
+    'sector',
+    'motivo',
+    'pedidos_rechazo',
+    'clientes_rechazo',
+    'ocurrencias',
+    'bultos_rechazo',
+    'hl_rechazo',
+    'pallets_rechazo',
+]
+
+
 def get_resumen_diario(desde, hasta, sucursal: str = 'TODAS') -> dict:
     if desde > hasta:
         raise ValueError('desde no puede ser posterior a hasta')
@@ -241,6 +266,106 @@ def get_resumen_diario(desde, hasta, sucursal: str = 'TODAS') -> dict:
             'pct_rechazo_pallets': round(pallets_rechazo / pallets * 100, 2) if pallets else 0,
         })
     return _base_payload(desde, hasta, sucursal, datos, RESUMEN_DIARIO_CAMPOS)
+
+
+def get_rechazos_por_cliente(desde, hasta, sucursal: str = 'TODAS', limit: int = 50) -> dict:
+    if desde > hasta:
+        raise ValueError('desde no puede ser posterior a hasta')
+    ensure_table()
+    ensure_ventas_detalle_table()
+    ensure_articulos_table()
+    sucursal = sucursal or 'TODAS'
+    limit = max(1, min(int(limit or 50), 500))
+    params = {'desde': desde, 'hasta': hasta, 'sucursal': sucursal, 'limit': limit}
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            SELECT
+                COALESCE(NULLIF(TRIM(v.cliente), ''), 'Sin cliente') AS cliente,
+                COALESCE(NULLIF(TRIM(MAX(v.descripcion_cliente)), ''), NULLIF(TRIM(MAX(v.descripcion_detallada_cliente)), ''), '') AS descripcion_cliente,
+                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal,
+                COUNT(DISTINCT CASE WHEN {IS_REC} THEN {PEDIDO_KEY} END) AS pedidos_rechazo,
+                COUNT(*) AS ocurrencias,
+                SUM(COALESCE(v.bultos_rechazados, 0)) AS bultos_rechazo,
+                SUM(COALESCE(v.unidad_medida_rechazado, 0)) AS hl_rechazo,
+                SUM({PALLETS_RECHAZO_EXPR}) AS pallets_rechazo,
+                STRING_AGG(DISTINCT COALESCE(NULLIF(TRIM(v.motivo_rechazo), ''), 'Sin motivo'), ' | ' ORDER BY COALESCE(NULLIF(TRIM(v.motivo_rechazo), ''), 'Sin motivo')) AS motivos
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            {REC_JOIN}
+            WHERE v.fecha BETWEEN %(desde)s AND %(hasta)s
+              {_suc_filter(sucursal)}
+              AND {IS_REC}
+              AND {IS_MERCADERIA}
+              AND {NOT_REMITO}
+            GROUP BY
+                COALESCE(NULLIF(TRIM(v.cliente), ''), 'Sin cliente'),
+                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1')
+            ORDER BY bultos_rechazo DESC, hl_rechazo DESC, pedidos_rechazo DESC
+            LIMIT %(limit)s
+        """, params)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    datos = [{
+        'cliente': r.get('cliente') or 'Sin cliente',
+        'descripcion_cliente': r.get('descripcion_cliente') or '',
+        'sucursal': r.get('sucursal') or '',
+        'pedidos_rechazo': int(r.get('pedidos_rechazo') or 0),
+        'ocurrencias': int(r.get('ocurrencias') or 0),
+        'bultos_rechazo': _num(r.get('bultos_rechazo'), 2),
+        'hl_rechazo': _num(r.get('hl_rechazo'), 4),
+        'pallets_rechazo': _num(r.get('pallets_rechazo'), 4),
+        'motivos': r.get('motivos') or '',
+    } for r in rows]
+    return _base_payload(desde, hasta, sucursal, datos, RECHAZOS_CLIENTE_CAMPOS)
+
+
+def get_rechazos_por_motivo(desde, hasta, sucursal: str = 'TODAS', limit: int = 50) -> dict:
+    if desde > hasta:
+        raise ValueError('desde no puede ser posterior a hasta')
+    ensure_table()
+    ensure_ventas_detalle_table()
+    ensure_articulos_table()
+    sucursal = sucursal or 'TODAS'
+    limit = max(1, min(int(limit or 50), 500))
+    params = {'desde': desde, 'hasta': hasta, 'sucursal': sucursal, 'limit': limit}
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            SELECT
+                COALESCE(rz.sector, 'Sin sector') AS sector,
+                COALESCE(NULLIF(TRIM(v.motivo_rechazo), ''), 'Sin motivo') AS motivo,
+                COUNT(DISTINCT CASE WHEN {IS_REC} THEN {PEDIDO_KEY} END) AS pedidos_rechazo,
+                COUNT(DISTINCT NULLIF(TRIM(v.cliente), '')) AS clientes_rechazo,
+                COUNT(*) AS ocurrencias,
+                SUM(COALESCE(v.bultos_rechazados, 0)) AS bultos_rechazo,
+                SUM(COALESCE(v.unidad_medida_rechazado, 0)) AS hl_rechazo,
+                SUM({PALLETS_RECHAZO_EXPR}) AS pallets_rechazo
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            {REC_JOIN}
+            WHERE v.fecha BETWEEN %(desde)s AND %(hasta)s
+              {_suc_filter(sucursal)}
+              AND {IS_REC}
+              AND {IS_MERCADERIA}
+              AND {NOT_REMITO}
+            GROUP BY
+                COALESCE(rz.sector, 'Sin sector'),
+                COALESCE(NULLIF(TRIM(v.motivo_rechazo), ''), 'Sin motivo')
+            ORDER BY bultos_rechazo DESC, hl_rechazo DESC, pedidos_rechazo DESC
+            LIMIT %(limit)s
+        """, params)
+        rows = [dict(r) for r in cur.fetchall()]
+
+    datos = [{
+        'sector': r.get('sector') or 'Sin sector',
+        'motivo': r.get('motivo') or 'Sin motivo',
+        'pedidos_rechazo': int(r.get('pedidos_rechazo') or 0),
+        'clientes_rechazo': int(r.get('clientes_rechazo') or 0),
+        'ocurrencias': int(r.get('ocurrencias') or 0),
+        'bultos_rechazo': _num(r.get('bultos_rechazo'), 2),
+        'hl_rechazo': _num(r.get('hl_rechazo'), 4),
+        'pallets_rechazo': _num(r.get('pallets_rechazo'), 4),
+    } for r in rows]
+    return _base_payload(desde, hasta, sucursal, datos, RECHAZOS_MOTIVO_CAMPOS)
 
 
 def get_detalle_diario(desde, hasta, sucursal: str = 'TODAS') -> dict:

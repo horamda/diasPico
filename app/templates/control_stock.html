@@ -52,15 +52,15 @@
       #viewConteo .panel{position:static;box-shadow:none}
       #viewConteo .grid{grid-template-columns:1fr!important}
       #viewConteo .field{padding:5px 7px;border-right:0}
-      #viewConteo .field label{font-size:9px;margin-bottom:2px}
-      #viewConteo .field input,#viewConteo .field select{min-height:34px!important;height:34px!important;font-size:12px!important;padding:5px 8px!important}
+      #viewConteo .field label{font-size:11px;margin-bottom:2px}
+      #viewConteo .field input,#viewConteo .field select{min-height:40px!important;height:40px!important;font-size:14px!important;padding:6px 8px!important}
       #viewConteo .time-note{font-size:11px;padding:7px 9px;margin-bottom:6px}
       #viewConteo .stats{position:static!important;display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:6px;background:#eef2f5}
-      #viewConteo .stats .pill{min-width:0!important;font-size:10.5px;padding:5px 6px}
-      .top{gap:6px;margin-bottom:6px}.top h1{font-size:18px}.top .sub{display:none}.eyebrow{font-size:9px}
+      #viewConteo .stats .pill{min-width:0!important;font-size:11.5px;padding:6px 7px}
+      .top{gap:6px;margin-bottom:6px}.top h1{font-size:18px}.top .sub{display:none}.eyebrow{font-size:10px}
       .top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr 1fr!important;gap:5px;width:100%}
-      .top .btn{min-height:30px!important;height:30px!important;font-size:11px!important;padding:4px 7px!important}
-      .tabs{padding:3px;gap:3px;margin-bottom:8px}.tab{font-size:10.5px;padding:7px 9px}
+      .top .btn{min-height:40px!important;height:40px!important;font-size:12.5px!important;padding:4px 7px!important}
+      .tabs{padding:4px;gap:4px;margin-bottom:8px}.tab{font-size:12px;padding:9px 11px;min-height:38px}
       .mobile-head{display:flex;flex-direction:row!important;justify-content:space-between;gap:8px;font-size:13px;line-height:1.2}
       .mobile-meta{font-size:12px;margin:6px 0;color:#334155}
       .mobile-help{display:grid;grid-template-columns:1fr 1fr!important;gap:5px;margin:6px 0}
@@ -68,12 +68,14 @@
       .mobile-row.five{display:grid;grid-template-columns:1fr 1fr!important;gap:6px}
       #cards .stock-input{height:40px!important;font-size:15px!important;border-width:1px!important}
       .mobile-total{font-size:12px;margin-top:7px;text-align:center}
-      .save-footer{position:fixed!important;left:0;right:0;bottom:0;margin:0!important;border-radius:12px 12px 0 0;padding:9px 10px!important}
+      .save-footer{position:fixed!important;left:0;right:0;bottom:0;margin:0!important;border-radius:12px 12px 0 0;padding:9px 10px!important;padding-bottom:calc(9px + env(safe-area-inset-bottom))!important}
       .save-title{font-size:13px}.save-sub{font-size:10.5px}.save-btn{height:42px!important;font-size:13px!important}
       .mobile-carousel-bar{display:flex!important;align-items:center;justify-content:space-between;gap:8px;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:8px;margin:8px 0;position:sticky;top:0;z-index:8;box-shadow:0 2px 8px rgba(15,23,42,.08)}
       .mobile-carousel-bar .btn{height:34px!important;min-height:34px!important;font-size:12px!important;padding:5px 10px!important}
-      .mobile-progress{font-size:12px;font-weight:800;color:#0f172a;text-align:center;flex:1}
-      .mobile-card{min-height:calc(100vh - 280px);display:flex!important;flex-direction:column;justify-content:flex-start}
+      .mobile-progress{font-size:12px;font-weight:800;color:#0f172a;text-align:center;flex:1;display:flex;flex-direction:column;gap:2px;background:transparent;border:0;cursor:pointer;padding:4px 6px;border-radius:8px}
+      .mobile-progress:active{background:#eef2f5}
+      .mobile-progress small{font-size:10.5px;font-weight:700;color:#64748b}
+      .mobile-card{min-height:calc(100vh - 280px);min-height:calc(100dvh - 280px);display:flex!important;flex-direction:column;justify-content:flex-start}
       .mobile-card .mobile-row.five{margin-top:14px}
       .mobile-card .stock-input{height:52px!important;font-size:18px!important}
       .mobile-total{margin-top:12px!important;padding:10px!important}
@@ -90,7 +92,7 @@
       #cards .mobile-carousel-bar .btn{height:42px!important;min-height:42px!important;border-radius:10px!important;font-size:13px!important;font-weight:900!important;padding:6px 12px!important}
       #cards .mobile-carousel-bar .btn.prev{background:#f8fafc!important;border-color:#94a3b8!important;color:#0f172a!important}
       #cards .mobile-carousel-bar .btn.next{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important;box-shadow:0 2px 8px rgba(37,99,235,.24)}
-      #cards .mobile-progress{font-size:14px!important;font-weight:950!important;color:#0f172a!important;text-align:center!important;min-width:58px;font-variant-numeric:tabular-nums}
+      #cards .mobile-progress{font-size:14px!important;font-weight:950!important;color:#0f172a!important;text-align:center!important;min-width:96px;font-variant-numeric:tabular-nums}
       #cards .mobile-article-code{font-size:20px;font-weight:950;letter-spacing:.01em;color:#0f172a}
       #cards .mobile-article-route{font-size:15px;font-weight:900;color:#334155}
       #cards .mobile-article-desc{font-size:18px!important;line-height:1.25!important;color:#0f172a!important;margin:8px 0 10px!important;font-weight:750}
@@ -101,7 +103,7 @@
       #cards .mobile-head{align-items:center!important;text-align:center}
       #cards .mobile-head span{flex:1}
       #cards .mobile-group-title,#cards .mobile-group-hint,#cards .mobile-total{text-align:center}
-      #viewConteo .save-footer{display:none!important;position:fixed!important;left:0;right:0;bottom:0;margin:0!important;border-radius:16px 16px 0 0!important;padding:12px 14px!important;background:#fff!important;border-color:#cbd5e1!important;box-shadow:0 -6px 20px rgba(15,23,42,.22)!important}
+      #viewConteo .save-footer{display:none!important;position:fixed!important;left:0;right:0;bottom:0;margin:0!important;border-radius:16px 16px 0 0!important;padding:12px 14px!important;padding-bottom:calc(12px + env(safe-area-inset-bottom))!important;background:#fff!important;border-color:#cbd5e1!important;box-shadow:0 -6px 20px rgba(15,23,42,.22)!important}
       #viewConteo .save-footer.ready{display:flex!important}
       #viewConteo .save-title{font-size:16px!important;font-weight:950!important}
       #viewConteo .save-sub{font-size:12px!important;line-height:1.3!important}
@@ -110,6 +112,19 @@
     .summary-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0;box-shadow:0 1px 4px rgba(15,23,42,.06)}.summary-head{display:flex;justify-content:space-between;gap:10px;color:#0f172a}.summary-head span{font:700 12px var(--mono);color:#475569}.summary-meta{font-size:12px;color:#64748b;margin-top:4px}.summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:10px 0}.summary-grid span{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:7px;font-size:12px}.summary-grid b{display:block;font-size:16px;color:#0f172a}.summary-card pre{white-space:pre-wrap;margin:8px 0 0;font:11px var(--mono);max-height:180px;overflow:auto}
     .summary-card,.abc-mobile-card{text-align:center}.summary-head,.abc-mobile-head{align-items:center}.summary-grid span,.abc-month-pill{text-align:center}.abc-mobile-desc,.abc-mobile-obs{text-align:center}
     .article-result-card{display:none}
+    .resp-mobile-list,.articulos-mobile-list{display:none}
+    .resp-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0}
+    .resp-card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-weight:850;color:#0f172a}
+    .resp-card-status{font-size:12px;color:#64748b;margin-top:2px}
+    .resp-card-actions{display:flex;gap:8px;margin-top:10px}
+    .resp-card-actions .btn{flex:1;min-height:40px}
+    .articulos-card{background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0}
+    .articulos-card-head{display:flex;justify-content:space-between;gap:8px;align-items:flex-start;font-weight:850;color:#0f172a}
+    .articulos-card-desc{font-size:12px;color:#475569;margin:4px 0 8px}
+    .articulos-card-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+    .articulos-card-grid span{background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px;text-align:center;font-size:11px}
+    .articulos-card-grid span b{display:block;font-size:13px}
+    .articulos-card-foot{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:#334155;margin-top:6px}
     @media(max-width:820px){ #viewAbc .table-wrap,#viewPlan .table-wrap,#viewResp .table-wrap{display:block;overflow:auto}}
     @media(max-width:1100px){.dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.charts-grid{grid-template-columns:1fr}.donut-wrap{justify-content:flex-start}}
     @media(max-width:760px){
@@ -118,10 +133,167 @@
       .mini-note{margin-left:0;font-size:10.5px}.pending-row{grid-template-columns:34px 1fr 30px}.pending-row strong{white-space:normal}
       #viewResumen .table-wrap{display:none}.mobile-summary{display:block}.section-title{font-size:13px;margin-top:10px}.section-title span{display:none}.summary-grid{grid-template-columns:1fr 1fr}.summary-head{align-items:flex-start;flex-direction:column;gap:2px}
       #viewAbc .table-wrap,#viewPlan .table-wrap,#viewResp .table-wrap,#viewArticulos .table-wrap,#viewAbcMensual .table-wrap,#viewResumenArticulo .table-wrap{max-height:55vh;border-radius:8px}#viewAbc table,#viewArticulos table,#viewAbcMensual table{font-size:11px}#viewPlan table,#viewResp table{min-width:620px}
-      #viewResumenArticulo .table-wrap{display:none}.article-result-card{display:block;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0;text-align:center;box-shadow:0 1px 4px rgba(15,23,42,.08)}.article-result-head{display:flex;justify-content:center;gap:8px;align-items:center;font-weight:900}.article-result-desc{font-size:13px;color:#334155;margin:5px 0 10px}.article-result-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}.article-result-grid span{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:7px;padding:7px;font-size:12px}.article-result-grid b{display:block;font:900 18px var(--mono);color:#0f172a}
+      #viewResp .table-wrap{display:none}.resp-mobile-list{display:block}
+      #viewArticulos .table-wrap{display:none}.articulos-mobile-list{display:block}
+      #viewResumenArticulo .table-wrap{display:none}.article-result-card{display:block;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin:8px 0;text-align:left;box-shadow:0 1px 4px rgba(15,23,42,.08)}.article-result-head{display:flex;justify-content:space-between;gap:8px;align-items:center;font-weight:900}.article-result-desc{font-size:13px;color:#334155;margin:5px 0 10px;line-height:1.35}.article-result-resp{display:block;color:#64748b;margin-top:2px}.article-result-grid{display:grid;grid-template-columns:1fr;gap:8px}.article-result-metric{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;background:#f8fafc;border:1px solid #cbd5e1;border-radius:8px;padding:9px}.article-result-label{display:block;font-size:12px;font-weight:900;color:#0f172a;text-transform:uppercase}.article-result-help{display:block;font-size:11px;color:#64748b;line-height:1.25;margin-top:2px}.article-result-value{font:900 20px var(--mono);color:#0f172a;text-align:right;font-variant-numeric:tabular-nums}.article-result-metric.bultos{background:#ecfeff;border-color:#67e8f9}.article-result-metric.unidades{background:#f0fdf4;border-color:#86efac}.article-result-metric.controles{background:#fefce8;border-color:#fde047}
     }
     @media(max-width:980px){ #viewAbcMensual .abc-mensual-table{display:none}.abc-mobile-list{display:block}.abc-month-grid{grid-template-columns:repeat(3,1fr)}}
     @media(max-width:520px){.abc-month-grid{grid-template-columns:repeat(2,1fr)}#viewAbcMensual .stats .pill{min-width:100%}}
+    :root[data-theme="dark"] body{background:var(--bg)!important;color:var(--txt)!important}
+    :root[data-theme="dark"] .shell{background:var(--bg)!important;color:var(--txt)!important}
+    :root[data-theme="dark"] .top h1,
+    :root[data-theme="dark"] .mobile-head,
+    :root[data-theme="dark"] .mobile-article-code,
+    :root[data-theme="dark"] .mobile-article-desc,
+    :root[data-theme="dark"] .section-title,
+    :root[data-theme="dark"] .chart-title,
+    :root[data-theme="dark"] .kpi-value,
+    :root[data-theme="dark"] .legend b,
+    :root[data-theme="dark"] .article-result-head,
+    :root[data-theme="dark"] .article-result-label,
+    :root[data-theme="dark"] .article-result-value,
+    :root[data-theme="dark"] .summary-head,
+    :root[data-theme="dark"] .abc-mobile-head{color:var(--txt)!important}
+    :root[data-theme="dark"] .sub,
+    :root[data-theme="dark"] .mobile-meta,
+    :root[data-theme="dark"] .mobile-article-route,
+    :root[data-theme="dark"] .article-result-desc,
+    :root[data-theme="dark"] .article-result-resp,
+    :root[data-theme="dark"] .article-result-help,
+    :root[data-theme="dark"] .summary-meta,
+    :root[data-theme="dark"] .kpi-label,
+    :root[data-theme="dark"] .kpi-note,
+    :root[data-theme="dark"] .legend,
+    :root[data-theme="dark"] .status,
+    :root[data-theme="dark"] .mini-note,
+    :root[data-theme="dark"] .bar-name,
+    :root[data-theme="dark"] .abc-mobile-desc,
+    :root[data-theme="dark"] .abc-mobile-obs,
+    :root[data-theme="dark"] .articulos-card-desc,
+    :root[data-theme="dark"] .articulos-card-foot,
+    :root[data-theme="dark"] .resp-card-status,
+    :root[data-theme="dark"] .field label{color:var(--txt2)!important}
+    :root[data-theme="dark"] .panel,
+    :root[data-theme="dark"] .table-wrap,
+    :root[data-theme="dark"] .kpi-card,
+    :root[data-theme="dark"] .chart-panel,
+    :root[data-theme="dark"] .summary-card,
+    :root[data-theme="dark"] .article-result-card,
+    :root[data-theme="dark"] .abc-mobile-card,
+    :root[data-theme="dark"] .save-footer,
+    :root[data-theme="dark"] .resp-card,
+    :root[data-theme="dark"] .articulos-card,
+    :root[data-theme="dark"] #cards .mobile-carousel-bar{background:var(--surf)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] .tabs,
+    :root[data-theme="dark"] .stats,
+    :root[data-theme="dark"] .field,
+    :root[data-theme="dark"] .summary-grid span,
+    :root[data-theme="dark"] .article-result-metric,
+    :root[data-theme="dark"] .mobile-logistics span,
+    :root[data-theme="dark"] #cards .mobile-logistics span,
+    :root[data-theme="dark"] .mobile-help span,
+    :root[data-theme="dark"] .mobile-group,
+    :root[data-theme="dark"] .abc-month-pill,
+    :root[data-theme="dark"] .articulos-card-grid span,
+    :root[data-theme="dark"] .bar-track{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] .tab{color:var(--txt2)!important}
+    :root[data-theme="dark"] .tab.active{background:var(--surf)!important;color:var(--txt)!important}
+    :root[data-theme="dark"] .btn{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}
+    :root[data-theme="dark"] .btn.primary{background:var(--acc)!important;border-color:var(--acc)!important;color:#06101f!important}
+    :root[data-theme="dark"] .btn.ok{background:var(--grn)!important;border-color:var(--grn)!important;color:#03130b!important}
+    :root[data-theme="dark"] #cards .mobile-card,
+    :root[data-theme="dark"] #cards .mobile-carousel-bar,
+    :root[data-theme="dark"] #viewConteo .save-footer{background:var(--surf)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] #cards .mobile-carousel-bar .btn.prev{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}
+    :root[data-theme="dark"] #cards .mobile-carousel-bar .btn.next,
+    :root[data-theme="dark"] #viewConteo .save-btn{background:var(--acc)!important;color:#06101f!important;border-color:var(--acc)!important}
+    :root[data-theme="dark"] #cards .mobile-progress,
+    :root[data-theme="dark"] #cards .mobile-article-code,
+    :root[data-theme="dark"] #cards .mobile-article-desc,
+    :root[data-theme="dark"] #cards .mobile-logistics strong,
+    :root[data-theme="dark"] .mobile-group-title,
+    :root[data-theme="dark"] .save-title,
+    :root[data-theme="dark"] .summary-grid b{color:var(--txt)!important}
+    :root[data-theme="dark"] #cards .mobile-article-route,
+    :root[data-theme="dark"] #cards .mobile-logistics span,
+    :root[data-theme="dark"] .mobile-group-hint,
+    :root[data-theme="dark"] .save-sub{color:var(--txt2)!important}
+    :root[data-theme="dark"] .time-note{background:var(--ora-bg)!important;color:var(--ora)!important;border-color:var(--ora-bd)!important}
+    :root[data-theme="dark"] input,
+    :root[data-theme="dark"] select,
+    :root[data-theme="dark"] textarea,
+    :root[data-theme="dark"] .stock-input,
+    :root[data-theme="dark"] .obs-input{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}
+    :root[data-theme="dark"] #viewConteo input,
+    :root[data-theme="dark"] #viewConteo select,
+    :root[data-theme="dark"] #viewResp input,
+    :root[data-theme="dark"] #viewResp select,
+    :root[data-theme="dark"] #viewResumen input,
+    :root[data-theme="dark"] #viewResumen select,
+    :root[data-theme="dark"] #viewResumenArticulo input,
+    :root[data-theme="dark"] #viewResumenArticulo select{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}
+    :root[data-theme="dark"] #viewConteo select option,
+    :root[data-theme="dark"] #viewResp select option,
+    :root[data-theme="dark"] #viewResumen select option,
+    :root[data-theme="dark"] #viewResumenArticulo select option{background:var(--surf2)!important;color:var(--txt)!important}
+    :root[data-theme="dark"] input::placeholder{color:var(--muted)!important}
+    :root[data-theme="dark"] td,
+    :root[data-theme="dark"] td:first-child{background:var(--surf)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] tbody tr:nth-child(even) td{background:var(--surf2)!important}
+    :root[data-theme="dark"] th,
+    :root[data-theme="dark"] th:first-child{background:var(--surf3)!important;color:var(--txt2)!important;border-color:var(--brd2)!important}
+    :root[data-theme="dark"] .pill{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] .frescura-pill,
+    :root[data-theme="dark"] #viewConteo .pill{background:var(--blu-bg)!important;color:var(--blu)!important;border-color:var(--blu-bd)!important}
+    :root[data-theme="dark"] .mobile-total{background:var(--grn-bg)!important;color:var(--grn)!important;border-color:var(--grn-bd)!important}
+    :root[data-theme="dark"] .control-mark,
+    :root[data-theme="dark"] .status-chip.ok{background:var(--grn-bg)!important;color:var(--grn)!important}
+    :root[data-theme="dark"] .status-chip.pending{background:var(--red-bg)!important;color:var(--red)!important}
+    :root[data-theme="dark"] .article-result-metric.bultos{background:var(--blu-bg)!important;border-color:var(--blu-bd)!important}
+    :root[data-theme="dark"] .article-result-metric.unidades{background:var(--grn-bg)!important;border-color:var(--grn-bd)!important}
+    :root[data-theme="dark"] .article-result-metric.controles{background:var(--ora-bg)!important;border-color:var(--ora-bd)!important}
+    :root[data-theme="dark"] .donut::after{background:var(--surf)!important}
+    :root[data-theme="dark"] .bar-fill{background:var(--acc)!important}
+    :root[data-theme="dark"] .abc-fill-a{background:var(--grn)!important}
+    :root[data-theme="dark"] .abc-fill-b{background:var(--ora)!important}
+    :root[data-theme="dark"] .abc-fill-c{background:var(--red)!important}
+    :root[data-theme="light"] .btn.primary{color:#fff!important}
+    .modal-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100;align-items:center;justify-content:center;padding:16px}
+    .modal-overlay.open{display:flex}
+    .modal-box{background:#fff;color:#0f172a;border-radius:12px;max-width:480px;width:100%;max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);overflow:auto;box-shadow:0 12px 40px rgba(15,23,42,.35)}
+    .modal-title{font-size:16px;font-weight:850;padding:16px 18px 0}
+    .modal-body{padding:12px 18px}
+    .modal-body .field{border:0;padding:8px 0}
+    .modal-body .field label{margin-bottom:5px}
+    .modal-error{display:none;background:#fee2e2;border:1px solid #ef4444;color:#7f1d1d;border-radius:8px;padding:8px 10px;font-size:12px;margin-top:6px}
+    .modal-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 18px 18px;position:sticky;bottom:0;background:#fff}
+    .modal-actions .btn{min-height:42px;padding:0 16px}
+    @media(max-width:520px){.modal-box{border-radius:12px 12px 0 0;max-width:none;position:fixed;left:0;right:0;bottom:0;max-height:88vh;max-height:88dvh}.modal-actions{flex-direction:column-reverse}.modal-actions .btn{width:100%}}
+    :root[data-theme="dark"] .modal-overlay{background:rgba(3,6,14,.7)!important}
+    :root[data-theme="dark"] .modal-box,
+    :root[data-theme="dark"] .modal-actions{background:var(--surf)!important;color:var(--txt)!important}
+    :root[data-theme="dark"] .modal-error{background:var(--red-bg)!important;color:var(--red)!important;border-color:var(--red-bd)!important}
+    .tabs-wrap{position:relative}
+    .tabs-fade{position:absolute;top:1px;bottom:1px;width:26px;pointer-events:none;opacity:0;transition:opacity .15s;border-radius:7px}
+    .tabs-fade.show{opacity:1}
+    .tabs-fade.left{left:1px;background:linear-gradient(90deg,#dbe4ed,rgba(219,228,237,0))}
+    .tabs-fade.right{right:1px;background:linear-gradient(270deg,#dbe4ed,rgba(219,228,237,0))}
+    :root[data-theme="dark"] .tabs-fade.left{background:linear-gradient(90deg,var(--surf2),rgba(0,0,0,0))!important}
+    :root[data-theme="dark"] .tabs-fade.right{background:linear-gradient(270deg,var(--surf2),rgba(0,0,0,0))!important}
+    :root[data-theme="dark"] .mobile-progress:active{background:var(--surf2)!important}
+    .modal-list{max-height:min(60vh,420px);overflow:auto;padding:0}
+    .modal-list-item{display:grid;grid-template-columns:1fr auto;column-gap:10px;width:100%;text-align:left;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:9px 10px;margin:6px 0;cursor:pointer}
+    .modal-list-item:first-child{margin-top:0}
+    .modal-list-item.current{border-color:#2563eb;background:#eff6ff}
+    .modal-list-code{font-weight:800;font-size:13px;color:#0f172a}
+    .modal-list-desc{grid-column:1/-1;font-size:12px;color:#64748b;margin-top:2px}
+    .modal-list-status{font-size:11px;font-weight:800;justify-self:end}
+    .modal-list-status.ok{color:#166534}
+    .modal-list-status.pending{color:#991b1b}
+    :root[data-theme="dark"] .modal-list-item{background:var(--surf2)!important;border-color:var(--brd)!important}
+    :root[data-theme="dark"] .modal-list-item.current{border-color:var(--acc)!important;background:var(--acc-bg)!important}
+    :root[data-theme="dark"] .modal-list-code{color:var(--txt)!important}
+    :root[data-theme="dark"] .modal-list-desc{color:var(--txt2)!important}
   </style>
 </head>
 <body>
@@ -135,23 +307,27 @@
     <div>
       <button class="btn primary" onclick="loadPlanilla()">Actualizar</button>
       <button class="btn" onclick="usarHoy()">Hoy</button>
-      <a class="btn" href="/portal">Volver</a>
+      <a class="btn" href="/portal" title="Volver al inicio del portal">Inicio</a>
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" id="tabAbc" onclick="openTab('abc')">Analisis ABC</button>
-    <button class="tab" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
-    <button class="tab" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
-    <button class="tab" id="tabExterno" onclick="openTab('externo')">Control externo</button>
-    <button class="tab" id="tabResumenArticulo" onclick="openTab('resumenArticulo')">Resumen por articulo</button>
-    <button class="tab" id="tabArticulos" onclick="openTab('articulos')">Articulos controlados</button>
-    <button class="tab" id="tabAbcMensual" onclick="openTab('abcMensual')">ABC mensual</button>
-    <button class="tab" id="tabResp" onclick="openTab('resp')">Responsables</button>
-    <button class="tab" id="tabResumen" onclick="openTab('resumen')">Dashboard</button>
+  <div class="tabs-wrap">
+  <nav class="tabs" role="tablist" aria-label="Secciones de control de stock" id="tabsNav">
+    <button class="tab active" type="button" role="tab" aria-selected="true" aria-controls="viewAbc" id="tabAbc" onclick="openTab('abc')">Analisis ABC</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewPlan" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewConteo" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewExterno" id="tabExterno" onclick="openTab('externo')">Control externo</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewResumenArticulo" id="tabResumenArticulo" onclick="openTab('resumenArticulo')">Resumen por articulo</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewArticulos" id="tabArticulos" onclick="openTab('articulos')">Articulos controlados</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewAbcMensual" id="tabAbcMensual" onclick="openTab('abcMensual')">ABC mensual</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewResp" id="tabResp" onclick="openTab('resp')">Responsables</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewResumen" id="tabResumen" onclick="openTab('resumen')">Dashboard</button>
   </nav>
+  <div class="tabs-fade left" id="tabsFadeLeft"></div>
+  <div class="tabs-fade right" id="tabsFadeRight"></div>
+  </div>
 
-  <section class="view active" id="viewAbc">
+  <section class="view active" id="viewAbc" role="tabpanel" aria-labelledby="tabAbc">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalAbc" onchange="syncSucursal('abc')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -173,7 +349,7 @@
     </section>
   </section>
 
-  <section class="view" id="viewPlan">
+  <section class="view" id="viewPlan" role="tabpanel" aria-labelledby="tabPlan">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalPlan" onchange="syncSucursal('plan')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -207,7 +383,7 @@
     </section>
   </section>
 
-  <section class="view" id="viewConteo">
+  <section class="view" id="viewConteo" role="tabpanel" aria-labelledby="tabConteo">
   <section class="panel">
     <div class="grid">
       <div class="field auto-field"><label>Mes ABC</label><input id="mes" type="month"></div>
@@ -249,7 +425,7 @@
   </section>
   </section>
 
-  <section class="view" id="viewExterno">
+  <section class="view" id="viewExterno" role="tabpanel" aria-labelledby="tabExterno">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalExterno" onchange="syncSucursal('externo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -285,7 +461,7 @@
     </section>
   </section>
 
-  <section class="view" id="viewResumenArticulo">
+  <section class="view" id="viewResumenArticulo" role="tabpanel" aria-labelledby="tabResumenArticulo">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalResumenArticulo" onchange="syncSucursal('resumenArticulo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -303,14 +479,14 @@
     <div class="status" id="resumenArticuloStatus">Cargando...</div>
     <section class="table-wrap" style="max-height:none">
       <table>
-        <thead><tr><th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Responsable</th><th>Controles</th><th>Total bultos</th><th>Total unidades</th></tr></thead>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Responsable</th><th>Controles</th><th>Total bultos</th><th>Total unidades</th><th>Accion</th></tr></thead>
         <tbody id="resumenArticuloBody"></tbody>
       </table>
     </section>
     <section id="resumenArticuloCards"></section>
   </section>
 
-  <section class="view" id="viewResumen">
+  <section class="view" id="viewResumen" role="tabpanel" aria-labelledby="tabResumen">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalResumen" onchange="syncSucursal('resumen')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -367,7 +543,7 @@
     </section>
   </section>
 
-  <section class="view" id="viewArticulos">
+  <section class="view" id="viewArticulos" role="tabpanel" aria-labelledby="tabArticulos">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalArticulos" onchange="syncSucursal('articulos')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -388,9 +564,10 @@
         <tbody id="articulosControlBody"></tbody>
       </table>
     </section>
+    <section id="articulosCards" class="articulos-mobile-list"></section>
   </section>
 
-  <section class="view" id="viewAbcMensual">
+  <section class="view" id="viewAbcMensual" role="tabpanel" aria-labelledby="tabAbcMensual">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalAbcMensual" onchange="syncSucursal('abcMensual')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -414,7 +591,7 @@
     <section id="abcMensualCards" class="abc-mobile-list"></section>
   </section>
 
-  <section class="view" id="viewResp">
+  <section class="view" id="viewResp" role="tabpanel" aria-labelledby="tabResp">
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalResp" onchange="syncSucursal('resp')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -426,11 +603,14 @@
     <section class="table-wrap" style="max-height:none">
       <table><thead><tr><th>Responsable</th><th>Estado</th><th>Accion</th></tr></thead><tbody id="respBody"></tbody></table>
     </section>
+    <section id="respCards" class="resp-mobile-list"></section>
   </section>
 </main>
+<div class="modal-overlay" id="modalOverlay"></div>
 <script>
 const fmt = new Intl.NumberFormat('es-AR', {maximumFractionDigits: 2});
 let currentRows = [];
+let resumenArticuloRows = [];
 let abcMensualRows = [];
 let abcMensualMonths = [];
 let abcLoaded = false;
@@ -440,6 +620,8 @@ let resumenArticuloLoaded = false;
 let articulosLoaded = false;
 let abcMensualLoaded = false;
 let respLoaded = false;
+let activeTab = 'abc';
+let planillaStale = false;
 let mobileIndex = 0;
 let conteoGuardado = false;
 let guardandoConteo = false;
@@ -449,6 +631,56 @@ let externalGuardado = false;
 let externalReviewKey = '';
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function themeVar(name,fallback){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
+function closeModal(){modalOverlay.classList.remove('open');modalOverlay.innerHTML='';document.body.style.overflow=''}
+function modalAlert(message,okText='Entendido'){
+  return new Promise(resolve=>{
+    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true"><div class="modal-body">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
+    modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+    const btn=document.getElementById('modalOkBtn');
+    btn.onclick=()=>{closeModal();resolve()};
+    btn.focus();
+  });
+}
+function modalConfirm(message,{okText='Confirmar',cancelText='Cancelar'}={}){
+  return new Promise(resolve=>{
+    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true"><div class="modal-body">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn" id="modalCancelBtn">${esc(cancelText)}</button><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
+    modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+    const cleanup=val=>{closeModal();resolve(val)};
+    document.getElementById('modalCancelBtn').onclick=()=>cleanup(false);
+    const okBtn=document.getElementById('modalOkBtn');
+    okBtn.onclick=()=>cleanup(true);
+    okBtn.focus();
+  });
+}
+function modalPromptText(title,label,value=''){
+  return new Promise(resolve=>{
+    modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true"><div class="modal-title">${esc(title)}</div><div class="modal-body"><div class="field"><label>${esc(label)}</label><input class="obs-input" style="width:100%" id="modalTextInput" value="${esc(value)}"></div></div><div class="modal-actions"><button class="btn" id="modalCancelBtn">Cancelar</button><button class="btn primary" id="modalOkBtn">Guardar</button></div></div>`;
+    modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+    const input=document.getElementById('modalTextInput');
+    input.focus();input.select();
+    const cleanup=val=>{closeModal();resolve(val)};
+    document.getElementById('modalCancelBtn').onclick=()=>cleanup(null);
+    document.getElementById('modalOkBtn').onclick=()=>cleanup(input.value);
+    input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();cleanup(input.value)}});
+  });
+}
+modalOverlay.addEventListener('click',e=>{
+  if(e.target!==modalOverlay) return;
+  (document.getElementById('modalCancelBtn')||document.getElementById('modalOkBtn'))?.click();
+});
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape'||!modalOverlay.classList.contains('open')) return;
+  (document.getElementById('modalCancelBtn')||document.getElementById('modalOkBtn'))?.click();
+});
+function updateTabsFade(){
+  const max=tabsNav.scrollWidth-tabsNav.clientWidth;
+  tabsFadeLeft.classList.toggle('show', tabsNav.scrollLeft>4);
+  tabsFadeRight.classList.toggle('show', tabsNav.scrollLeft<max-4);
+}
+tabsNav.addEventListener('scroll', updateTabsFade, {passive:true});
+window.addEventListener('resize', updateTabsFade);
+new MutationObserver(()=>{if(resumenLoaded) loadResumenMensual()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 async function cargarSucursales(){
   try{
     const res=await fetch('/api/sucursales?empresa_id=1');
@@ -567,16 +799,21 @@ function syncSucursal(origin){
   articulosLoaded=false;
   abcMensualLoaded=false;
   respLoaded=false;
-  loadAbc();
-  loadPlanificacion();
-  loadPlanilla();
-  loadResumenMensual();
-  loadResumenArticulo();
-  loadArticulosControlados();
-  loadAbcMensual();
-  loadResponsables();
+  planillaStale=true;
+  const tabLoaders={
+    abc:()=>{loadAbc()},
+    plan:()=>{loadPlanificacion()},
+    resumen:()=>{loadResumenMensual()},
+    resumenArticulo:()=>{loadResumenArticulo()},
+    articulos:()=>{loadArticulosControlados()},
+    abcMensual:()=>{loadAbcMensual()},
+    resp:()=>{loadResponsables()},
+    conteo:()=>{loadPlanilla();planillaStale=false},
+  };
+  tabLoaders[activeTab]?.();
 }
 function openTab(name){
+  activeTab=name;
   tabAbc.classList.toggle('active', name==='abc');
   tabPlan.classList.toggle('active', name==='plan');
   tabConteo.classList.toggle('active', name==='conteo');
@@ -586,6 +823,9 @@ function openTab(name){
   tabArticulos.classList.toggle('active', name==='articulos');
   tabAbcMensual.classList.toggle('active', name==='abcMensual');
   tabResp.classList.toggle('active', name==='resp');
+  document.querySelectorAll('#tabsNav .tab').forEach(btn=>btn.setAttribute('aria-selected', btn.classList.contains('active')?'true':'false'));
+  document.getElementById('tab'+name[0].toUpperCase()+name.slice(1))?.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
+  setTimeout(updateTabsFade,220);
   viewAbc.classList.toggle('active', name==='abc');
   viewPlan.classList.toggle('active', name==='plan');
   viewConteo.classList.toggle('active', name==='conteo');
@@ -602,6 +842,7 @@ function openTab(name){
   if(name==='articulos' && !articulosLoaded) loadArticulosControlados();
   if(name==='abcMensual' && !abcMensualLoaded) loadAbcMensual();
   if(name==='resp' && !respLoaded) loadResponsables();
+  if(name==='conteo' && planillaStale){loadPlanilla();planillaStale=false}
 }
 function rowSemana(r){return r.control_semana||r.semana1||r.semana2||r.semana3||r.semana4||''}
 function rowDia(r){return r.control_dia||r.lunes||r.martes||r.miercoles||r.jueves||r.viernes||''}
@@ -682,7 +923,9 @@ async function loadResumenMensual(){
   kpiPendientes.textContent=fmt.format(kpis.controles_pendientes||0);
   kpiVencidos.textContent=fmt.format(kpis.articulos_vencidos||0);
   kpiProductividad.textContent=fmt.format(kpis.articulos_por_hora||0);
-  donutControles.style.background=`conic-gradient(#2563eb 0deg ${avance*3.6}deg,#e2e8f0 ${avance*3.6}deg 360deg)`;
+  const donutAccent=themeVar('--acc','#2563eb');
+  const donutTrack=themeVar('--surf2','#e2e8f0');
+  donutControles.style.background=`conic-gradient(${donutAccent} 0deg ${avance*3.6}deg,${donutTrack} ${avance*3.6}deg 360deg)`;
   donutValue.textContent=`${avance}%`;
   legendDias.textContent=fmt.format(kpis.dias_controlados??diasUnicos);
   legendMinutos.textContent=fmt.format(totalMinutos);
@@ -715,6 +958,7 @@ async function loadResumenArticulo(){
   const data=await res.json();
   if(!res.ok||data.ok===false){resumenArticuloStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
   const rows=data.rows||[];
+  resumenArticuloRows=rows;
   raFecha.textContent=`Fecha: ${data.fecha}`;
   raControles.textContent=`Controles: ${fmt.format(data.controles||0)}`;
   raArticulos.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
@@ -727,18 +971,93 @@ async function loadResumenArticulo(){
     <td class="num">${fmt.format(r.controles||0)}</td>
     <td class="num">${fmt.format(r.total_bultos||0)}</td>
     <td class="num">${fmt.format(r.total_unidades||0)}</td>
+    <td><button class="btn" onclick="editarResumenArticulo(${r.id_articulo})">Editar</button></td>
   </tr>`).join('');
   resumenArticuloCards.innerHTML=rows.map(r=>`<article class="article-result-card">
     <div class="article-result-head"><span>${esc(r.id_articulo)}</span><span class="abc-badge abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</span></div>
-    <div class="article-result-desc">${esc(r.descripcion)}<br>${esc(r.responsables||'')}</div>
+    <div class="article-result-desc">${esc(r.descripcion)}<span class="article-result-resp">${esc(r.responsables||'Sin responsable informado')}</span></div>
     <div class="article-result-grid">
-      <span><b>${fmt.format(r.total_bultos||0)}</b> bultos</span>
-      <span><b>${fmt.format(r.total_unidades||0)}</b> unidades</span>
-      <span><b>${fmt.format(r.controles||0)}</b> controles</span>
+      <span class="article-result-metric bultos"><span><span class="article-result-label">Bultos</span><span class="article-result-help">Total de bultos completos contados.</span></span><b class="article-result-value">${fmt.format(r.total_bultos||0)}</b></span>
+      <span class="article-result-metric unidades"><span><span class="article-result-label">Unidades</span><span class="article-result-help">Unidades sueltas que quedaron fuera de bulto completo.</span></span><b class="article-result-value">${fmt.format(r.total_unidades||0)}</b></span>
+      <span class="article-result-metric controles"><span><span class="article-result-label">Control</span><span class="article-result-help">Cantidad de veces que el articulo fue controlado en la fecha.</span></span><b class="article-result-value">${fmt.format(r.controles||0)}</b></span>
     </div>
+    <button class="btn primary" style="width:100%;margin-top:10px" onclick="editarResumenArticulo(${r.id_articulo})">Editar control finalizado</button>
   </article>`).join('');
   resumenArticuloStatus.textContent=rows.length?`${rows.length} articulos controlados`:'Sin datos para los filtros seleccionados';
   resumenArticuloLoaded=true;
+}
+async function editarResumenArticulo(idArticulo){
+  const row=resumenArticuloRows.find(r=>Number(r.id_articulo)===Number(idArticulo));
+  if(!row){await modalAlert('No se encontro el articulo en el resumen cargado.');return}
+  const controles=row.controles_detalle||[];
+  if(!controles.length){await modalAlert('No hay un control editable para este articulo.');return}
+  const resultado=await abrirModalEdicionControl(row,controles);
+  if(!resultado) return;
+  resumenArticuloStatus.textContent='Guardando correccion...';
+  const res=await fetch(`/api/control-stock/conteos/${resultado.conteoId}/items/${row.id_articulo}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(resultado.payload)});
+  const data=await res.json();
+  if(!res.ok||data.ok===false){resumenArticuloStatus.textContent='Error: '+(data.error||'No se pudo editar');await modalAlert(data.error||'No se pudo editar');return}
+  resumenLoaded=false;
+  articulosLoaded=false;
+  await loadResumenArticulo();
+}
+function abrirModalEdicionControl(row,controles){
+  return new Promise(resolve=>{
+    const opciones=controles.map((c,i)=>`<option value="${i}">${esc(c.responsable||'Sin responsable')} · ${esc(c.semana||'-')} · ${esc(c.dia||'-')} · ${fmt.format(c.stock||0)} bultos / ${fmt.format(c.unidades_sueltas||0)} unid.</option>`).join('');
+    modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+      <div class="modal-title">Editar control · ${esc(row.id_articulo)} · ${esc(row.descripcion)}</div>
+      <div class="modal-body">
+        ${controles.length>1?`<div class="field"><label>Control a editar</label><select id="modalControlSelect">${opciones}</select></div>`:''}
+        <div class="mobile-group">
+          <div class="mobile-group-title">Bultos</div>
+          <div class="mobile-row five">
+            ${[1,2,3,4,5,6].map(n=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" id="modalCant${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'')">`).join('')}
+          </div>
+        </div>
+        <div class="mobile-group units">
+          <div class="mobile-group-title">Unidades sueltas</div>
+          <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" id="modalUnidades" oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+        </div>
+        <div class="field"><label>Observacion</label><input class="obs-input" style="width:100%" id="modalObservacion"></div>
+        <div class="field"><label>Motivo de la correccion (obligatorio)</label><input class="obs-input" style="width:100%" id="modalMotivo" placeholder="Por que se corrige este control"></div>
+        <div class="modal-error" id="modalError"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" id="modalCancelBtn">Cancelar</button>
+        <button class="btn primary" id="modalOkBtn">Guardar correccion</button>
+      </div>
+    </div>`;
+    const select=document.getElementById('modalControlSelect');
+    const fill=control=>{
+      [1,2,3,4,5,6].forEach(n=>document.getElementById('modalCant'+n).value=control[`cantidad_${n}`]??0);
+      document.getElementById('modalUnidades').value=control.unidades_sueltas??0;
+      document.getElementById('modalObservacion').value=control.observacion||'';
+    };
+    fill(controles[0]);
+    select?.addEventListener('change',()=>fill(controles[Number(select.value)]));
+    modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+    document.getElementById('modalCant1').focus();
+    const cleanup=val=>{closeModal();resolve(val)};
+    document.getElementById('modalCancelBtn').onclick=()=>cleanup(null);
+    document.getElementById('modalOkBtn').onclick=()=>{
+      const errEl=document.getElementById('modalError');
+      const nums=[1,2,3,4,5,6].map(n=>Number(document.getElementById('modalCant'+n).value||0));
+      const unidades=Number(document.getElementById('modalUnidades').value||0);
+      const motivo=document.getElementById('modalMotivo').value.trim();
+      if([...nums,unidades].some(v=>!Number.isFinite(v)||v<0)){errEl.textContent='Todas las cantidades deben ser numeros mayores o iguales a 0.';errEl.style.display='block';return}
+      if(!motivo){errEl.textContent='El motivo de la correccion es obligatorio.';errEl.style.display='block';document.getElementById('modalMotivo').focus();return}
+      const control=controles[select?Number(select.value):0];
+      cleanup({
+        conteoId:control.conteo_id,
+        payload:{
+          cantidad_1:nums[0],cantidad_2:nums[1],cantidad_3:nums[2],cantidad_4:nums[3],cantidad_5:nums[4],cantidad_6:nums[5],
+          unidades_sueltas:unidades,
+          observacion:document.getElementById('modalObservacion').value,
+          motivo
+        }
+      });
+    };
+  });
 }
 function diasHabilesMes(mesValue){
   const [y,m]=(mesValue||currentMonth()).split('-').map(Number);
@@ -802,6 +1121,17 @@ async function loadArticulosControlados(){
     <td class="num">${fmt.format(r.controles||0)}</td>
     <td><span class="status-chip ${r.controles?'ok':'pending'}">${esc(r.estado_control)}</span></td>
   </tr>`).join('');
+  articulosCards.innerHTML=(data.rows||[]).map(r=>`<article class="articulos-card">
+    <div class="articulos-card-head"><span>${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</span></span><span class="status-chip ${r.controles?'ok':'pending'}">${esc(r.estado_control)}</span></div>
+    <div class="articulos-card-desc">${esc(r.descripcion)}<br>${esc(r.negocio)} · ${esc(r.tipo_producto)}</div>
+    <div class="articulos-card-grid">
+      <span>C1<b class="control-mark">${esc(r.control_1)}</b></span>
+      <span>C2<b class="control-mark">${esc(r.control_2)}</b></span>
+      <span>C3<b class="control-mark">${esc(r.control_3)}</b></span>
+      <span>C4<b class="control-mark">${esc(r.control_4)}</b></span>
+    </div>
+    <div class="articulos-card-foot"><span>${fmt.format(r.bultos||0)} bultos mes</span><span>${fmt.format(r.controles||0)} veces</span></div>
+  </article>`).join('');
   articulosStatus.textContent=`${(data.rows||[]).length} articulos`;
   articulosLoaded=true;
 }
@@ -854,6 +1184,14 @@ async function loadResponsables(){
   responsableResumenArticulo.innerHTML='<option value="">Todos los responsables</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
   responsableResumenArticulo.value=rows.some(r=>r.activo&&r.nombre===keepResumenArticulo)?keepResumenArticulo:'';
   respBody.innerHTML=rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('');
+  respCards.innerHTML=rows.map(r=>`<article class="resp-card">
+    <div class="resp-card-head"><span>${esc(r.nombre)}</span></div>
+    <div class="resp-card-status">${r.activo?'Activo':'Inactivo'}</div>
+    <div class="resp-card-actions">
+      <button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button>
+      <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button>
+    </div>
+  </article>`).join('');
   respStatus.textContent=`${rows.length} responsables`;
   respLoaded=true;
 }
@@ -869,7 +1207,7 @@ async function guardarResponsable(){
 }
 function escapeJs(value){return String(value??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'")}
 async function editarResponsable(id,nombreActual){
-  const nombre=prompt('Nuevo nombre del responsable', nombreActual);
+  const nombre=await modalPromptText('Editar responsable','Nombre del responsable',nombreActual);
   if(nombre===null) return;
   const limpio=nombre.trim();
   if(!limpio){respStatus.textContent='El nombre no puede quedar vacio';return}
@@ -976,9 +1314,13 @@ async function validarDispersionAntesDeGuardar(payload){
 function renderMobileCards(){
   if(!currentRows.length){cards.innerHTML='';return}
   const visibleRows=isMobileConteo()? [currentRows[Math.min(mobileIndex,currentRows.length-1)]] : currentRows;
+  const cargados=currentRows.filter(rowTouched).length;
   const bar=isMobileConteo()?`<div class="mobile-carousel-bar">
     <button class="btn prev" onclick="mobilePrev()">Anterior</button>
-    <div class="mobile-progress">${Math.min(mobileIndex+1,currentRows.length)} / ${currentRows.length}</div>
+    <button type="button" class="mobile-progress" onclick="abrirListaArticulosConteo()" title="Ver todos los articulos y saltar a uno">
+      <span>${Math.min(mobileIndex+1,currentRows.length)} / ${currentRows.length}</span>
+      <small>${cargados} cargados · ver lista</small>
+    </button>
     <button class="btn next" onclick="mobileNext()">Siguiente</button>
   </div>`:'';
   cards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
@@ -1012,6 +1354,31 @@ function renderMobileCards(){
   </article>`).join('');
   cargarBorradorLocal();
   actualizarTotales(false);
+}
+function abrirListaArticulosConteo(){
+  if(!currentRows.length) return;
+  const itemsHtml=currentRows.map((r,i)=>{
+    const done=rowTouched(r);
+    return `<button type="button" class="modal-list-item ${i===mobileIndex?'current':''}" data-idx="${i}">
+      <span class="modal-list-code">${esc(r.id_articulo)} <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span>
+      <span class="modal-list-status ${done?'ok':'pending'}">${done?'Cargado':'Pendiente'}</span>
+      <span class="modal-list-desc">${esc(r.descripcion)}</span>
+    </button>`;
+  }).join('');
+  const cargados=currentRows.filter(rowTouched).length;
+  modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title">Articulos del control · ${cargados}/${currentRows.length} cargados</div>
+    <div class="modal-body modal-list">${itemsHtml}</div>
+    <div class="modal-actions"><button class="btn" id="modalCancelBtn">Cerrar</button></div>
+  </div>`;
+  modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+  modalOverlay.querySelectorAll('.modal-list-item').forEach(btn=>btn.addEventListener('click',()=>{
+    mobileIndex=Number(btn.dataset.idx);
+    closeModal();
+    renderMobileCards();
+  }));
+  document.getElementById('modalCancelBtn').onclick=closeModal;
+  modalOverlay.querySelector('.modal-list-item.current')?.scrollIntoView({block:'center'});
 }
 function mobilePrev(){if(mobileIndex>0){mobileIndex--;renderMobileCards()}}
 function mobileNext(){
@@ -1054,19 +1421,19 @@ function externalPayload(){
   return {tipo_conteo:'externo',mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,semana:'externo',dia:'Externo',fecha:fechaExterno.value||today(),responsable:responsableExterno.value.trim(),hora_inicio:new Date().toTimeString().slice(0,5),hora_fin:new Date().toTimeString().slice(0,5),observaciones:observacionesExterno.value,items};
 }
 async function guardarControlExterno(){
-  if(externalGuardado){alert('Este control externo ya fue guardado.');return}
+  if(externalGuardado){await modalAlert('Este control externo ya fue guardado.');return}
   if(!externalRows.length){externoStatus.textContent='Primero genera un sorteo.';return}
   if(!responsableExterno.value.trim()){externoStatus.textContent='Ingresa el responsable externo.';responsableExterno.focus();return}
   const faltante=externalRows.find(r=>!cantidadInputsExterno(r.id_articulo).touched);
   if(faltante){externoStatus.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribi 0.`;return}
   const payload=externalPayload();const sig=dispersionSignature(payload);const validacion=await validarDispersionAntesDeGuardar(payload);const alertas=validacion.alertas_dispersion||[];
-  if(alertas.length&&externalReviewKey!==sig){externalReviewKey=sig;alert(`Antes de guardar, volve a controlar estos articulos:\n\n${alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n')}\n\nNo se muestra el stock esperado.`);externoStatus.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante.`;return}
-  if(alertas.length&&!confirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)) return;
-  if(!confirm(`Guardar control externo con ${externalRows.length} articulos?`)) return;
+  if(alertas.length&&externalReviewKey!==sig){externalReviewKey=sig;await modalAlert(`Antes de guardar, volve a controlar estos articulos:\n\n${alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n')}\n\nNo se muestra el stock esperado.`);externoStatus.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante.`;return}
+  if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)) return;
+  if(!await modalConfirm(`Guardar control externo con ${externalRows.length} articulos?`)) return;
   guardarExternoBtn.disabled=true;guardarExternoBtn.textContent='Guardando...';
   const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();
   if(!res.ok||data.ok===false){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo';externoStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
-  externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado. Items: ${data.data.items_guardados}.`;alert('Control externo guardado correctamente.');
+  externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado. Items: ${data.data.items_guardados}.`;await modalAlert('Control externo guardado correctamente.');
 }
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
@@ -1075,8 +1442,21 @@ function guardarBorradorLocal(){
   data.horaInicio=horaInicio.value||data.horaInicio;data.responsable=responsable.value||data.responsable;data.observaciones=observaciones.value;
   document.querySelectorAll('[data-cant]').forEach(el=>data.values[el.dataset.cant]=el.value);
   document.querySelectorAll('[data-unid]').forEach(el=>data.unidades[el.dataset.unid]=el.value);
+  data.savedAt=Date.now();
   localStorage.setItem(draftKey(),JSON.stringify(data));
   estado.value='Borrador guardado';
+}
+async function confirmarBorradorPendiente(){
+  const raw=localStorage.getItem(draftKey());
+  if(!raw) return;
+  let data;
+  try{data=JSON.parse(raw)}catch(_){localStorage.removeItem(draftKey());return}
+  const cargados=Object.values(data.values||{}).filter(v=>v!=='').length+Object.values(data.unidades||{}).filter(v=>v!=='').length;
+  if(!cargados) return;
+  const cuando=data.savedAt?new Date(data.savedAt).toLocaleString('es-AR'):'fecha desconocida';
+  const quien=data.responsable||'un responsable no identificado';
+  const restaurar=await modalConfirm(`Hay un borrador sin terminar para estos filtros, guardado por ${quien} el ${cuando} (${cargados} valor(es) cargados).\n\n¿Restaurar ese borrador o empezar de cero?`,{okText:'Restaurar borrador',cancelText:'Empezar de cero'});
+  if(!restaurar) localStorage.removeItem(draftKey());
 }
 function cargarBorradorLocal(){
   const raw=localStorage.getItem(draftKey());
@@ -1107,6 +1487,7 @@ async function loadPlanilla(){
   if(!res.ok||data.ok===false){status.textContent='Error: '+(data.error||'No se pudo cargar');return}
   currentRows=data.rows||[];
   mobileIndex=0;
+  await confirmarBorradorPendiente();
   document.querySelector('#viewConteo .save-footer')?.classList.remove('ready');
   pMes.textContent=`Mes: ${data.mes}`;
   pArt.textContent=`Artículos: ${data.total_filtrado}`;
@@ -1129,24 +1510,6 @@ async function loadPlanilla(){
     <td class="num" data-total="${r.id_articulo}">0</td>
     <td class="num" data-unidades="${r.id_articulo}">0</td>
   </tr>`).join('');
-  cards.innerHTML=currentRows.map(r=>`<article class="mobile-card">
-    <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowDia(r))}</span></div>
-    <div class="mobile-meta">${esc(r.descripcion)}<br>${esc(rowSemana(r))} · ${fmt.format(r.bultos)} bultos</div>
-    <div class="mobile-row"><input class="stock-input" type="number" step="1" min="0" placeholder="Stock" data-stock="${r.id_articulo}m"><label><input class="diff-check" type="checkbox" data-diff="${r.id_articulo}m" onchange="updateDiffCount()"> Diferencia</label></div>
-    <input class="obs-input" placeholder="Observación" data-obs="${r.id_articulo}m">
-  </article>`).join('');
-  cards.innerHTML=currentRows.map(r=>`<article class="mobile-card">
-    <div class="mobile-head"><span>${esc(r.id_articulo)} · ${esc(r.abc)}</span><span>${esc(rowDia(r))}</span></div>
-    <div class="mobile-meta">${esc(r.descripcion)}<br>${esc(rowSemana(r))} · ${fmt.format(r.bultos_por_pallet||0)} b/pallet · ${fmt.format(r.unidades_por_bulto||0)} u/bulto</div>
-    <div class="mobile-row">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 1" data-cant="${r.id_articulo}m-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 2" data-cant="${r.id_articulo}m-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 3" data-cant="${r.id_articulo}m-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Bultos 4" data-cant="${r.id_articulo}m-4" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-      <input class="stock-input" type="number" step="1" min="0" inputmode="numeric" placeholder="Unidades" data-unid="${r.id_articulo}m" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()">
-    </div>
-    <div class="pill"><span data-total="${r.id_articulo}m">0</span> bultos con <span data-unidades="${r.id_articulo}m">0</span> unidades</div>
-  </article>`).join('');
   renderMobileCards();
   status.textContent=`Cantidad de artículos a contar: ${currentRows.length}`;
   if(!isMobileConteo()){
@@ -1156,7 +1519,7 @@ async function loadPlanilla(){
 }
 async function guardarConteo(){
   if(conteoGuardado){
-    alert('Este control ya fue guardado. No se puede volver a grabar el mismo conteo.');
+    await modalAlert('Este control ya fue guardado. No se puede volver a grabar el mismo conteo.');
     status.textContent='Este control ya fue guardado. Para hacer otro conteo cambia fecha, sucursal o responsable y actualiza la planilla.';
     return;
   }
@@ -1193,10 +1556,10 @@ async function guardarConteo(){
       }
       estado.value='Revisar dispersion';
       status.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante antes de guardar.`;
-      alert(`Antes de guardar, volve a controlar estos articulos:\n\n${lista}${alertas.length>8?'\n...':''}\n\nNo se muestra el stock esperado. Revisalos fisicamente y luego volve a guardar.`);
+      await modalAlert(`Antes de guardar, volve a controlar estos articulos:\n\n${lista}${alertas.length>8?'\n...':''}\n\nNo se muestra el stock esperado. Revisalos fisicamente y luego volve a guardar.`);
       return;
     }
-    if(alertas.length&&!confirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)){
+    if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)){
       estado.value='Sin guardar';
       status.textContent='Conteo sin guardar. Revisar articulos con dispersion.';
       return;
@@ -1207,7 +1570,7 @@ async function guardarConteo(){
     return;
   }
   const cargados=saveFooterSummary?.dataset?.loaded||currentRows.length;
-  if(!confirm(`Vas a finalizar y guardar este control con ${cargados} articulos. Despues no se podra volver a grabar el mismo conteo. Confirmas?`)) return;
+  if(!await modalConfirm(`Vas a finalizar y guardar este control con ${cargados} articulos. Despues no se podra volver a grabar el mismo conteo. Confirmas?`)) return;
   guardandoConteo=true;
   if(guardarConteoBtn){
     guardarConteoBtn.disabled=true;
@@ -1223,7 +1586,7 @@ async function guardarConteo(){
     if(String(msg).toLowerCase().includes('ya existe')){
       conteoGuardado=true;
       if(guardarConteoBtn) guardarConteoBtn.textContent='Conteo ya guardado';
-      alert(msg);
+      await modalAlert(msg);
     }else if(guardarConteoBtn){
       guardarConteoBtn.disabled=false;
       guardarConteoBtn.textContent='Guardar control y finalizar';
@@ -1238,7 +1601,7 @@ async function guardarConteo(){
     ? `Control guardado correctamente. Items: ${data.data.items_guardados}. Atencion: ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Revisar con supervisor.`
     : `Control guardado correctamente. Items: ${data.data.items_guardados}. No se puede volver a grabar el mismo conteo.`;
   if(guardarConteoBtn) guardarConteoBtn.textContent='Control guardado';
-  alert(alertasDispersion
+  await modalAlert(alertasDispersion
     ? `Control guardado correctamente. Hay ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Avisar o revisar con supervisor.`
     : `Control guardado correctamente. Se registraron ${data.data.items_guardados} articulos.`);
   localStorage.removeItem(draftKey());
@@ -1258,6 +1621,7 @@ async function guardarConteo(){
   actualizarEstadoFrescura(fecha.value,'pFrescura');
   actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
   loadAbc();loadPlanificacion();loadResumenMensual();loadResumenArticulo();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();
+  updateTabsFade();
 })();
 </script>
 </body>

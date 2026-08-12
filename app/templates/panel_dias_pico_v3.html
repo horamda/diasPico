@@ -401,7 +401,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   <span class="badge">OPS</span>
   <h1>Panel de Días Pico</h1>
   <div class="right">
-    <a class="btn sm" href="/portal" title="Volver al dashboard general">Dashboard</a>
+    <a class="btn sm" href="/portal" title="Volver al inicio del portal">Inicio</a>
     <button class="btn sm calendar-toggle" id="toggleCalendarBtn" type="button" onclick="toggleCalendarSidebar()" aria-pressed="false" title="Ocultar calendario lateral">Ocultar calendario</button>
     <label style="font-size:11px;color:var(--muted)">Sucursal</label>
     <select id="selSucursal" onchange="onSucursalChange()"><option value="TODAS">Todas</option></select>
@@ -902,6 +902,47 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
         <span><i class="dot" style="background:var(--acc)"></i>Bultos rechazados</span>
       </div>
       <div id="analisisHlChart"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div class="box" style="margin-top:8px">
+      <div class="sec" style="margin-bottom:10px">Rechazos por cliente y motivo</div>
+      <div class="filter-grid">
+        <div class="filter-field">
+          <label>Sucursal</label>
+          <select id="rechazoRankingSucursal">
+            <option value="TODAS">Todas</option>
+            <option value="1">Casa Central</option>
+            <option value="2">Dolores</option>
+          </select>
+        </div>
+        <div class="filter-field">
+          <label>Desde</label>
+          <input id="rechazoRankingDesde" type="date">
+        </div>
+        <div class="filter-field">
+          <label>Hasta</label>
+          <input id="rechazoRankingHasta" type="date">
+        </div>
+        <div class="filter-field">
+          <label>Top</label>
+          <select id="rechazoRankingLimit">
+            <option value="10">10</option>
+            <option value="25" selected>25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <button class="btn primary" onclick="loadRechazosRankings()">Actualizar</button>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:8px">
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Clientes con rechazos</div>
+        <div id="rechazosPorCliente"><div class="loading"><div class="spinner"></div>Cargando...</div></div>
+      </div>
+      <div class="box">
+        <div class="sec" style="margin-bottom:8px">Motivos de rechazo</div>
+        <div id="rechazosPorMotivo"><div class="loading"><div class="spinner"></div>Cargando...</div></div>
+      </div>
     </div>
     <div class="sec" style="margin-top:8px">Tabla mensual</div>
     <div class="box"><div id="analisisHlTabla"><div class="loading"><div class="spinner"></div></div></div></div>
@@ -2000,7 +2041,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/static/app.js?v=20260717-1"></script>
+<script src="/static/app.js?v=20260811-rechazos"></script>
 <script src="/static/simulador_logistico.js?v=20260524-1"></script>
 
 </body>

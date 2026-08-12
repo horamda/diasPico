@@ -36,6 +36,7 @@
 }
 #rptSuc { min-width: 160px; }
 .ctrl-btn { padding: 6px 16px; border-radius: 5px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.ctrl-link { display: inline-flex; align-items: center; text-decoration: none; }
 .ctrl-btn.gen { background: var(--blu); color: #fff; }
 .ctrl-btn.prt { background: var(--grn); color: #000; }
 .ctrl-btn.drk { background: var(--ctrl-btn-bg); color: var(--txt); }
@@ -223,6 +224,8 @@
 
 <!-- CONTROL BAR -->
 <div id="ctrl-bar">
+  <a class="ctrl-btn drk ctrl-link" href="/portal" title="Volver al inicio del portal">Inicio</a>
+  <div class="vsp"></div>
   <label>Sucursal</label>
   <select id="rptSuc" onchange=""></select>
   <div class="vsp"></div>

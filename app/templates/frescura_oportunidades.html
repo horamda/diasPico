@@ -417,7 +417,7 @@
       position: fixed;
       top: 0;
       right: 0;
-      width: min(760px, 100%);
+      width: min(1180px, calc(100% - 28px));
       height: 100vh;
       background: #0f1624;
       border-left: 1px solid var(--line);
@@ -462,34 +462,36 @@
 
     .detail-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(6, minmax(118px, 1fr));
+      gap: 8px;
     }
 
     .detail-card {
       border: 1px solid var(--line);
-      border-radius: 14px;
+      border-radius: 10px;
       background: rgba(255,255,255,.02);
-      padding: 12px;
+      padding: 10px;
+      min-width: 0;
     }
 
     .detail-card .label {
       color: var(--txt-soft);
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: .06em;
     }
 
     .detail-card .value {
       margin-top: 8px;
       font-family: var(--mono);
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
+      overflow-wrap: anywhere;
     }
 
     .panel-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(280px, .8fr) minmax(320px, 1fr);
       gap: 12px;
     }
 
@@ -537,13 +539,22 @@
     }
 
     .opportunities-table {
-      min-width: 0;
+      min-width: 820px;
       width: 100%;
     }
 
     .opportunities-table thead th,
     .opportunities-table tbody td {
       padding: 10px 10px;
+    }
+
+    .drawer .table-wrap {
+      max-width: 100%;
+      overflow-x: auto;
+    }
+
+    .drawer .panel {
+      border-radius: 10px;
     }
 
     .plan-box {
@@ -680,7 +691,13 @@
     @media (max-width: 1280px) {
       .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .drawer { width: min(1040px, calc(100% - 24px)); }
+      .detail-grid { grid-template-columns: repeat(4, minmax(118px, 1fr)); }
+    }
+
+    @media (max-width: 980px) {
+      .drawer { width: 100%; }
+      .detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .panel-grid { grid-template-columns: 1fr; }
     }
 
@@ -712,21 +729,23 @@
       #articlesMobile { display: grid; }
       #tabErrores .table-wrap { display: none; }
       #erroresMobile { display: grid; }
-      .detail-grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .drawer { width: 100%; }
       .drawer-header { padding: 12px; }
       .drawer-header h3 { font-size: 16px; }
       .drawer-body { padding: 10px; gap: 10px; }
       .detail-card { text-align: center; }
       .panel-grid { grid-template-columns: 1fr; }
-      .opportunities-table { min-width: 620px; }
+      .opportunities-table { min-width: 700px; }
       table { min-width: 1120px; }
+      .drawer .opportunities-table { min-width: 700px; }
     }
 
     @media (max-width: 420px) {
       .hero-actions,.filter-actions,.mobile-metrics { grid-template-columns: 1fr; }
       .mobile-card-head { flex-direction: column; align-items: center; text-align: center; }
       .mobile-card-desc { text-align: center; }
+      .detail-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -743,6 +762,7 @@
       <div class="hero-meta">
         <span class="badge" id="lastSync">Ultima sincronizacion: -</span>
         <div class="hero-actions">
+          <a class="btn ghost" href="/portal" title="Volver al inicio del portal">Inicio</a>
           <button class="btn primary" id="syncBtn" onclick="syncFreshness()">Sincronizar</button>
           <button class="btn ghost" onclick="loadArticles(true)">Solo criticos</button>
         </div>
@@ -942,6 +962,12 @@
         <div class="detail-card"><div class="label">Estado</div><div class="value" id="detailEstado">-</div></div>
         <div class="detail-card"><div class="label">Cobertura</div><div class="value" id="detailCobertura">-</div></div>
         <div class="detail-card"><div class="label">Potencial</div><div class="value" id="detailPotencial">-</div></div>
+        <div class="detail-card"><div class="label">Ultima venta</div><div class="value" id="detailUltimaVenta">-</div></div>
+        <div class="detail-card"><div class="label">Venta bultos</div><div class="value" id="detailVentaBultos">-</div></div>
+        <div class="detail-card"><div class="label">Venta HL</div><div class="value" id="detailVentaHl">-</div></div>
+        <div class="detail-card"><div class="label">Venta $</div><div class="value" id="detailVentaImporte">-</div></div>
+        <div class="detail-card"><div class="label">Prom. blt/dia</div><div class="value" id="detailVentaPromedio">-</div></div>
+        <div class="detail-card"><div class="label">Stock cubre</div><div class="value" id="detailDiasStock">-</div></div>
       </div>
 
       <div class="panel">
@@ -1058,6 +1084,7 @@
 
     const fmt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 2 });
     const fmtInt = new Intl.NumberFormat('es-AR', { maximumFractionDigits: 0 });
+    const fmtMoney = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', maximumFractionDigits: 0 });
 
     function esc(value) {
       return String(value ?? '')
@@ -1599,7 +1626,9 @@
       }
       target.innerHTML = rows.map((row) => {
         const label = `${row.cliente_nombre || row.cliente || '-'}${row.localidad ? ' · ' + row.localidad : ''}`;
-        const meta = row.score_oportunidad != null ? `${fmt.format(row.score_oportunidad)} pts` : (row.prioridad_accion || '');
+        const meta = row.count != null
+          ? `${fmtInt.format(Number(row.count || 0))} clientes`
+          : (row.score_oportunidad != null ? `${fmt.format(row.score_oportunidad)} pts` : (row.prioridad_accion || ''));
         return `<li><span>${esc(label)}</span><strong>${esc(meta)}</strong></li>`;
       }).join('');
     }
@@ -1663,6 +1692,12 @@
       document.getElementById('detailEstado').textContent = '-';
       document.getElementById('detailCobertura').textContent = '-';
       document.getElementById('detailPotencial').textContent = '-';
+      document.getElementById('detailUltimaVenta').textContent = '-';
+      document.getElementById('detailVentaBultos').textContent = '-';
+      document.getElementById('detailVentaHl').textContent = '-';
+      document.getElementById('detailVentaImporte').textContent = '-';
+      document.getElementById('detailVentaPromedio').textContent = '-';
+      document.getElementById('detailDiasStock').textContent = '-';
       document.getElementById('clientBuckets').innerHTML = '<li><span>Cargando...</span><strong>-</strong></li>';
       document.getElementById('lotsTbody').innerHTML = '<tr><td colspan="6" class="empty">Cargando...</td></tr>';
       document.getElementById('opportunitiesTbody').innerHTML = '<tr><td colspan="5" class="empty">Cargando...</td></tr>';
@@ -1690,12 +1725,18 @@
         document.getElementById('detailEstado').innerHTML = `<span class="chip ${chipClass(article?.estado_frescura)}">${stateLabel(article?.estado_frescura)}</span>`;
         document.getElementById('detailCobertura').textContent = `${fmt.format(Number(summary?.cobertura_comercial_porcentaje || 0))}%`;
         document.getElementById('detailPotencial').textContent = fmtInt.format(Number(summary?.potencial_clientes || 0));
+        document.getElementById('detailUltimaVenta').textContent = formatDate(summary?.venta_ultima_fecha);
+        document.getElementById('detailVentaBultos').textContent = fmt.format(Number(summary?.venta_bultos_total || 0));
+        document.getElementById('detailVentaHl').textContent = fmt.format(Number(summary?.venta_hl_total || 0));
+        document.getElementById('detailVentaImporte').textContent = fmtMoney.format(Number(summary?.venta_importe_total || 0));
+        document.getElementById('detailVentaPromedio').textContent = fmt.format(Number(summary?.venta_promedio_bultos_dia || 0));
+        document.getElementById('detailDiasStock').textContent = summary?.stock_dias_estimados_venta == null ? '-' : `${fmt.format(Number(summary.stock_dias_estimados_venta || 0))} dias`;
         renderLotsTable(article?.lotes || [], article?.uxb);
         renderClientList('clientBuckets', [
-          { cliente_nombre: `Últimos ${diasLabel} días`, score_oportunidad: summary?.clientes_ultimos_config_dias || 0 },
-          { cliente_nombre: `Inactivos`, score_oportunidad: summary?.clientes_inactivos_para_el_sku || 0 },
-          { cliente_nombre: `Categoría / marca`, score_oportunidad: summary?.clientes_categoria_marca_sin_sku || 0 },
-          { cliente_nombre: `Nunca compraron`, score_oportunidad: summary?.clientes_que_nunca_compraron || 0 },
+          { cliente_nombre: `Últimos ${diasLabel} días`, count: summary?.clientes_ultimos_config_dias || 0 },
+          { cliente_nombre: `Inactivos`, count: summary?.clientes_inactivos_para_el_sku || 0 },
+          { cliente_nombre: `Categoría / marca`, count: summary?.clientes_categoria_marca_sin_sku || 0 },
+          { cliente_nombre: `Nunca compraron`, count: summary?.clientes_que_nunca_compraron || 0 },
         ], 'Sin datos');
         renderOpportunityTable(resumen.oportunidades || []);
         const nuncaTotal = clientes?.nunca_compraron_total ?? (clientes?.nunca_compraron?.length || 0);

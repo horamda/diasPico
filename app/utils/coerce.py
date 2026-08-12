@@ -50,7 +50,10 @@ def to_dec(v) -> float | None:
             text = text.replace(',', '.')
     elif dot >= 0:
         parts = text.split('.')
-        if len(parts[-1]) == 3 and len(parts) > 1:
+        if text.startswith('.'):
+            # Decimal sin cero inicial exportado como texto: .114 == 0.114.
+            pass
+        elif len(parts[-1]) == 3 and len(parts) > 1:
             # 1.234 o 12.345.678 como miles.
             text = ''.join(parts)
     try:

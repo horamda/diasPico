@@ -53,6 +53,32 @@ def diario_detalle():
         return jsonify({'error': str(e)}), 500
 
 
+@bp.get('/por-cliente')
+def por_cliente():
+    try:
+        desde, hasta = _parse_rango()
+        sucursal = request.args.get('sucursal', 'TODAS')
+        limit = request.args.get('limit', type=int) or 50
+        return jsonify(rechazos_svc.get_rechazos_por_cliente(desde, hasta, sucursal, limit))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/por-motivo')
+def por_motivo():
+    try:
+        desde, hasta = _parse_rango()
+        sucursal = request.args.get('sucursal', 'TODAS')
+        limit = request.args.get('limit', type=int) or 50
+        return jsonify(rechazos_svc.get_rechazos_por_motivo(desde, hasta, sucursal, limit))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bp.get('/diario/integracion')
 def diario_integracion():
     try:

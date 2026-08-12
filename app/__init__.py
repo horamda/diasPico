@@ -26,6 +26,7 @@ BLUEPRINT_MODULES = (
     'app.routes.frescura',
     'app.routes.segmentacion',
     'app.routes.admin_proyecto',
+    'app.routes.foxtrot_review',
 )
 
 

@@ -164,7 +164,7 @@ async function refreshPicoDependentViews() {
   if (isTabVisible('tab-comparativo')) loadComparativo();
   if (isTabVisible('tab-experiencia')) loadExperienciaClientes();
   if (isTabVisible('tab-dotacion')) loadDotacion();
-  if (isTabVisible('tab-analisis')) loadAnalisisHl();
+  if (isTabVisible('tab-analisis')) { loadAnalisisHl(); loadRechazosRankings(); }
   if (isTabVisible('tab-dropsize')) loadDropsize();
   if (isTabVisible('tab-planificacion')) loadPlanificacion();
   if (isTabVisible('tab-config')) loadKpiObjetivos();
@@ -2910,6 +2910,82 @@ async function loadAnalisisHl() {
 
 // ─── DRAWER ──────────────────────────────────────────────────
 // ─── DROPSIZE ────────────────────────────────────────────────────────────────
+function initRechazosRankingFilters() {
+  const suc = document.getElementById('rechazoRankingSucursal');
+  const desde = document.getElementById('rechazoRankingDesde');
+  const hasta = document.getElementById('rechazoRankingHasta');
+  if (suc && !suc.dataset.ready) {
+    suc.value = getSuc();
+    suc.dataset.ready = '1';
+  }
+  if (desde && !desde.value) {
+    const [y, m] = mesPad().split('-').map(Number);
+    desde.value = `${y}-${String(m).padStart(2, '0')}-01`;
+  }
+  if (hasta && !hasta.value) {
+    const [y, m] = mesPad().split('-').map(Number);
+    hasta.value = `${y}-${String(m).padStart(2, '0')}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  }
+}
+
+function renderRechazosPorCliente(rows) {
+  if (!rows.length) return '<div class="empty"><div class="icon">📋</div>Sin rechazos por cliente para el periodo</div>';
+  let html = '<div style="overflow-x:auto"><table class="rtbl"><thead><tr><th>Cliente</th><th>Descripcion</th><th>Suc.</th><th>PDV</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>Motivos</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    html += `<tr>
+      <td style="font-family:var(--mono);font-weight:700">${escHtml(r.cliente || '')}</td>
+      <td>${escHtml(r.descripcion_cliente || '')}</td>
+      <td>${escHtml(r.sucursal || '')}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(r.pedidos_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right;color:var(--red)">${fmt1(r.bultos_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right;color:var(--red)">${fmt1(r.hl_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmt1(r.pallets_rechazo || 0)}</td>
+      <td style="max-width:280px;white-space:normal">${escHtml(r.motivos || '')}</td>
+    </tr>`;
+  });
+  return html + '</tbody></table></div>';
+}
+
+function renderRechazosPorMotivo(rows) {
+  if (!rows.length) return '<div class="empty"><div class="icon">📋</div>Sin rechazos por motivo para el periodo</div>';
+  let html = '<div style="overflow-x:auto"><table class="rtbl"><thead><tr><th>Sector</th><th>Motivo</th><th>Clientes</th><th>PDV</th><th>Ocurr.</th><th>Bultos</th><th>HL</th><th>Pallets</th></tr></thead><tbody>';
+  rows.forEach(r => {
+    html += `<tr>
+      <td>${escHtml(r.sector || 'Sin sector')}</td>
+      <td style="max-width:260px;white-space:normal">${escHtml(r.motivo || 'Sin motivo')}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(r.clientes_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(r.pedidos_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmtN(r.ocurrencias || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right;color:var(--red)">${fmt1(r.bultos_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right;color:var(--red)">${fmt1(r.hl_rechazo || 0)}</td>
+      <td style="font-family:var(--mono);text-align:right">${fmt1(r.pallets_rechazo || 0)}</td>
+    </tr>`;
+  });
+  return html + '</tbody></table></div>';
+}
+
+async function loadRechazosRankings() {
+  initRechazosRankingFilters();
+  load('rechazosPorCliente');
+  load('rechazosPorMotivo');
+  const desde = document.getElementById('rechazoRankingDesde')?.value || '';
+  const hasta = document.getElementById('rechazoRankingHasta')?.value || '';
+  const sucursal = document.getElementById('rechazoRankingSucursal')?.value || getSuc();
+  const limit = document.getElementById('rechazoRankingLimit')?.value || '25';
+  const qs = new URLSearchParams({ desde, hasta, sucursal, limit }).toString();
+  try {
+    const [clientes, motivos] = await Promise.all([
+      api('/api/rechazos/por-cliente?' + qs),
+      api('/api/rechazos/por-motivo?' + qs),
+    ]);
+    document.getElementById('rechazosPorCliente').innerHTML = renderRechazosPorCliente(clientes.datos || []);
+    document.getElementById('rechazosPorMotivo').innerHTML = renderRechazosPorMotivo(motivos.datos || []);
+  } catch (e) {
+    errBox('rechazosPorCliente', e.message);
+    errBox('rechazosPorMotivo', e.message);
+  }
+}
+
 function initDropsizeFilters() {
   const mesEl = document.getElementById('dropMes');
   if (!mesEl) return;
@@ -4864,7 +4940,7 @@ function switchTab(t, el) {
   if (t === 'comparativo') loadComparativo();
   if (t === 'experiencia') loadExperienciaClientes();
   if (t === 'dotacion')    loadDotacion();
-  if (t === 'analisis')    loadAnalisisHl();
+  if (t === 'analisis')    { loadAnalisisHl(); loadRechazosRankings(); }
   if (t === 'calibres')    loadCalibres();
   if (t === 'dropsize')  {
     if (document.getElementById('dropSucursal')) document.getElementById('dropSucursal').value = getSuc();

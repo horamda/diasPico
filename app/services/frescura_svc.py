@@ -1110,6 +1110,32 @@ def _client_payload_from_fact(client: dict[str, Any], fact: dict[str, Any] | Non
     }
 
 
+def _sales_metrics_from_facts(facts: list[dict[str, Any]], stock_bultos: float = 0.0) -> dict[str, Any]:
+    first_dates = [f.get('primera_venta') for f in facts if isinstance(f.get('primera_venta'), date)]
+    last_dates = [f.get('ultima_venta') for f in facts if isinstance(f.get('ultima_venta'), date)]
+    primera = min(first_dates) if first_dates else None
+    ultima = max(last_dates) if last_dates else None
+    days_span = max(1, (date.today() - primera).days + 1) if primera else 0
+    bultos = sum(_as_float(f.get('bultos'), 0.0) for f in facts)
+    unidades = sum(_as_float(f.get('unidades'), 0.0) for f in facts)
+    hl = sum(_as_float(f.get('hl'), 0.0) for f in facts)
+    importe = sum(_as_float(f.get('importe'), 0.0) for f in facts)
+    promedio_bultos_dia = (bultos / days_span) if days_span else 0.0
+    dias_stock = (stock_bultos / promedio_bultos_dia) if promedio_bultos_dia > 0 and stock_bultos > 0 else None
+    return {
+        'venta_primera_fecha': primera.isoformat() if primera else None,
+        'venta_ultima_fecha': ultima.isoformat() if ultima else None,
+        'venta_dias_historia': days_span,
+        'venta_clientes_total': len(facts),
+        'venta_bultos_total': round(bultos, 2),
+        'venta_unidades_total': round(unidades, 2),
+        'venta_hl_total': round(hl, 2),
+        'venta_importe_total': round(importe, 2),
+        'venta_promedio_bultos_dia': round(promedio_bultos_dia, 2),
+        'stock_dias_estimados_venta': round(dias_stock, 1) if dias_stock is not None else None,
+    }
+
+
 def _article_lotes_payload(article: dict[str, Any]) -> list[dict[str, Any]]:
     raw_lotes = article.get('lotes') or []
     if not isinstance(raw_lotes, list):
@@ -1947,6 +1973,7 @@ def get_articulo_clientes(codigo_articulo: str, sucursal: str | None = None, **f
     facts = context['facts']
     cat_match = context['category_match']
     active_keys = {(str(c.get('cliente') or ''), str(c.get('sucursal') or '')) for c in active_clients}
+    stock_bultos = _as_float(article.get('stock_bultos_total'), 0.0) or _as_float(article.get('stock_bultos'), 0.0) or _as_float(article.get('stock_actual'), 0.0)
 
     fact_map: dict[tuple[str, str], dict[str, Any]] = {}
     for fact in facts:
@@ -2011,6 +2038,7 @@ def get_articulo_clientes(codigo_articulo: str, sucursal: str | None = None, **f
     summary['clientes_categoria_marca_sin_sku'] = len(category_no_sku)
     summary['cobertura_comercial_porcentaje'] = round((summary['clientes_ultimos_config_dias'] / len(active_clients) * 100), 2) if active_clients else 0.0
     summary['potencial_clientes'] = len([c for c in active_clients if _norm(c.get('cluster_dpo')) in _GOOD_CLUSTERS and _as_float(c.get('score_total'), 0.0) >= 65 and (str(c.get('cliente') or ''), str(c.get('sucursal') or '')) not in buyers])
+    summary.update(_sales_metrics_from_facts(list(fact_map.values()), stock_bultos))
 
     opportunities = sorted(
         opportunities,
