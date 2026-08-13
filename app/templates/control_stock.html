@@ -307,7 +307,7 @@
     <div>
       <button class="btn primary" onclick="loadPlanilla()">Actualizar</button>
       <button class="btn" onclick="usarHoy()">Hoy</button>
-      <a class="btn" href="/portal" title="Volver al inicio del portal">Inicio</a>
+      <a class="btn" href="/portal" title="Volver al inicio del portal">Inicio portal</a>
     </div>
   </header>
 
@@ -1175,7 +1175,9 @@ function renderAbcMensual(){
 }
 async function loadResponsables(){
   respStatus.textContent='Cargando responsables...';
-  const res=await fetch('/api/control-stock/responsables?sucursal='+encodeURIComponent(sucursalResp.value)+'&incluir_inactivos=1');
+  const adminMode = activeTab === 'resp';
+  const sucursalObjetivo = adminMode ? sucursalResp.value : sucursalConteo.value;
+  const res=await fetch('/api/control-stock/responsables?sucursal='+encodeURIComponent(sucursalObjetivo)+'&incluir_inactivos=1');
   const data=await res.json();
   if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
   const rows=data.data||[];
@@ -1183,16 +1185,16 @@ async function loadResponsables(){
   const keepResumenArticulo=responsableResumenArticulo.value||'';
   responsableResumenArticulo.innerHTML='<option value="">Todos los responsables</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
   responsableResumenArticulo.value=rows.some(r=>r.activo&&r.nombre===keepResumenArticulo)?keepResumenArticulo:'';
-  respBody.innerHTML=rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('');
-  respCards.innerHTML=rows.map(r=>`<article class="resp-card">
+  respBody.innerHTML=adminMode ? rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('') : respBody.innerHTML;
+  respCards.innerHTML=adminMode ? rows.map(r=>`<article class="resp-card">
     <div class="resp-card-head"><span>${esc(r.nombre)}</span></div>
     <div class="resp-card-status">${r.activo?'Activo':'Inactivo'}</div>
     <div class="resp-card-actions">
       <button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button>
       <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button>
     </div>
-  </article>`).join('');
-  respStatus.textContent=`${rows.length} responsables`;
+  </article>`).join('') : respCards.innerHTML;
+  respStatus.textContent=`${rows.length} responsables · ${sucursalObjetivo==='2'?'Dolores':'Casa Central'}`;
   respLoaded=true;
 }
 async function guardarResponsable(){
@@ -1474,6 +1476,7 @@ async function loadPlanilla(){
   const f=filtrosEfectivos();
   const params=new URLSearchParams({mes:mes.value||defaultMonth(),sucursal:sucursalConteo.value,semana:f.semana,dia:f.dia,abc:abc.value});
   actualizarEstadoFrescura(fecha.value,'pFrescura');
+  await loadResponsables();
   conteoGuardado=false;
   guardandoConteo=false;
   dispersionReviewKey='';

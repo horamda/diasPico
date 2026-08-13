@@ -115,5 +115,10 @@ def ensure_ventas_detalle_table() -> None:
                     CREATE INDEX IF NOT EXISTS idx_ventas_detalle_documento ON ventas_detalle(detalle_documento);
                     CREATE INDEX IF NOT EXISTS idx_ventas_detalle_empresa ON ventas_detalle(empresa);
                     CREATE INDEX IF NOT EXISTS idx_ventas_detalle_cliente ON ventas_detalle(cliente);
+                    CREATE INDEX IF NOT EXISTS idx_ventas_detalle_portal_suc_fecha
+                        ON ventas_detalle(sucursal, fecha)
+                        INCLUDE (unidad_medida, bultos, cliente, detalle_documento, documento, id_articulo,
+                                 unidad_medida_rechazado, bultos_rechazados, unidad_paquete, motivo_rechazo,
+                                 rechazo_total, origen);
                 """)
         _VENTAS_DETALLE_READY = True

@@ -140,7 +140,7 @@ def dashboard_kpis():
         data = cache_svc.get_or_set(
             f'portal:dashboard_kpis:{empresa_id}:{sucursal_id}',
             lambda: portal_dashboard_svc.get_dashboard_kpis(empresa_id, sucursal_id),
-            ttl_seconds=300,
+            ttl_seconds=900,
         )
         return jsonify({'ok': True, 'data': data})
     except Exception as e:

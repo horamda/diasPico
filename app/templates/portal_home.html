@@ -105,6 +105,15 @@ body { display: flex; }
 .refresh-btn:hover { color: var(--acc); border-color: var(--acc-bd); }
 .refresh-btn.spin-anim svg { animation: spin .8s linear infinite; }
 .last-updated { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.data-updated {
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--brd);
+  background: var(--surf2);
+  border-radius: 999px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
 
 .content { padding: 22px 24px 40px; }
 
@@ -205,6 +214,10 @@ body { display: flex; }
 .kpi-delta.dn  { background: var(--red-bg); color: var(--red); }
 .kpi-delta.eq  { background: var(--surf3);  color: var(--muted); }
 .kpi-sub { font-size: 10px; color: var(--muted); }
+.kpi-breakdown { display: grid; gap: 4px; margin: -3px 0 9px; }
+.kpi-breakdown-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 10px; color: var(--muted); }
+.kpi-breakdown-row b { color: var(--txt); font-weight: 700; }
+.kpi-breakdown-row span:last-child { text-align: right; white-space: nowrap; }
 
 /* progress bar */
 .kpi-progress {
@@ -219,6 +232,38 @@ body { display: flex; }
 .kpi-card.red .kpi-progress-fill { background: var(--red); }
 .kpi-card.ora .kpi-progress-fill { background: var(--ora); }
 .kpi-card.blu .kpi-progress-fill { background: var(--blu); }
+
+.volume-mix-panel { margin-top: 10px; background: var(--surf); border: 1px solid var(--brd); border-radius: var(--r-lg); padding: 14px; overflow: hidden; }
+.volume-mix-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 10px; }
+.volume-mix-title { font-size: 12px; font-weight: 700; color: var(--txt); }
+.volume-mix-sub, .volume-mix-foot { font-size: 10px; color: var(--muted); }
+.volume-mix-legend { display: flex; gap: 8px 10px; flex-wrap: wrap; justify-content: flex-end; max-width: 58%; }
+.legend-item { font-size: 10px; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+.legend-swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.legend-line { width: 15px; height: 2px; border-radius: 2px; display: inline-block; }
+.volume-charts-grid { display: grid; grid-template-columns: minmax(430px, 1fr) minmax(240px, 300px); gap: 14px; align-items: stretch; }
+.volume-chart-wrap { height: clamp(220px, 25vw, 285px); position: relative; margin-top: 8px; min-width: 0; }
+.volume-donut-wrap { min-height: 220px; border-left: 1px solid var(--brd); padding-left: 14px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.volume-donut-title { font-size: 11px; font-weight: 700; color: var(--txt); }
+.volume-donut-sub { font-size: 10px; color: var(--muted); }
+.volume-donut-canvas { flex: 1; min-height: 170px; }
+#volumeMixChart, #volumeDonutChart { width: 100%; height: 100%; display: block; }
+.theme-toggle { left: calc(var(--sidebar-w) + 18px); right: auto; bottom: 18px; }
+
+@media (max-width: 900px) {
+  .volume-charts-grid { grid-template-columns: 1fr; }
+  .volume-mix-head { flex-direction: column; }
+  .volume-mix-legend { justify-content: flex-start; max-width: none; }
+  .volume-donut-wrap { border-left: 0; border-top: 1px solid var(--brd); padding-left: 0; padding-top: 12px; }
+  .theme-toggle { left: auto; right: 14px; }
+}
+
+@media (max-width: 560px) {
+  .volume-mix-panel { padding: 11px; }
+  .volume-chart-wrap { height: 260px; overflow-x: auto; }
+  .volume-donut-canvas { min-height: 220px; }
+  .legend-item { font-size: 9px; }
+}
 
 /* periodos dots */
 .pc-dots { display: flex; gap: 5px; margin-top: 8px; }
@@ -385,6 +430,7 @@ body { display: flex; }
     </div>
     <div class="topbar-actions">
       <span class="last-updated" id="lastUpdated"></span>
+      <span class="data-updated" id="dataUpdated">Datos: —</span>
       <select class="suc-sel" id="sucSelect" onchange="reloadKpis()">
         <option value="TODAS">Todas las sucursales</option>
         <option value="1">Casa Central</option>
@@ -413,6 +459,31 @@ body { display: flex; }
       </div>
       <div class="kpi-grid" id="kpiVol">
         <div class="loading" style="grid-column:1/-1"><div class="spinner"></div> Cargando…</div>
+      </div>
+      <div class="volume-mix-panel">
+        <div class="volume-mix-head">
+          <div>
+            <div class="volume-mix-title">Peso mensual Dolores vs Casa Central</div>
+            <div class="volume-mix-sub">Año en curso: barras = peso mensual; líneas = peso acumulado.</div>
+          </div>
+          <div class="volume-mix-legend">
+            <span class="legend-item"><i class="legend-swatch" style="background:var(--grn)"></i>Dolores mensual</span>
+            <span class="legend-item"><i class="legend-swatch" style="background:var(--ora)"></i>Casa Central mensual</span>
+            <span class="legend-item"><i class="legend-line" style="background:var(--grn)"></i>Dolores acum.</span>
+            <span class="legend-item"><i class="legend-line" style="background:var(--ora)"></i>Casa Central acum.</span>
+          </div>
+        </div>
+        <div class="volume-charts-grid">
+          <div class="volume-chart-wrap"><canvas id="volumeMixChart"></canvas></div>
+          <div class="volume-donut-wrap">
+            <div>
+              <div class="volume-donut-title">Peso sobre total HL</div>
+              <div class="volume-donut-sub">Acumulado del año por sucursal.</div>
+            </div>
+            <div class="volume-donut-canvas"><canvas id="volumeDonutChart"></canvas></div>
+          </div>
+        </div>
+        <div class="volume-mix-foot" id="volumeMixFoot">Sin datos cargados.</div>
       </div>
     </div>
 
@@ -480,6 +551,11 @@ function closeSidebar() { document.getElementById('sidebar').classList.remove('o
 // ── Formatters ──────────────────────────────────────────
 const fmtN = v => v == null ? '—' : new Intl.NumberFormat('es-AR').format(Math.round(v));
 const fmtP = (v, d=1) => v == null ? '—' : v.toFixed(d) + '%';
+const fmtDate = v => {
+  if (!v) return '—';
+  const [y, m, d] = String(v).slice(0, 10).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : v;
+};
 
 function deltaChip(v, invert = false) {
   if (v == null) return '<span class="kpi-delta eq">—</span>';
@@ -494,7 +570,209 @@ function progressBar(pct) {
   return `<div class="kpi-progress"><div class="kpi-progress-fill" style="width:${w}%"></div></div>`;
 }
 
+function bultosBreakdown(d) {
+  const rows = Array.isArray(d.bultos_por_sucursal) ? d.bultos_por_sucursal : [];
+  if (!rows.length) {
+    return `<div class="kpi-meta"><span class="kpi-sub">${fmtN(d.salidas)} salidas</span></div>`;
+  }
+  return `<div class="kpi-breakdown">${rows.map(r => `
+    <div class="kpi-breakdown-row">
+      <span>${r.nombre || 'Sucursal'}</span>
+      <span><b>${fmtN(r.bultos)}</b> bultos · <b>${fmtN(r.salidas)}</b> salidas</span>
+    </div>`).join('')}</div>`;
+}
+
+const fmtHl = v => v == null ? '—' : new Intl.NumberFormat('es-AR', {maximumFractionDigits: 0}).format(Math.round(v));
+const cssVar = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const isLightTheme = () => document.documentElement.getAttribute('data-theme') === 'light';
+const chartInk = () => isLightTheme() ? '#0f172a' : '#e5edf7';
+const chartMuted = () => isLightTheme() ? '#475569' : '#a7b3c7';
+const chartGrid = () => isLightTheme() ? 'rgba(100,116,139,.28)' : 'rgba(148,163,184,.18)';
+const chartPanel = () => isLightTheme() ? 'rgba(255,255,255,.94)' : 'rgba(15,23,42,.92)';
+let lastPesoSucursales = [];
+
+function pctLabel(v) {
+  return v == null ? 's/d' : `${Number(v).toFixed(1)}%`;
+}
+
+function drawVolumeMix(rows) {
+  const canvas = document.getElementById('volumeMixChart');
+  const foot = document.getElementById('volumeMixFoot');
+  if (!canvas || !foot) return;
+  rows = Array.isArray(rows) ? rows : [];
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(320, Math.floor(rect.width || canvas.parentElement.clientWidth || 900));
+  const h = Math.max(180, Math.floor(rect.height || 220));
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const pad = {l: 34, r: 28, t: 12, b: 30};
+  const iw = w - pad.l - pad.r, ih = h - pad.t - pad.b;
+  const has = rows.some(r => (r.casa_central_hl || 0) + (r.dolores_hl || 0) > 0);
+  if (!has) {
+    ctx.fillStyle = cssVar('--muted');
+    ctx.font = '12px system-ui';
+    ctx.fillText('Sin HL cargados para el año en curso.', pad.l, pad.t + 28);
+    foot.textContent = 'Sin datos cargados.';
+    return;
+  }
+  const cDol = cssVar('--grn'), cCasa = cssVar('--ora'), grid = chartGrid(), muted = chartMuted(), text = chartInk(), surf = chartPanel();
+  ctx.strokeStyle = grid; ctx.lineWidth = 1; ctx.fillStyle = muted; ctx.font = '10px system-ui'; ctx.textAlign = 'right';
+  for (let p = 0; p <= 100; p += 25) {
+    const y = pad.t + ih - (p / 100) * ih;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
+    ctx.fillText(p + '%', pad.l - 6, y + 3);
+  }
+  const slot = iw / rows.length, bw = Math.max(10, Math.min(34, slot * .46));
+  rows.forEach((r, i) => {
+    const x = pad.l + slot * i + slot / 2, base = pad.t + ih;
+    const dol = r.peso_mensual_dolores, casa = r.peso_mensual_casa_central;
+    if (dol != null || casa != null) {
+      const hd = ((dol || 0) / 100) * ih, hc = ((casa || 0) / 100) * ih;
+      ctx.globalAlpha = .85;
+      ctx.fillStyle = cDol; ctx.fillRect(x - bw / 2, base - hd, bw, hd);
+      ctx.fillStyle = cCasa; ctx.fillRect(x - bw / 2, base - hd - hc, bw, hc);
+      ctx.globalAlpha = 1;
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = '700 11px system-ui';
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = 'rgba(0,0,0,.35)';
+      ctx.shadowBlur = 2;
+      if (hd >= 20) ctx.fillText(`${Math.round(dol || 0)}%`, x, base - hd / 2);
+      if (hc >= 20) ctx.fillText(`${Math.round(casa || 0)}%`, x, base - hd - hc / 2);
+      ctx.restore();
+    }
+    const mm = parseInt(String(r.mes || '2000-01').slice(5, 7), 10);
+    ctx.fillStyle = muted; ctx.font = '10px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText((MESES[mm - 1] || '').slice(0, 3), x, h - 10);
+  });
+  const line = (key, color, align) => {
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+    let started = false;
+    rows.forEach((r, i) => {
+      const v = r[key]; if (v == null) return;
+      const x = pad.l + slot * i + slot / 2, y = pad.t + ih - (v / 100) * ih;
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    rows.forEach((r, i) => {
+      const v = r[key]; if (v == null) return;
+      const x = pad.l + slot * i + slot / 2, y = pad.t + ih - (v / 100) * ih;
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    });
+    const lastIdx = rows.map(r => r[key]).reduce((idx, v, i) => v == null ? idx : i, -1);
+    if (lastIdx >= 0) {
+      const v = rows[lastIdx][key];
+      const x = pad.l + slot * lastIdx + slot / 2, y = pad.t + ih - (v / 100) * ih;
+      const label = pctLabel(v);
+      ctx.save();
+      ctx.font = '700 12px system-ui';
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = align;
+      const tw = ctx.measureText(label).width + 12;
+      let bx = align === 'left' ? x + 7 : x - tw - 7;
+      bx = Math.max(pad.l + 4, Math.min(w - pad.r - tw - 4, bx));
+      const by = Math.max(pad.t + 2, Math.min(pad.t + ih - 20, y - 10));
+      ctx.fillStyle = surf;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(bx, by, tw, 20, 5);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = color;
+      ctx.fillText(label, align === 'left' ? bx + 6 : bx + tw - 6, by + 10);
+      ctx.restore();
+    }
+  };
+  line('peso_acum_dolores', cDol, 'right');
+  line('peso_acum_casa_central', cCasa, 'left');
+  const totals = rows.reduce((a, r) => ({casa: a.casa + Number(r.casa_central_hl || 0), dolores: a.dolores + Number(r.dolores_hl || 0)}), {casa: 0, dolores: 0});
+  const total = totals.casa + totals.dolores, pctCasa = total ? totals.casa / total * 100 : null;
+  foot.textContent = total ? `Acumulado: Casa Central ${fmtHl(totals.casa)} HL (${pctCasa.toFixed(1)}%) · Dolores ${fmtHl(totals.dolores)} HL (${(100 - pctCasa).toFixed(1)}%).` : 'Sin datos cargados.';
+}
+
 // ── Load & render ───────────────────────────────────────
+function drawVolumeDonut(rows) {
+  const canvas = document.getElementById('volumeDonutChart');
+  if (!canvas) return;
+  rows = Array.isArray(rows) ? rows : [];
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  const w = Math.max(220, Math.floor(rect.width || canvas.parentElement.clientWidth || 240));
+  const h = Math.max(170, Math.floor(rect.height || canvas.parentElement.clientHeight || 170));
+  canvas.width = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  const totals = rows.reduce((a, r) => ({
+    casa: a.casa + Number(r.casa_central_hl || 0),
+    dolores: a.dolores + Number(r.dolores_hl || 0)
+  }), {casa: 0, dolores: 0});
+  const total = totals.casa + totals.dolores;
+  const cDol = cssVar('--grn'), cCasa = cssVar('--ora'), muted = chartMuted(), text = chartInk(), grid = chartGrid();
+  if (!total) {
+    ctx.fillStyle = muted;
+    ctx.font = '12px system-ui';
+    ctx.fillText('Sin HL cargados.', 10, 30);
+    return;
+  }
+  const compact = w < 275;
+  const cx = compact ? w / 2 : Math.min(w * .36, 94);
+  const cy = compact ? Math.min(88, h * .42) : h / 2 + 4;
+  const r = Math.min(compact ? 54 : 62, h * .32, w * (compact ? .25 : .23));
+  const lw = compact ? 16 : 18;
+  const parts = [
+    {name: 'Casa Central', value: totals.casa, color: cCasa},
+    {name: 'Dolores', value: totals.dolores, color: cDol}
+  ];
+  let start = -Math.PI / 2;
+  parts.forEach(part => {
+    const ang = (part.value / total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, start, start + ang);
+    ctx.strokeStyle = part.color;
+    ctx.lineWidth = lw;
+    ctx.lineCap = 'butt';
+    ctx.stroke();
+    start += ang;
+  });
+  ctx.textAlign = 'center';
+  ctx.fillStyle = muted;
+  ctx.font = '10px system-ui';
+  ctx.fillText('Total HL', cx, cy - 4);
+  ctx.fillStyle = text;
+  ctx.font = '700 15px system-ui';
+  ctx.fillText(fmtHl(total), cx, cy + 14);
+
+  const lx = compact ? 12 : Math.min(w - 132, cx + r + 34);
+  parts.forEach((part, i) => {
+    const y = compact ? cy + r + 34 + i * 42 : cy - 30 + i * 52;
+    const pct = part.value / total * 100;
+    ctx.fillStyle = part.color;
+    ctx.fillRect(lx, y - 7, 9, 9);
+    ctx.fillStyle = text;
+    ctx.font = '700 11px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText(`${part.name} ${pct.toFixed(1)}%`, lx + 16, y);
+    ctx.fillStyle = muted;
+    ctx.font = '10px system-ui';
+    ctx.fillText(`${fmtHl(part.value)} HL`, lx + 16, y + 15);
+    ctx.strokeStyle = grid;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(lx, y + 25);
+    ctx.lineTo(w - 8, y + 25);
+    ctx.stroke();
+  });
+}
+
 async function reloadKpis() {
   const btn = document.getElementById('refreshBtn');
   btn.classList.add('spin-anim');
@@ -521,6 +799,10 @@ async function reloadKpis() {
 }
 
 function renderDashboard(d) {
+  lastPesoSucursales = Array.isArray(d.peso_sucursales) ? d.peso_sucursales : [];
+  drawVolumeMix(lastPesoSucursales);
+  drawVolumeDonut(lastPesoSucursales);
+  document.getElementById('dataUpdated').textContent = `Datos hasta: ${fmtDate(d.ultima_fecha_datos)}`;
   // Subtitle
   const [y, m] = (d.mes || '').split('-');
   if (y && m) {
@@ -552,7 +834,7 @@ function renderDashboard(d) {
       <div class="kpi-val ${hlCls}">${fmtN(d.hl)}</div>
       <div class="kpi-meta">
         ${deltaChip(dv)}
-        <span class="kpi-sub">vs mes anterior</span>
+        <span class="kpi-sub">vs mismos días año anterior</span>
       </div>
       ${progressBar(hlPct)}
     </div>
@@ -563,9 +845,7 @@ function renderDashboard(d) {
         <div class="kpi-icon">🗃️</div>
       </div>
       <div class="kpi-val ${bltCls}">${fmtN(d.bultos)}</div>
-      <div class="kpi-meta">
-        <span class="kpi-sub">${fmtN(d.salidas)} salidas</span>
-      </div>
+      ${bultosBreakdown(d)}
       ${progressBar(bltPct)}
     </div>`;
 
@@ -653,12 +933,25 @@ function renderDashboard(d) {
     html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">Ausentismo moderado ${fmtP(d.pct_ausentismo)} — monitorear.</span></div>`;
   }
   if (dv != null && dv < -15) {
-    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Caída fuerte de HL vs mes anterior (${fmtP(dv)}).</span></div>`;
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Caída fuerte de HL vs mismos días año anterior (${fmtP(dv)}).</span></div>`;
   } else if (dv != null && dv < -5) {
-    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">HL por debajo del mes anterior (${fmtP(dv)}).</span></div>`;
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">HL por debajo de mismos días año anterior (${fmtP(dv)}).</span></div>`;
   }
   document.getElementById('alertsArea').innerHTML = html;
 }
+
+let resizeVolumeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeVolumeTimer);
+  resizeVolumeTimer = setTimeout(() => {
+    drawVolumeMix(lastPesoSucursales);
+    drawVolumeDonut(lastPesoSucursales);
+  }, 120);
+});
+new MutationObserver(() => {
+  drawVolumeMix(lastPesoSucursales);
+  drawVolumeDonut(lastPesoSucursales);
+}).observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
 
 reloadKpis();
 </script>
