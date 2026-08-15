@@ -305,8 +305,7 @@
       <div class="sub">ABC generado con ventas del mes anterior. La planilla se filtra por semana y día para contar stock.</div>
     </div>
     <div>
-      <button class="btn primary" onclick="loadPlanilla()">Actualizar</button>
-      <button class="btn" onclick="usarHoy()">Hoy</button>
+      <button class="btn primary" onclick="loadPlanilla()">Actualizar planilla</button>
       <a class="btn" href="/portal" title="Volver al inicio del portal">Inicio portal</a>
     </div>
   </header>
@@ -746,6 +745,10 @@ function diaDesdeFecha(value){
   const d=parseLocalDate(value);
   return ['Domingo','Lunes','Martes','Miercoles','Jueves','Viernes','Sabado'][d.getDay()] || 'TODOS';
 }
+function fechaCorta(value){
+  const d=parseLocalDate(value);
+  return d.toLocaleDateString('es-AR', {day:'2-digit', month:'2-digit', year:'numeric'});
+}
 function filtrosEfectivos(){
   let sem=semana.value;
   let day=dia.value;
@@ -753,13 +756,6 @@ function filtrosEfectivos(){
   if(day==='AUTO') day=diaDesdeFecha(fecha.value);
   if(day==='Sabado'||day==='Domingo') day='TODOS';
   return {semana:sem,dia:day};
-}
-function usarHoy(){
-  fecha.value=today();
-  semana.value='AUTO';
-  dia.value='AUTO';
-  actualizarEstadoFrescura(fecha.value,'pFrescura');
-  loadPlanilla();
 }
 function syncSucursal(origin){
   if(origin==='abc') sucursalConteo.value=sucursalAbc.value;
@@ -1494,7 +1490,7 @@ async function loadPlanilla(){
   document.querySelector('#viewConteo .save-footer')?.classList.remove('ready');
   pMes.textContent=`Mes: ${data.mes}`;
   pArt.textContent=`Artículos: ${data.total_filtrado}`;
-  pDia.textContent=`${f.semana.toUpperCase()} · ${f.dia}`;
+  pDia.textContent=`Fecha de control: ${fechaCorta(fecha.value)} | ${f.semana.toUpperCase()} | ${f.dia}`;
   document.querySelector('#viewConteo thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Semana</th><th>Dia</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
   tbody.innerHTML=currentRows.map(r=>`<tr>
     <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
@@ -1522,13 +1518,14 @@ async function loadPlanilla(){
 }
 async function guardarConteo(){
   if(conteoGuardado){
-    await modalAlert('Este control ya fue guardado. No se puede volver a grabar el mismo conteo.');
-    status.textContent='Este control ya fue guardado. Para hacer otro conteo cambia fecha, sucursal o responsable y actualiza la planilla.';
+    const msg='Este conteo ya fue guardado.\n\nYa existe un conteo para la misma sucursal, fecha, semana, dia y responsable.\n\nPara hacer otro conteo, cambia la fecha o el responsable y actualiza la planilla.';
+    await modalAlert(msg);
+    status.textContent='Conteo ya guardado. Para hacer otro, cambia fecha o responsable y actualiza la planilla.';
     return;
   }
   if(guardandoConteo) return;
   if(!responsable.value){
-    status.textContent='Selecciona el responsable antes de guardar.';
+    status.textContent='Falta seleccionar el responsable del conteo antes de guardar.';
     responsable.focus();
     return;
   }
@@ -1536,7 +1533,7 @@ async function guardarConteo(){
   if(faltante){
     mobileIndex=Math.max(0,currentRows.findIndex(r=>r.id_articulo===faltante.id_articulo));
     if(isMobileConteo()){renderMobileCards();showMobileValidation()}
-    status.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribí 0.`;
+    status.textContent=`Falta cargar el articulo ${faltante.id_articulo} - ${faltante.descripcion}. Si no hay stock, escribi 0 para confirmarlo.`;
     return;
   }
   horaFin.value=new Date().toTimeString().slice(0,5);
@@ -1557,23 +1554,23 @@ async function guardarConteo(){
         mobileIndex=idx;
         renderMobileCards();
       }
-      estado.value='Revisar dispersion';
-      status.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante antes de guardar.`;
-      await modalAlert(`Antes de guardar, volve a controlar estos articulos:\n\n${lista}${alertas.length>8?'\n...':''}\n\nNo se muestra el stock esperado. Revisalos fisicamente y luego volve a guardar.`);
+      estado.value='Revisar diferencia';
+      status.textContent=`Hay ${alertas.length} articulo(s) con diferencia importante contra Frescura. Recontalos antes de guardar.`;
+      await modalAlert(`Hay ${alertas.length} articulos con diferencia importante contra Frescura.\n\nRecontalos antes de guardar:\n\n${lista}${alertas.length>8?'\n...':''}\n\nNo se muestra el stock esperado para no condicionar el conteo. Despues de revisarlos, volve a presionar Guardar.`);
       return;
     }
-    if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)){
+    if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con diferencia importante.\n\nConfirmas que ya fueron revisados fisicamente y queres guardar igual?`)){
       estado.value='Sin guardar';
-      status.textContent='Conteo sin guardar. Revisar articulos con dispersion.';
+      status.textContent='Conteo sin guardar. Revisa los articulos con diferencia importante contra Frescura.';
       return;
     }
   }catch(error){
     estado.value='Error';
-    status.textContent='Error: '+(error.message||'No se pudo validar dispersion');
+    status.textContent='No se pudo validar el conteo contra Frescura: '+(error.message||'error desconocido');
     return;
   }
   const cargados=saveFooterSummary?.dataset?.loaded||currentRows.length;
-  if(!await modalConfirm(`Vas a finalizar y guardar este control con ${cargados} articulos. Despues no se podra volver a grabar el mismo conteo. Confirmas?`)) return;
+  if(!await modalConfirm(`Vas a cerrar el conteo de stock.\n\nSucursal: ${sucursalConteo.options[sucursalConteo.selectedIndex]?.text || sucursalConteo.value}\nFecha: ${fechaCorta(fecha.value)}\nResponsable: ${responsable.value}\nArticulos cargados: ${cargados}\n\nDespues de guardar no vas a poder grabar otro conteo con la misma sucursal, fecha, dia y responsable.`, {okText:'Guardar conteo'})) return;
   guardandoConteo=true;
   if(guardarConteoBtn){
     guardarConteoBtn.disabled=true;
@@ -1585,12 +1582,14 @@ async function guardarConteo(){
   if(!res.ok||data.ok===false){
     estado.value='Error';
     const msg=data.error||'No se pudo guardar';
-    status.textContent='Error: '+msg;
     if(String(msg).toLowerCase().includes('ya existe')){
       conteoGuardado=true;
       if(guardarConteoBtn) guardarConteoBtn.textContent='Conteo ya guardado';
-      await modalAlert(msg);
+      const dupMsg='Este conteo ya fue guardado.\n\nYa existe un conteo para la misma sucursal, fecha, semana, dia y responsable.\n\nPara hacer otro conteo, cambia la fecha o el responsable y actualiza la planilla.';
+      status.textContent='Conteo duplicado. Cambia fecha o responsable para registrar un conteo nuevo.';
+      await modalAlert(dupMsg);
     }else if(guardarConteoBtn){
+      status.textContent='No se pudo guardar el conteo: '+msg;
       guardarConteoBtn.disabled=false;
       guardarConteoBtn.textContent='Guardar control y finalizar';
     }
@@ -1600,13 +1599,15 @@ async function guardarConteo(){
   conteoGuardado=true;
   estado.value=`Guardado #${data.data.id}`;
   const alertasDispersion=Number(data.data.total_alertas_dispersion||0);
+  const totalContado=pTotalCant.textContent.replace('Total: ','');
+  const resumenGuardado=`Conteo #${data.data.id} guardado. Articulos guardados: ${data.data.items_guardados}. Total contado: ${totalContado}.`;
   status.textContent=alertasDispersion
-    ? `Control guardado correctamente. Items: ${data.data.items_guardados}. Atencion: ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Revisar con supervisor.`
-    : `Control guardado correctamente. Items: ${data.data.items_guardados}. No se puede volver a grabar el mismo conteo.`;
+    ? `${resumenGuardado} Atencion: ${alertasDispersion} articulo(s) con diferencia importante contra Frescura. Avisar o revisar con supervisor.`
+    : `${resumenGuardado} No se puede volver a grabar el mismo conteo.`;
   if(guardarConteoBtn) guardarConteoBtn.textContent='Control guardado';
   await modalAlert(alertasDispersion
-    ? `Control guardado correctamente. Hay ${alertasDispersion} articulo(s) con dispersion importante contra Frescura. Avisar o revisar con supervisor.`
-    : `Control guardado correctamente. Se registraron ${data.data.items_guardados} articulos.`);
+    ? `Conteo guardado con ${alertasDispersion} alerta(s) de diferencia contra Frescura.\n\nNro. de conteo: ${data.data.id}\nArticulos guardados: ${data.data.items_guardados}\nTotal contado: ${totalContado}\n\nAccion requerida: avisar o revisar con supervisor.`
+    : `Conteo guardado correctamente.\n\nNro. de conteo: ${data.data.id}\nArticulos guardados: ${data.data.items_guardados}\nTotal contado: ${totalContado}`);
   localStorage.removeItem(draftKey());
   resumenLoaded=false;
   resumenArticuloLoaded=false;
@@ -1629,3 +1630,5 @@ async function guardarConteo(){
 </script>
 </body>
 </html>
+
+

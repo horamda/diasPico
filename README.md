@@ -104,6 +104,8 @@ Los indicadores de detalle usan solo articulos con `tipo_producto = mercaderia`.
 
 ## Endpoints utiles
 
+Contrato completo y rutas recomendadas por modulo: [`docs/API_CONTRATO.md`](docs/API_CONTRATO.md).
+
 ```text
 GET /api/articulos/count
 GET /api/articulos/sin-clasificar?mes=YYYY-MM&sucursal=TODAS
