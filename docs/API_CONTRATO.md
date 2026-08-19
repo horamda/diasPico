@@ -215,6 +215,7 @@ Parametros diarios: `desde`, `hasta`, `sucursal`.
 | --- | --- |
 | GET | `/api/control-stock/abc` |
 | GET | `/api/control-stock/planilla` |
+| PUT | `/api/control-stock/articulos/<id_articulo>/logistica` |
 | GET | `/api/control-stock/control-externo/sorteo` |
 | GET | `/api/control-stock/planificacion` |
 | GET | `/api/control-stock/pendientes-dias` |
@@ -242,6 +243,8 @@ Notas de `/api/control-stock/planilla`:
 - Si `bultos_por_piso` falta pero existen `bultos_por_pallet` y `pisos`, el backend lo calcula como `bultos_por_pallet / pisos`.
 - Cada item informa `logistica_incompleta` y `logistica_faltante`.
 - La respuesta incluye `logistica_filtrada` con `total_articulos`, `completos` e `incompletos`.
+
+`PUT /api/control-stock/articulos/<id_articulo>/logistica` actualiza datos logisticos del maestro de articulos. Body JSON: `bultos_por_pallet`, `pisos`, `bultos_por_piso`. Si `bultos_por_piso` no se envia, se calcula con `bultos_por_pallet / pisos`.
 
 Notas de `/api/control-stock/pendientes-dias`:
 - Los pendientes se calculan desde el inicio operativo del modulo: `2026-08-10`.

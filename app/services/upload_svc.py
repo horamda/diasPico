@@ -184,11 +184,27 @@ def _parse_articulos_excel(file_bytes: bytes) -> list[dict]:
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), data_only=True, read_only=True)
     ws = wb['Artículos'] if 'Artículos' in wb.sheetnames else wb.active
     rows_iter = ws.iter_rows(values_only=True)
-    next(rows_iter, None)
-    raw_headers = [str(v or '').strip() for v in (next(rows_iter, None) or [])]
+    buffered = []
+    header_idx = -1
+    cm: dict[str, int] = {}
+    for idx, row in enumerate(rows_iter):
+        buffered.append(row)
+        raw = [str(v or '').strip() for v in (row or [])]
+        mapped = map_headers(raw, ARTICULOS_MAP)
+        if 'id_articulo' in mapped and len(mapped) >= 2:
+            header_idx = idx
+            cm = mapped
+            break
+        if idx >= 8:
+            break
+    if header_idx < 0:
+        return []
+
+    raw_headers = [str(v or '').strip() for v in (buffered[header_idx] or [])]
     cm = map_headers(raw_headers, ARTICULOS_MAP)
     result = []
-    for row in rows_iter:
+    data_rows = list(buffered[header_idx + 1:]) + list(rows_iter)
+    for row in data_rows:
         if all(v is None for v in row):
             continue
         item = {col: row[idx] if idx < len(row) else None for col, idx in cm.items()}

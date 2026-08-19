@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -413,6 +413,7 @@
     .summary-grid span,.abc-month-pill,.articulos-card-grid span,.article-result-metric{border-color:#e5e5ea;border-radius:14px;background:#f5f5f7}
     .pending-days{border-color:#ffcc80;border-radius:16px;background:#fff8ed;color:#7a3500}.pending-days strong{color:#7a3500}
     .logistic-missing{color:#b45309;font-weight:800}
+    button.logistic-missing{border:0;background:transparent;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
     @media(max-width:1280px){
       .shell{padding:12px 12px calc(18px + env(safe-area-inset-bottom))}
       .top{border-radius:22px;padding:14px}.top>div:last-child{gap:8px}.top .btn{min-height:44px}
@@ -572,6 +573,14 @@
     @media(max-width:820px){.shell{padding:10px 10px calc(88px + env(safe-area-inset-bottom))!important}.top{top:6px!important;display:block!important;padding:16px!important;border-radius:22px!important}.top h1{font-size:30px!important}.top .sub{display:block!important;font-size:12px!important}.top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr!important;margin-top:12px!important}.tabs-wrap{position:fixed!important;left:10px!important;right:10px!important;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;z-index:80!important;margin:0!important;padding:0!important;background:transparent!important}.tabs{justify-content:flex-start!important;overflow-x:auto!important;scrollbar-width:none!important;border-radius:24px!important;padding:7px!important}.tabs::-webkit-scrollbar{display:none}.tab{min-width:104px!important;min-height:48px!important;padding:5px 12px!important;font-size:12px!important;white-space:normal!important;line-height:1.05!important}.tab.active{box-shadow:0 8px 26px rgba(10,132,255,.18)!important}.view .panel{border-radius:22px!important}.view .grid{grid-template-columns:1fr!important}.field{border-right:0!important}.stats{grid-template-columns:1fr!important;gap:8px!important}.dashboard-grid{grid-template-columns:1fr 1fr!important}.kpi-card{border-radius:22px!important}.charts-grid{gap:14px!important}.mobile-card{border-radius:24px!important;padding:16px!important}.save-footer{position:fixed!important;left:10px!important;right:10px!important;bottom:calc(74px + env(safe-area-inset-bottom))!important;border-radius:24px!important}}
     @media(max-width:520px){.top h1{font-size:28px!important}.dashboard-grid{grid-template-columns:1fr!important}.top>div:last-child{grid-template-columns:1fr!important}.tab{min-width:92px!important}.chart-panel,.kpi-card,.panel,.mobile-card{border-radius:22px!important}}
     @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+    /* Mobile section switcher: compact bottom control + sheet menu */
+    .mobile-section-bar{display:none}.section-sheet-list{display:grid;gap:8px}.section-sheet-item{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;border:1px solid var(--cs-line-soft);border-radius:16px;background:var(--cs-elev);color:var(--cs-text);padding:13px 14px;text-align:left;font-weight:800}.section-sheet-item span{display:block;font-size:12px;color:var(--cs-muted);font-weight:700;margin-top:2px}.section-sheet-item.active{background:var(--cs-accent);border-color:var(--cs-accent);color:#fff}.section-sheet-item.active span{color:rgba(255,255,255,.82)}
+    @media(max-width:820px){.shell{padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}.tabs-wrap{display:none!important}.mobile-section-bar{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px;position:fixed;left:10px;right:10px;bottom:calc(10px + env(safe-area-inset-bottom));z-index:90;border:1px solid var(--cs-line-soft);border-radius:24px;background:var(--cs-surface);box-shadow:0 14px 44px rgba(0,0,0,.22);padding:8px;backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px)}.mobile-section-current,.mobile-section-menu{border:0;border-radius:18px;min-height:50px;cursor:pointer}.mobile-section-current{background:transparent;color:var(--cs-text);text-align:left;padding:6px 12px}.mobile-section-current span{display:block;font-size:11px;color:var(--cs-muted);font-weight:750}.mobile-section-current strong{display:block;font-size:15px;line-height:1.15;color:var(--cs-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mobile-section-menu{background:var(--cs-accent);color:#fff;font-weight:850;padding:0 14px}.save-footer{bottom:calc(78px + env(safe-area-inset-bottom))!important}}
+    /* External stock control uses the same mobile carousel surface as regular stock control */
+    @media(max-width:1280px){#viewExterno .table-wrap{display:none!important}#externoCards{display:block!important;padding-bottom:118px!important}#externoCards .mobile-carousel-bar{display:grid!important;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;position:sticky;top:58px;z-index:8;border:0!important;border-radius:18px!important;background:rgba(255,255,255,.94)!important;backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important;padding:8px!important;margin:8px 0}#externoCards .mobile-carousel-bar .btn{height:44px!important;border-radius:14px!important;font-size:14px!important}#externoCards .mobile-carousel-bar .btn.prev{background:#f8fafc!important;border-color:#94a3b8!important;color:#0f172a!important}#externoCards .mobile-carousel-bar .btn.next{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important}#externoCards .mobile-progress{font-size:15px!important;color:#1d1d1f!important;text-align:center!important;font-weight:950!important;min-width:96px;font-variant-numeric:tabular-nums}#externoCards .mobile-progress small{display:block;font-size:11px!important;color:#6e6e73!important}#externoCards .mobile-card{display:block!important;min-height:auto!important;border:0!important;border-radius:22px!important;padding:16px!important;margin:10px 0 14px!important;box-shadow:0 12px 32px rgba(0,0,0,.08)!important;text-align:left!important}#externoCards .mobile-head{align-items:flex-start!important;text-align:left!important}#externoCards .mobile-head span{flex:unset!important}#externoCards .mobile-article-code{font-size:22px!important;line-height:1.1!important;color:#1d1d1f!important;font-weight:950}#externoCards .mobile-article-route{font-size:13px!important;color:#6e6e73!important;background:#f2f2f7;border-radius:999px;padding:5px 9px;white-space:nowrap}#externoCards .mobile-article-desc{font-size:17px!important;line-height:1.3!important;font-weight:650!important;text-align:left!important;margin:12px 0!important}#externoCards .mobile-logistics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;margin:8px 0}#externoCards .mobile-logistics span{border:0!important;background:#f5f5f7!important;border-radius:16px!important;padding:10px!important;text-align:left!important;color:#334155}#externoCards .mobile-logistics strong{display:block;font-size:18px!important;color:#0f172a!important;margin-top:2px}#externoCards .stock-input{height:54px!important;border-radius:14px!important;border:1px solid #d2d2d7!important;background:#fff!important;font-size:22px!important;font-weight:700!important;text-align:center!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.03)}#viewExterno .save-footer{display:flex!important;position:fixed!important;left:10px!important;right:10px!important;bottom:calc(78px + env(safe-area-inset-bottom))!important;border-radius:24px!important}}@media(max-width:520px){#externoCards .mobile-carousel-bar{top:54px!important}#externoCards .mobile-article-code{font-size:21px!important}#externoCards .stock-input{height:56px!important;font-size:24px!important}}@media(max-width:1280px){:root[data-theme="dark"] #externoCards .mobile-card,:root[data-theme="dark"] #externoCards .mobile-carousel-bar{background:rgba(25,31,42,.96)!important;color:var(--txt)!important;border-color:var(--brd)!important}:root[data-theme="dark"] #externoCards .mobile-logistics span,:root[data-theme="dark"] #externoCards .stock-input{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}:root[data-theme="dark"] #externoCards .mobile-article-code,:root[data-theme="dark"] #externoCards .mobile-article-desc,:root[data-theme="dark"] #externoCards .mobile-logistics strong{color:var(--txt)!important}:root[data-theme="dark"] #externoCards .mobile-progress{color:var(--txt)!important}:root[data-theme="dark"] #externoCards .mobile-progress small,:root[data-theme="dark"] #externoCards .mobile-article-route{color:var(--txt2)!important}}
+    /* Mobile tab UX refinement: top contextual switcher, bottom reserved for actions */
+    @media(max-width:820px){.shell{padding-bottom:calc(92px + env(safe-area-inset-bottom))!important}.mobile-section-bar{display:grid!important;grid-template-columns:minmax(0,1fr) auto;gap:8px;position:sticky!important;top:8px!important;bottom:auto!important;left:auto!important;right:auto!important;z-index:75;margin:8px 0 12px!important;border:1px solid var(--cs-line-soft);border-radius:22px;background:var(--cs-surface);box-shadow:0 10px 32px rgba(0,0,0,.18);padding:8px;backdrop-filter:saturate(180%) blur(24px);-webkit-backdrop-filter:saturate(180%) blur(24px)}.mobile-section-current{min-width:0;background:rgba(127,127,127,.08)!important;border:0!important;border-radius:16px!important;color:var(--cs-text)!important;text-align:left!important;padding:8px 12px!important}.mobile-section-current span{display:block!important;font-size:11px!important;color:var(--cs-muted)!important;font-weight:800!important;letter-spacing:0!important}.mobile-section-current strong{display:block!important;margin-top:2px;font-size:16px!important;line-height:1.15!important;color:var(--cs-text)!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}.mobile-section-menu{min-height:48px!important;border:0!important;border-radius:16px!important;background:var(--cs-accent)!important;color:#fff!important;font-weight:850!important;padding:0 16px!important}.save-footer,#viewConteo .save-footer,#viewExterno .save-footer{bottom:calc(10px + env(safe-area-inset-bottom))!important}.mobile-carousel-bar,#cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar{top:66px!important}}
+    @media(max-width:520px){.mobile-section-bar{top:6px!important;margin-top:6px!important}.mobile-section-current strong{font-size:15px!important}.mobile-section-menu{padding:0 13px!important}.mobile-carousel-bar,#cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar{top:62px!important}}
 </style>
 </head>
 <body>
@@ -602,6 +611,13 @@
   </nav>
   <div class="tabs-fade left" id="tabsFadeLeft"></div>
   <div class="tabs-fade right" id="tabsFadeRight"></div>
+  </div>
+  <div class="mobile-section-bar" id="mobileSectionBar">
+    <button class="mobile-section-current" type="button" onclick="abrirSeccionesMobile()">
+      <span>Solapa actual</span>
+      <strong id="mobileSectionLabel">Analisis ABC</strong>
+    </button>
+    <button class="mobile-section-menu" type="button" onclick="abrirSeccionesMobile()" aria-label="Cambiar solapa">Cambiar</button>
   </div>
 
   <section class="view active" id="viewAbc" role="tabpanel" aria-labelledby="tabAbc">
@@ -907,7 +923,19 @@ let dispersionReviewKey = '';
 let externalRows = [];
 let externalGuardado = false;
 let externalReviewKey = '';
+let externalDraft = {values:{}, unidades:{}};
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
+const STOCK_TABS=[
+  {name:'abc',label:'Analisis ABC',hint:'Clasificacion mensual'},
+  {name:'plan',label:'Planificacion',hint:'Frecuencia por semana'},
+  {name:'conteo',label:'Control de stock',hint:'Conteo diario'},
+  {name:'externo',label:'Control externo',hint:'Sorteo aleatorio'},
+  {name:'resumenArticulo',label:'Resumen por articulo',hint:'Detalle por responsable'},
+  {name:'articulos',label:'Articulos controlados',hint:'Seguimiento mensual'},
+  {name:'abcMensual',label:'ABC mensual',hint:'Evolucion anual'},
+  {name:'resp',label:'Responsables',hint:'Controladores por sucursal'},
+  {name:'resumen',label:'Dashboard',hint:'Indicadores del mes'},
+];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function themeVar(name,fallback){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
 function closeModal(){modalOverlay.classList.remove('open');modalOverlay.innerHTML='';document.body.style.overflow=''}
@@ -942,6 +970,25 @@ function modalPromptText(title,label,value=''){
     document.getElementById('modalOkBtn').onclick=()=>cleanup(input.value);
     input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();cleanup(input.value)}});
   });
+}
+function tabInfo(name){return STOCK_TABS.find(t=>t.name===name)||STOCK_TABS[0]}
+function updateMobileSectionLabel(){
+  const el=document.getElementById('mobileSectionLabel');
+  if(el) el.textContent=tabInfo(activeTab).label;
+}
+function abrirSeccionesMobile(){
+  const items=STOCK_TABS.map(t=>`<button type="button" class="section-sheet-item ${t.name===activeTab?'active':''}" data-tab="${esc(t.name)}">${esc(t.label)}<span>${esc(t.hint)}</span></button>`).join('');
+  modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title">Secciones</div>
+    <div class="modal-body section-sheet-list">${items}</div>
+    <div class="modal-actions"><button class="btn" id="modalCancelBtn">Cerrar</button></div>
+  </div>`;
+  modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+  modalOverlay.querySelectorAll('.section-sheet-item').forEach(btn=>btn.addEventListener('click',()=>{
+    closeModal();
+    openTab(btn.dataset.tab);
+  }));
+  document.getElementById('modalCancelBtn').onclick=closeModal;
 }
 modalOverlay.addEventListener('click',e=>{
   if(e.target!==modalOverlay) return;
@@ -1037,9 +1084,11 @@ function filtrosEfectivos(){
   if(day==='Sabado'||day==='Domingo') day='TODOS';
   return {semana:sem,dia:day};
 }
-function logVal(value){
+function logVal(value,row=null,field=''){
   const n=Number(value||0);
-  return n>0?fmt.format(n):'<span class="logistic-missing">Sin dato</span>';
+  if(n>0) return fmt.format(n);
+  if(row&&row.id_articulo) return `<button type="button" class="logistic-missing" title="Cargar pisos y bultos por piso" onclick="abrirModalLogistica(${Number(row.id_articulo)})">Sin dato</button>`;
+  return '<span class="logistic-missing">Sin dato</span>';
 }
 function logText(value){
   const n=Number(value||0);
@@ -1051,6 +1100,55 @@ function logisticaAviso(data, rows){
   if(!incompletos) return '';
   const total=Number(info.total_articulos||rows?.length||0);
   return ` | Logistica incompleta: ${fmt.format(incompletos)} de ${fmt.format(total)} articulos sin pisos o bultos/piso. Cargar "Datos faltantes de articulos" para completarlo.`;
+}
+function articuloActual(id){
+  return [...currentRows,...externalRows].find(r=>String(r.id_articulo)===String(id));
+}
+function abrirModalLogistica(idArticulo){
+  const row=articuloActual(idArticulo);
+  if(!row){modalAlert('No se encontro el articulo en la planilla cargada.');return}
+  modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title">Datos logisticos · ${esc(row.id_articulo)}</div>
+    <div class="modal-body">
+      <div class="mobile-meta">${esc(row.descripcion||'')}</div>
+      <div class="field"><label>Bultos por pallet</label><input class="obs-input" style="width:100%" id="logBultosPallet" type="number" step="0.01" min="0" value="${esc(row.bultos_por_pallet||'')}"></div>
+      <div class="field"><label>Pisos</label><input class="obs-input" style="width:100%" id="logPisos" type="number" step="0.01" min="0" value="${esc(row.pisos||'')}"></div>
+      <div class="field"><label>Bultos por piso</label><input class="obs-input" style="width:100%" id="logBultosPiso" type="number" step="0.01" min="0" value="${esc(row.bultos_por_piso||'')}"></div>
+      <div class="status">Si dejas bultos por piso vacio, se calcula con bultos por pallet / pisos.</div>
+      <div class="modal-error" id="modalError"></div>
+    </div>
+    <div class="modal-actions"><button class="btn" id="modalCancelBtn">Cancelar</button><button class="btn primary" id="modalOkBtn">Guardar datos</button></div>
+  </div>`;
+  modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+  const pallet=document.getElementById('logBultosPallet');
+  const pisos=document.getElementById('logPisos');
+  const piso=document.getElementById('logBultosPiso');
+  const calc=()=>{const p=Number(pallet.value||0), ps=Number(pisos.value||0); if(p>0&&ps>0&&!piso.dataset.touched) piso.value=(p/ps).toFixed(2)};
+  pallet.addEventListener('input',calc);pisos.addEventListener('input',calc);piso.addEventListener('input',()=>piso.dataset.touched='1');
+  pisos.focus();pisos.select();
+  document.getElementById('modalCancelBtn').onclick=closeModal;
+  document.getElementById('modalOkBtn').onclick=async()=>{
+    const errorEl=document.getElementById('modalError');
+    const payload={bultos_por_pallet:Number(pallet.value||0),pisos:Number(pisos.value||0),bultos_por_piso:Number(piso.value||0)};
+    if(payload.pisos<=0){errorEl.textContent='Cargar pisos mayor a 0.';errorEl.style.display='block';pisos.focus();return}
+    if(payload.bultos_por_piso<=0&&payload.bultos_por_pallet<=0){errorEl.textContent='Cargar bultos por piso o bultos por pallet para calcularlo.';errorEl.style.display='block';return}
+    try{
+      const res=await fetch(`/api/control-stock/articulos/${encodeURIComponent(row.id_articulo)}/logistica`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      const data=await res.json();
+      if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo guardar');
+      closeModal();
+      status.textContent='Datos logisticos guardados. Actualizando planilla...';
+      if(activeTab==='externo'&&externalRows.length){
+        externalRows=externalRows.map(r=>String(r.id_articulo)===String(row.id_articulo)?{...r,...data.data}:r);
+        renderControlExterno();
+      }else{
+        await loadPlanilla();
+      }
+    }catch(error){
+      errorEl.textContent=error.message||'No se pudo guardar';
+      errorEl.style.display='block';
+    }
+  };
 }
 function fechaConteoChanged(){
   mes.value=previousMonthFromDate(fecha.value);
@@ -1161,6 +1259,7 @@ function openTab(name){
   tabArticulos.classList.toggle('active', name==='articulos');
   tabAbcMensual.classList.toggle('active', name==='abcMensual');
   tabResp.classList.toggle('active', name==='resp');
+  updateMobileSectionLabel();
   document.querySelectorAll('#tabsNav .tab').forEach(btn=>btn.setAttribute('aria-selected', btn.classList.contains('active')?'true':'false'));
   document.getElementById('tab'+name[0].toUpperCase()+name.slice(1))?.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
   setTimeout(updateTabsFade,220);
@@ -1674,10 +1773,10 @@ function renderMobileCards(){
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
     <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
     <div class="mobile-logistics">
-      <span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet)}</strong></span>
-      <span>Bultos/Piso<strong>${logVal(r.bultos_por_piso)}</strong></span>
-      <span>Pisos<strong>${logVal(r.pisos)}</strong></span>
-      <span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto)}</strong></span>
+      <span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</strong></span>
+      <span>Bultos/Piso<strong>${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</strong></span>
+      <span>Pisos<strong>${logVal(r.pisos,r,'pisos')}</strong></span>
+      <span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</strong></span>
     </div>
     <div class="mobile-error" id="mobileError">Cargá al menos un valor para este artículo. Si no hay stock, escribí 0.</div>
     <div class="mobile-group">
@@ -1737,27 +1836,107 @@ function mobileNext(){
   }
 }
 function cantidadInputsExterno(id){
-  const values=[1,2,3,4,5,6].map(n=>{const el=document.querySelector(`[data-ext-cant="${id}-${n}"]`);return el&&el.value!==''?Number(el.value):0});
+  const rawValues=[1,2,3,4,5,6].map(n=>{
+    const key=`${id}-${n}`;
+    const el=document.querySelector(`[data-ext-cant="${key}"]`);
+    return (el?el.value:externalDraft.values?.[key]) ?? '';
+  });
   const unidEl=document.querySelector(`[data-ext-unid="${id}"]`);
-  const unidades=unidEl&&unidEl.value!==''?Number(unidEl.value):0;
-  const touched=values.some(v=>v!==0)||(unidEl&&unidEl.value!=='');
-  return {values,total:values.reduce((a,b)=>a+b,0),unidades,touched};
+  const rawUnidades=(unidEl?unidEl.value:externalDraft.unidades?.[id]) ?? '';
+  const values=rawValues.map(v=>v===''?0:Number(v));
+  const unidades=rawUnidades===''?0:Number(rawUnidades);
+  const touched=rawValues.some(v=>v!=='')||rawUnidades!=='';
+  return {values,total:values.reduce((a,b)=>a+b,0),unidades,touched,rawValues,rawUnidades};
+}
+function guardarBorradorExternoDesdeDom(){
+  document.querySelectorAll('[data-ext-cant]').forEach(el=>{
+    if(isMobileConteo()&&el.closest('#externoTableWrap')) return;
+    externalDraft.values[el.dataset.extCant]=el.value;
+  });
+  document.querySelectorAll('[data-ext-unid]').forEach(el=>{
+    if(isMobileConteo()&&el.closest('#externoTableWrap')) return;
+    externalDraft.unidades[el.dataset.extUnid]=el.value;
+  });
 }
 function actualizarTotalesExterno(){
   externalReviewKey='';
+  guardarBorradorExternoDesdeDom();
   let total=0, unidades=0, cargados=0;
   externalRows.forEach(r=>{const input=cantidadInputsExterno(r.id_articulo);if(input.touched)cargados+=1;const norm=normalizarConteo(r,input);total+=norm.bultos;unidades+=norm.unidades;document.querySelectorAll(`[data-ext-total="${r.id_articulo}"]`).forEach(el=>el.textContent=fmt.format(norm.bultos));document.querySelectorAll(`[data-ext-unidades="${r.id_articulo}"]`).forEach(el=>el.textContent=fmt.format(norm.unidades))});
   extTotal.textContent=`Total: ${fmt.format(total)} bultos con ${fmt.format(unidades)} unidades`;
   externoFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(externalRows.length)} articulos cargados`;
 }
+function externalRowTouched(row){return cantidadInputsExterno(row.id_articulo).touched}
+function currentExternalRowValid(){
+  if(!isMobileConteo()||!externalRows.length) return true;
+  return externalRowTouched(externalRows[Math.min(mobileIndex,externalRows.length-1)]);
+}
+function showExternalMobileValidation(){
+  const card=document.querySelector('#externoCards .mobile-card');
+  const err=document.getElementById('externalMobileError');
+  if(card) card.classList.add('invalid');
+  if(err) err.style.display='block';
+}
+function abrirListaArticulosExterno(){
+  if(!externalRows.length) return;
+  const cargados=externalRows.filter(externalRowTouched).length;
+  const itemsHtml=externalRows.map((r,i)=>`<button type="button" class="modal-list-item ${i===mobileIndex?'current':''}" data-idx="${i}">
+    <span class="modal-list-code">${esc(r.id_articulo)} <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span>
+    <span class="modal-list-status ${externalRowTouched(r)?'ok':'pending'}">${externalRowTouched(r)?'Cargado':'Pendiente'}</span>
+    <span class="modal-list-desc">${esc(r.descripcion)}</span>
+  </button>`).join('');
+  modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title">Articulos del control externo · ${cargados}/${externalRows.length} cargados</div>
+    <div class="modal-body modal-list">${itemsHtml}</div>
+    <div class="modal-actions"><button class="btn" id="modalCancelBtn">Cerrar</button></div>
+  </div>`;
+  modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+  modalOverlay.querySelectorAll('.modal-list-item').forEach(btn=>btn.addEventListener('click',()=>{
+    guardarBorradorExternoDesdeDom();
+    mobileIndex=Number(btn.dataset.idx);
+    closeModal();
+    renderControlExterno();
+  }));
+  document.getElementById('modalCancelBtn').onclick=closeModal;
+  modalOverlay.querySelector('.modal-list-item.current')?.scrollIntoView({block:'center'});
+}
+function externalMobilePrev(){
+  if(mobileIndex>0){guardarBorradorExternoDesdeDom();mobileIndex--;renderControlExterno()}
+}
+function externalMobileNext(){
+  if(!currentExternalRowValid()){showExternalMobileValidation();return}
+  if(mobileIndex<externalRows.length-1){guardarBorradorExternoDesdeDom();mobileIndex++;renderControlExterno();return}
+  actualizarTotalesExterno();
+  if(externalRows.some(r=>!externalRowTouched(r))) externoStatus.textContent='Faltan articulos por cargar. Si no hay stock, escribi 0.';
+}
 function renderControlExterno(){
   document.querySelector('#viewExterno thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
-  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet)}</td><td class="num">${logVal(r.bultos_por_piso)}</td><td class="num">${logVal(r.pisos)}</td><td class="num">${logVal(r.unidades_por_bulto)}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
-  externoCards.innerHTML=externalRows.map(r=>`<article class="mobile-card"><div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} &middot; ${esc(r.abc)}</span></div><div class="mobile-article-desc">${esc(r.descripcion)}</div><div class="mobile-logistics"><span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet)}</strong></span><span>Bultos/Piso<strong>${logVal(r.bultos_por_piso)}</strong></span><span>Pisos<strong>${logVal(r.pisos)}</strong></span><span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto)}</strong></span></div><div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-row five">${[1,2,3,4,5,6].map(n=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div><div class="mobile-group units"><div class="mobile-group-title">Unidades</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div><div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div></article>`).join('');
+  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td><td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td><td class="num">${logVal(r.pisos,r,'pisos')}</td><td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
+  const visibleRows=isMobileConteo()? [externalRows[Math.min(mobileIndex,externalRows.length-1)]].filter(Boolean) : externalRows;
+  const cargados=externalRows.filter(externalRowTouched).length;
+  const bar=isMobileConteo()&&externalRows.length?`<div class="mobile-carousel-bar">
+    <button class="btn prev" onclick="externalMobilePrev()">Anterior</button>
+    <button type="button" class="mobile-progress" onclick="abrirListaArticulosExterno()" title="Ver todos los articulos sorteados y saltar a uno">
+      <span>${Math.min(mobileIndex+1,externalRows.length)} / ${externalRows.length}</span>
+      <small>${cargados} cargados · ver lista</small>
+    </button>
+    <button class="btn next" onclick="externalMobileNext()">Siguiente</button>
+  </div>`:'';
+  externoCards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
+    <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">Externo</span></div>
+    <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
+    <div class="mobile-logistics"><span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</strong></span><span>Bultos/Piso<strong>${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</strong></span><span>Pisos<strong>${logVal(r.pisos,r,'pisos')}</strong></span><span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</strong></span></div>
+    <div class="mobile-error" id="externalMobileError">Carga al menos un valor para este articulo. Si no hay stock, escribi 0.</div>
+    <div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-group-hint">Bultos completos encontrados en el conteo externo.</div><div class="mobile-row five">${[1,2,3,4,5,6].map((n,i)=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" value="${esc(cantidadInputsExterno(r.id_articulo).rawValues[i])}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div>
+    <div class="mobile-group units"><div class="mobile-group-title">Unidades</div><div class="mobile-group-hint">Unidades sueltas fuera de bulto completo.</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" value="${esc(cantidadInputsExterno(r.id_articulo).rawUnidades)}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div>
+    <div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div>
+  </article>`).join('');
   actualizarTotalesExterno();
 }
 async function generarControlExterno(){
   externoStatus.textContent='Generando sorteo...';externalGuardado=false;externalReviewKey='';if(guardarExternoBtn){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo'}
+  mobileIndex=0;
+  externalDraft={values:{},unidades:{}};
   actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
   const params=new URLSearchParams({mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,cantidad:cantidadExterno.value||6});
   const res=await fetch('/api/control-stock/control-externo/sorteo?'+params);const data=await res.json();
@@ -1769,11 +1948,17 @@ function externalPayload(){
   return {tipo_conteo:'externo',mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,semana:'externo',dia:'Externo',fecha:fechaExterno.value||today(),responsable:responsableExterno.value.trim(),hora_inicio:new Date().toTimeString().slice(0,5),hora_fin:new Date().toTimeString().slice(0,5),observaciones:observacionesExterno.value,items};
 }
 async function guardarControlExterno(){
+  guardarBorradorExternoDesdeDom();
   if(externalGuardado){await modalAlert('Este control externo ya fue guardado.');return}
   if(!externalRows.length){externoStatus.textContent='Primero genera un sorteo.';return}
   if(!responsableExterno.value.trim()){externoStatus.textContent='Ingresa el responsable externo.';responsableExterno.focus();return}
   const faltante=externalRows.find(r=>!cantidadInputsExterno(r.id_articulo).touched);
-  if(faltante){externoStatus.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribi 0.`;return}
+  if(faltante){
+    externoStatus.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribi 0.`;
+    const idx=externalRows.findIndex(r=>String(r.id_articulo)===String(faltante.id_articulo));
+    if(idx>=0&&isMobileConteo()){mobileIndex=idx;renderControlExterno();showExternalMobileValidation()}
+    return;
+  }
   const payload=externalPayload();const sig=dispersionSignature(payload);const validacion=await validarDispersionAntesDeGuardar(payload);const alertas=validacion.alertas_dispersion||[];
   if(alertas.length&&externalReviewKey!==sig){externalReviewKey=sig;await modalAlert(`Antes de guardar, volve a controlar estos articulos:\n\n${alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n')}\n\nNo se muestra el stock esperado.`);externoStatus.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante.`;return}
   if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)) return;
@@ -1845,10 +2030,10 @@ async function loadPlanilla(){
   tbody.innerHTML=currentRows.map(r=>`<tr>
     <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
     <td>${esc(rowSemana(r))}</td><td>${esc(rowDia(r))}</td>
-    <td class="num">${logVal(r.bultos_por_pallet)}</td>
-    <td class="num">${logVal(r.bultos_por_piso)}</td>
-    <td class="num">${logVal(r.pisos)}</td>
-    <td class="num">${logVal(r.unidades_por_bulto)}</td>
+    <td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td>
+    <td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td>
+    <td class="num">${logVal(r.pisos,r,'pisos')}</td>
+    <td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
@@ -1982,6 +2167,10 @@ async function guardarConteo(){
 </script>
 </body>
 </html>
+
+
+
+
 
 
 

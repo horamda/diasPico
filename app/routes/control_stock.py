@@ -43,6 +43,21 @@ def planilla():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.put("/articulos/<int:id_articulo>/logistica")
+@login_required
+def actualizar_articulo_logistica(id_articulo: int):
+    try:
+        data = control_stock_svc.update_articulo_logistica(
+            id_articulo,
+            request.get_json(force=True) or {},
+        )
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/control-externo/sorteo")
 @login_required
 def control_externo_sorteo():

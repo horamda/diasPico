@@ -457,6 +457,45 @@ def _complete_logistics(item: dict) -> dict:
     return item
 
 
+def update_articulo_logistica(id_articulo: int, payload: dict) -> dict:
+    ensure_articulos_table()
+    articulo_id = int(id_articulo)
+    bultos_por_pallet = _logistic_number(payload.get("bultos_por_pallet"))
+    pisos = _logistic_number(payload.get("pisos"))
+    bultos_por_piso = _logistic_number(payload.get("bultos_por_piso"))
+    if pisos <= 0:
+        raise ValueError("Pisos debe ser mayor a 0")
+    if bultos_por_piso <= 0 and bultos_por_pallet > 0:
+        bultos_por_piso = bultos_por_pallet / pisos
+    if bultos_por_piso <= 0:
+        raise ValueError("Bultos por piso debe ser mayor a 0")
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            UPDATE articulos
+               SET bultos_por_pallet = CASE WHEN %(bultos_por_pallet)s > 0 THEN %(bultos_por_pallet)s ELSE bultos_por_pallet END,
+                   pisos = %(pisos)s,
+                   bultos_por_piso = %(bultos_por_piso)s,
+                   actualizado = NOW()
+             WHERE id_articulo = %(id_articulo)s
+             RETURNING id_articulo, descripcion, bultos_por_pallet, pisos, bultos_por_piso, unidades_por_bulto
+            """,
+            {
+                "id_articulo": articulo_id,
+                "bultos_por_pallet": bultos_por_pallet,
+                "pisos": pisos,
+                "bultos_por_piso": bultos_por_piso,
+            },
+        )
+        row = cur.fetchone()
+    if not row:
+        raise ValueError("Articulo no encontrado")
+    item = dict(row)
+    _complete_logistics(item)
+    return item
+
+
 def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal: str | None = "1") -> dict:
     ensure_articulos_table()
     ensure_ventas_detalle_table()
