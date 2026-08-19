@@ -217,6 +217,7 @@ Parametros diarios: `desde`, `hasta`, `sucursal`.
 | GET | `/api/control-stock/planilla` |
 | GET | `/api/control-stock/control-externo/sorteo` |
 | GET | `/api/control-stock/planificacion` |
+| GET | `/api/control-stock/pendientes-dias` |
 | GET | `/api/control-stock/resumen-mensual` |
 | GET | `/api/control-stock/articulos-controlados` |
 | GET | `/api/control-stock/resumen-articulo` |
@@ -235,6 +236,17 @@ Parametros diarios: `desde`, `hasta`, `sucursal`.
 | GET | `/api/frescura/articulos` |
 | GET | `/api/frescura/articulos/criticos` |
 | GET | `/api/frescura/articulos/<codigo_articulo>/resumen` |
+
+Notas de `/api/control-stock/planilla`:
+- Cada item incluye datos logisticos: `bultos_por_pallet`, `bultos_por_piso`, `pisos`, `unidades_por_bulto`.
+- Si `bultos_por_piso` falta pero existen `bultos_por_pallet` y `pisos`, el backend lo calcula como `bultos_por_pallet / pisos`.
+- Cada item informa `logistica_incompleta` y `logistica_faltante`.
+- La respuesta incluye `logistica_filtrada` con `total_articulos`, `completos` e `incompletos`.
+
+Notas de `/api/control-stock/pendientes-dias`:
+- Los pendientes se calculan desde el inicio operativo del modulo: `2026-08-10`.
+- Fechas anteriores a `2026-08-10` no generan pendientes.
+- La respuesta incluye `desde`, `hasta` y `periodo_activo`.
 | GET | `/api/frescura/articulos/<codigo_articulo>/clientes` |
 | GET | `/api/frescura/articulos/<codigo_articulo>/oportunidades` |
 | GET | `/api/frescura/articulos/<codigo_articulo>/clientes/export` |

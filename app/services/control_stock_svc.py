@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import calendar as cal_mod
 import random
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from threading import Lock
 
 import psycopg2.extras
@@ -16,6 +16,7 @@ _CONTROL_STOCK_READY = False
 _CONTROL_STOCK_LOCK = Lock()
 _DISPERSION_MIN_BULTOS = 5.0
 _DISPERSION_PCT = 0.20
+_PENDIENTES_DESDE = date(2026, 8, 10)
 
 
 def ensure_control_stock_tables() -> None:
@@ -345,6 +346,19 @@ def _split_day(counter: int, total: float) -> str:
     return days[-1]
 
 
+def _semana_desde_fecha(value: date) -> str:
+    first = value.replace(day=1)
+    first_dow = first.weekday()
+    first_monday_day = 1 if first_dow == 0 else 1 + ((7 - first_dow) % 7)
+    if value.day < first_monday_day:
+        return "semana1"
+    return f"semana{min(4, max(1, ((value.day - first_monday_day) // 7) + 1))}"
+
+
+def _dia_desde_fecha(value: date) -> str:
+    return ("Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado", "Domingo")[value.weekday()]
+
+
 def _apply_excel_schedule(rows: list[dict]) -> None:
     semanas = ("semana1", "semana2", "semana3", "semana4")
     c_counter = 0
@@ -414,6 +428,35 @@ def _prepare_planilla_row(row: dict, semana_key: str) -> dict:
     return item
 
 
+def _logistic_number(value) -> float:
+    try:
+        return float(value or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _complete_logistics(item: dict) -> dict:
+    bultos_por_pallet = _logistic_number(item.get("bultos_por_pallet"))
+    pisos = _logistic_number(item.get("pisos"))
+    bultos_por_piso = _logistic_number(item.get("bultos_por_piso"))
+    if bultos_por_piso <= 0 and bultos_por_pallet > 0 and pisos > 0:
+        bultos_por_piso = bultos_por_pallet / pisos
+
+    item["bultos_por_pallet"] = round(bultos_por_pallet, 2)
+    item["pisos"] = round(pisos, 2)
+    item["bultos_por_piso"] = round(bultos_por_piso, 2)
+    item["logistica_incompleta"] = pisos <= 0 or bultos_por_piso <= 0
+    item["logistica_faltante"] = [
+        label
+        for label, missing in (
+            ("pisos", pisos <= 0),
+            ("bultos_por_piso", bultos_por_piso <= 0),
+        )
+        if missing
+    ]
+    return item
+
+
 def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal: str | None = "1") -> dict:
     ensure_articulos_table()
     ensure_ventas_detalle_table()
@@ -476,9 +519,9 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
             "activo": "SI",
             "movil": row.get("movil") or "SI",
             "anulado": row.get("anulado") or "NO",
-            "bultos_por_pallet": round(float(row.get("bultos_por_pallet") or 0), 2),
-            "bultos_por_piso": round(float(row.get("bultos_por_piso") or 0), 2),
-            "pisos": round(float(row.get("pisos") or 0), 2),
+            "bultos_por_pallet": row.get("bultos_por_pallet"),
+            "bultos_por_piso": row.get("bultos_por_piso"),
+            "pisos": row.get("pisos"),
             "apilabilidad": round(float(row.get("apilabilidad") or 0), 2),
             "unidades_por_bulto": round(float(row.get("unidades_por_bulto") or 0), 2),
             "bultos": round(bultos, 2),
@@ -489,6 +532,7 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
             "participa": "SI",
             "status": "OK",
         }
+        _complete_logistics(item)
         rows.append(item)
 
     _apply_excel_schedule(rows)
@@ -496,6 +540,7 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
     if limit:
         rows = rows[: max(1, min(int(limit), 1000))]
 
+    logistica_incompleta = sum(1 for row in rows if row.get("logistica_incompleta"))
     return {
         "ok": True,
         "mes": mes_label,
@@ -503,6 +548,11 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
         "sucursal_nombre": _sucursal_nombre(suc),
         "total_articulos": len(raw_rows),
         "total_bultos": round(total_bultos, 2),
+        "logistica": {
+            "total_articulos": len(rows),
+            "incompletos": logistica_incompleta,
+            "completos": max(0, len(rows) - logistica_incompleta),
+        },
         "rows": rows,
     }
 
@@ -547,6 +597,12 @@ def get_planilla(
         rows.append(_prepare_planilla_row(row, semana_key))
     data["rows"] = rows
     data["total_filtrado"] = len(rows)
+    incompletos = sum(1 for row in rows if row.get("logistica_incompleta"))
+    data["logistica_filtrada"] = {
+        "total_articulos": len(rows),
+        "incompletos": incompletos,
+        "completos": max(0, len(rows) - incompletos),
+    }
     data["filtros"] = {"semana": semana, "dia": dia, "abc": abc, "sucursal": data["sucursal"]}
     return data
 
@@ -633,6 +689,104 @@ def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dic
             dia: sum(por_semana_dia[semana.upper()][dia] for semana in semanas)
             for dia in dias
         },
+    }
+
+
+def get_pendientes_dias(mes: str | None = None, hasta: str | None = None) -> dict:
+    ensure_control_stock_tables()
+    mes_label, ini, fin = _current_month_range(mes)
+    inicio_control = max(ini, _PENDIENTES_DESDE)
+    try:
+        hasta_dt = date.fromisoformat(str(hasta or date.today().isoformat())[:10])
+    except ValueError as exc:
+        raise ValueError("hasta debe tener formato YYYY-MM-DD") from exc
+    fin_control = min(fin, hasta_dt)
+    periodo_activo = fin_control >= inicio_control
+    if fin_control < inicio_control:
+        fin_control = inicio_control - timedelta(days=1)
+
+    sucursales = ("1", "2")
+    plan_por_sucursal: dict[str, dict[tuple[str, str], int]] = {}
+    for suc in sucursales:
+        plan = get_planificacion(_previous_month_label(mes_label), sucursal=suc)
+        plan_por_sucursal[suc] = {
+            (semana.lower(), dia): int(cantidad or 0)
+            for semana, dias in (plan.get("por_semana_dia") or {}).items()
+            for dia, cantidad in (dias or {}).items()
+        }
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT sucursal, fecha, COUNT(*) AS controles
+            FROM control_stock_conteos
+            WHERE fecha BETWEEN %(ini)s AND %(fin)s
+              AND tipo_conteo = 'mensual'
+              AND sucursal = ANY(%(sucursales)s)
+            GROUP BY sucursal, fecha
+            """,
+            {"ini": inicio_control, "fin": fin_control, "sucursales": list(sucursales)},
+        )
+        realizados = {
+            (str(r["sucursal"]), r["fecha"]): int(r["controles"] or 0)
+            for r in (cur.fetchall() or [])
+        }
+
+    por_sucursal: list[dict] = []
+    total_pendientes = 0
+    total_vencidos = 0
+    cursor = inicio_control
+    fechas: list[date] = []
+    while cursor <= fin_control:
+        if cursor.weekday() < 5:
+            fechas.append(cursor)
+        cursor += timedelta(days=1)
+
+    for suc in sucursales:
+        pendientes: list[dict] = []
+        realizados_count = 0
+        esperados_count = 0
+        for fecha_item in fechas:
+            semana = _semana_desde_fecha(fecha_item)
+            dia = _dia_desde_fecha(fecha_item)
+            esperados = int(plan_por_sucursal.get(suc, {}).get((semana, dia), 0))
+            if esperados <= 0:
+                continue
+            done = int(realizados.get((suc, fecha_item), 0))
+            esperados_count += 1
+            if done > 0:
+                realizados_count += 1
+                continue
+            vencido = fecha_item < date.today()
+            total_pendientes += 1
+            if vencido:
+                total_vencidos += 1
+            pendientes.append({
+                "fecha": fecha_item.isoformat(),
+                "semana": semana,
+                "dia": dia,
+                "articulos_planificados": esperados,
+                "controles_guardados": done,
+                "vencido": vencido,
+            })
+        por_sucursal.append({
+            "sucursal": suc,
+            "sucursal_nombre": _sucursal_nombre(suc),
+            "dias_esperados": esperados_count,
+            "dias_realizados": realizados_count,
+            "dias_pendientes": len(pendientes),
+            "pendientes": pendientes,
+        })
+
+    return {
+        "ok": True,
+        "mes": mes_label,
+        "desde": inicio_control.isoformat(),
+        "hasta": fin_control.isoformat(),
+        "periodo_activo": periodo_activo,
+        "total_pendientes": total_pendientes,
+        "total_vencidos": total_vencidos,
+        "sucursales": por_sucursal,
     }
 
 

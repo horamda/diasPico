@@ -88,6 +88,23 @@ DOTACION_RECARGAS_URL=...
 PG_POOL_MAX=10
 ```
 
+Para Frescura, configurar tambien estas variables si se usa el modulo de oportunidades:
+
+```text
+FRESCURA_API_BASE_URL=https://delpalacio.chesserp.com/AR459/web/api/chess/v1
+FRESCURA_API_USER=...
+FRESCURA_API_PASSWORD=...
+FRESCURA_API_DEPOSITOS=1,4
+FRESCURA_API_DEPOSIT_MAP=1:1,4:2
+FRESCURA_API_TIMEOUT=60
+```
+
+La sincronizacion manual se ejecuta desde `GET /api/frescura/sync`. Para sincronizacion automatica, crear un job/cron en el entorno de deploy que ejecute:
+
+```bash
+python scripts/sync_frescura.py
+```
+
 No configurar `PORT` manualmente: Railway lo inyecta y el start command hace bind a `0.0.0.0:$PORT`.
 
 ## Carga de datos

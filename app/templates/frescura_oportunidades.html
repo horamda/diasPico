@@ -101,6 +101,21 @@
     }
 
     .badge strong { color: var(--txt-main); }
+    .badge.ok {
+      border-color: rgba(34,197,94,.45);
+      background: rgba(34,197,94,.12);
+      color: var(--grn);
+    }
+    .badge.warn {
+      border-color: rgba(245,158,11,.5);
+      background: rgba(245,158,11,.12);
+      color: var(--ora);
+    }
+    .badge.error {
+      border-color: rgba(239,68,68,.5);
+      background: rgba(239,68,68,.12);
+      color: var(--red);
+    }
 
     .btn {
       appearance: none;
@@ -1232,10 +1247,46 @@
       document.getElementById('kpiPotencialSub').textContent = 'Clientes con alto potencial';
     }
 
+    function syncAgeHours(sync) {
+      if (!sync || !sync.finished_at) return null;
+      const finished = new Date(sync.finished_at);
+      if (Number.isNaN(finished.getTime())) return null;
+      return Math.max(0, (Date.now() - finished.getTime()) / 36e5);
+    }
+
+    function syncStatus(sync) {
+      if (!sync || !sync.finished_at) {
+        return { cls: 'error', label: 'Sin sincronizacion registrada' };
+      }
+      if (String(sync.estado || '').toLowerCase() !== 'ok') {
+        return { cls: 'error', label: 'Ultima sincronizacion con error' };
+      }
+      const hours = syncAgeHours(sync);
+      if (hours == null) {
+        return { cls: 'warn', label: 'Sin fecha valida de sincronizacion' };
+      }
+      if (hours > 24) {
+        return { cls: 'warn', label: `Frescura desactualizada: ${Math.round(hours)} h` };
+      }
+      return { cls: 'ok', label: `Frescura actualizada: ${Math.max(1, Math.round(hours))} h` };
+    }
+
+    function formatSyncResult(result) {
+      const data = result?.data || result || {};
+      const rows = fmtInt.format(Number(data.saved_rows || 0));
+      const total = fmtInt.format(Number(data.total_items || 0));
+      const deposits = Array.isArray(data.deposits) ? data.deposits.join(', ') : '-';
+      const finished = data.last_sync?.finished_at
+        ? new Date(data.last_sync.finished_at).toLocaleString('es-AR')
+        : new Date().toLocaleString('es-AR');
+      return `Sync OK: ${rows} registros guardados de ${total} items | depositos ${deposits} | ${finished}`;
+    }
+
     function renderMeta(data) {
       const parts = [];
       if (data.last_sync && data.last_sync.finished_at) {
-        parts.push(`Ultima sync ${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}`);
+        const status = syncStatus(data.last_sync);
+        parts.push(`${status.label} (${new Date(data.last_sync.finished_at).toLocaleString('es-AR')})`);
       } else {
         parts.push('Sin sincronizacion registrada');
       }
@@ -1243,9 +1294,12 @@
       parts.push(`${fmt.format(data.resumen?.cobertura_promedio || 0)}% cobertura`);
       document.getElementById('resultMeta').textContent = parts.join(' | ');
       const lastSync = document.getElementById('lastSync');
+      const status = syncStatus(data.last_sync);
+      lastSync.classList.remove('ok', 'warn', 'error');
+      lastSync.classList.add(status.cls);
       lastSync.innerHTML = data.last_sync && data.last_sync.finished_at
-        ? `Ultima sincronizacion: <strong>${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}</strong>`
-        : 'Ultima sincronizacion: <strong>-</strong>';
+        ? `${status.label}: <strong>${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}</strong>`
+        : '<strong>Sin sincronizacion registrada</strong>';
     }
 
     function renderArticles(items) {
@@ -1394,9 +1448,9 @@
     async function syncFreshness() {
       try {
         setLoading(true, 'Sincronizando...');
-        await api('/api/frescura/sync');
-        showToast('Sincronizacion completada');
-        await loadArticles();
+        const result = await api('/api/frescura/sync');
+        showToast(formatSyncResult(result));
+        await loadArticles(false, true);
       } catch (error) {
         showToast(error.message);
       } finally {

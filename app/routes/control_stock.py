@@ -89,6 +89,21 @@ def resumen_mensual():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/pendientes-dias")
+@login_required
+def pendientes_dias():
+    try:
+        data = control_stock_svc.get_pendientes_dias(
+            mes=request.args.get("mes"),
+            hasta=request.args.get("hasta"),
+        )
+        return jsonify(data)
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/articulos-controlados")
 @login_required
 def articulos_controlados():

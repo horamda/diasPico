@@ -44,6 +44,12 @@
     @media(max-width:640px){.shell{padding:8px}.top>div:last-child{grid-template-columns:1fr 1fr}.top>div:last-child .btn:last-child{grid-column:1/-1}.tabs{margin-left:-4px;margin-right:-4px}.panel{border-radius:8px}.stats .pill{min-width:100%;font-size:12px}.mobile-row.five{grid-template-columns:repeat(2,minmax(0,1fr))}.mobile-row.five input:last-child{grid-column:1/-1}.mobile-card{margin-left:-2px;margin-right:-2px}.mobile-head{align-items:flex-start;flex-direction:column}.mobile-help{grid-template-columns:1fr}.stock-input{height:46px;font-size:18px}.save-footer{margin-left:-8px;margin-right:-8px}}
     #viewConteo .auto-field{display:none!important}
     .time-note{background:#fef3c7;border:1px solid #f59e0b;color:#78350f;border-radius:8px;padding:9px 11px;font-size:12px;margin:0 0 10px}
+    .pending-days{display:none;background:#fff7ed;border:1px solid #fb923c;color:#7c2d12;border-radius:10px;padding:10px 12px;margin:0 0 10px;font-size:12px}
+    .pending-days.show{display:block}
+    .pending-days strong{display:block;font-size:13px;margin-bottom:5px;color:#7c2d12}
+    .pending-days-list{display:flex;flex-wrap:wrap;gap:6px;margin-top:7px}
+    .pending-day-chip{display:inline-flex;gap:5px;align-items:center;background:#ffedd5;border:1px solid #fdba74;border-radius:999px;padding:4px 8px;font:700 11px var(--mono);color:#7c2d12;cursor:pointer}
+    button.pending-day-chip:hover{border-color:#f97316;background:#fed7aa}
     @media(max-width:1280px){
       #viewConteo .auto-field{display:none!important}
       #viewConteo .table-wrap{display:none!important}
@@ -294,7 +300,279 @@
     :root[data-theme="dark"] .modal-list-item.current{border-color:var(--acc)!important;background:var(--acc-bg)!important}
     :root[data-theme="dark"] .modal-list-code{color:var(--txt)!important}
     :root[data-theme="dark"] .modal-list-desc{color:var(--txt2)!important}
-  </style>
+    @media(max-width:1280px){
+      body{background:#f5f5f7!important;color:#1d1d1f!important;-webkit-font-smoothing:antialiased}
+      .shell{max-width:none!important;padding:12px 12px calc(96px + env(safe-area-inset-bottom))!important}
+      .top{align-items:flex-start!important;background:rgba(245,245,247,.92)!important;backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);border:1px solid rgba(0,0,0,.06);border-radius:18px;padding:12px!important;margin-bottom:10px!important;box-shadow:0 8px 24px rgba(0,0,0,.06)}
+      .top h1{font-size:22px!important;line-height:1.12!important;letter-spacing:0!important;margin:2px 0 0!important;color:#1d1d1f!important}
+      .eyebrow{font-size:10px!important;letter-spacing:.12em!important;color:#007aff!important}
+      .top>div:last-child{grid-template-columns:1fr 1fr!important;gap:8px!important}
+      .btn{border-radius:12px!important;min-height:44px!important;font-weight:700!important;border-color:rgba(0,0,0,.12)!important;background:#fff!important;color:#1d1d1f!important;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+      .btn.primary,.btn.ok{background:#007aff!important;border-color:#007aff!important;color:#fff!important;box-shadow:none!important}
+      .tabs-wrap{position:sticky!important;top:0!important;z-index:30!important;margin:0 -2px 10px!important;padding-top:2px!important;background:linear-gradient(#f5f5f7 70%,rgba(245,245,247,0))!important}
+      .tabs{border:0!important;border-radius:14px!important;background:#e8e8ed!important;padding:3px!important;gap:2px!important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05)}
+      .tab{min-height:38px!important;border-radius:11px!important;padding:8px 12px!important;color:#3a3a3c!important;font-size:13px!important;font-weight:700!important}
+      .tab.active{background:#fff!important;color:#1d1d1f!important;box-shadow:0 2px 8px rgba(0,0,0,.12)!important}
+      #viewConteo .panel{background:#fff!important;border:0!important;border-radius:18px!important;overflow:hidden!important;box-shadow:0 10px 28px rgba(0,0,0,.07)!important;margin-bottom:10px!important}
+      #viewConteo .field{border:0!important;border-bottom:1px solid #f2f2f7!important;padding:10px 12px!important}
+      #viewConteo .field label{font-size:11px!important;font-weight:750!important;text-transform:none!important;color:#6e6e73!important;margin-bottom:6px!important;letter-spacing:0!important}
+      #viewConteo .field input,#viewConteo .field select{height:46px!important;min-height:46px!important;border-radius:12px!important;border:1px solid #d2d2d7!important;background:#f5f5f7!important;font-size:16px!important;color:#1d1d1f!important;padding:0 12px!important}
+      #viewConteo .stats{grid-template-columns:1fr!important;background:transparent!important;border:0!important;padding:0 0 8px!important}
+      #viewConteo .pill{border:0!important;border-radius:14px!important;background:#f2f2f7!important;color:#1d1d1f!important;padding:9px 12px!important;font:700 12px -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",sans-serif!important;text-align:left!important}
+      .frescura-pill.ok{background:#e9f8ef!important;color:#166534!important}
+      .frescura-pill.alert{background:#fff1f0!important;color:#b42318!important}
+      .time-note,.pending-days{border:0!important;border-radius:16px!important;padding:12px 14px!important;box-shadow:0 4px 16px rgba(0,0,0,.05)!important}
+      .time-note{background:#fff7e6!important;color:#7a4b00!important}
+      .pending-days{background:#fff4e5!important;color:#7a3500!important}
+      .pending-days strong{font-size:15px!important;color:#7a3500!important}
+      .pending-days-list{flex-wrap:nowrap!important;overflow-x:auto!important;padding-bottom:2px!important;scroll-snap-type:x proximity}
+      .pending-day-chip{min-height:36px!important;border-radius:999px!important;background:#fff!important;border:1px solid rgba(0,0,0,.08)!important;color:#7a3500!important;white-space:nowrap!important;scroll-snap-align:start;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+      #cards{padding-bottom:118px!important}
+      #cards .mobile-carousel-bar{top:58px!important;border:0!important;border-radius:18px!important;background:rgba(255,255,255,.94)!important;backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important;padding:8px!important}
+      #cards .mobile-carousel-bar .btn{height:44px!important;border-radius:14px!important;font-size:14px!important}
+      #cards .mobile-progress{font-size:15px!important;color:#1d1d1f!important}
+      #cards .mobile-progress small{font-size:11px!important;color:#6e6e73!important}
+      #cards .mobile-card{min-height:auto!important;border:0!important;border-radius:22px!important;padding:16px!important;margin:10px 0 14px!important;box-shadow:0 12px 32px rgba(0,0,0,.08)!important;text-align:left!important}
+      #cards .mobile-head{align-items:flex-start!important;text-align:left!important}
+      #cards .mobile-head span{flex:unset!important}
+      #cards .mobile-article-code{font-size:22px!important;line-height:1.1!important;color:#1d1d1f!important}
+      #cards .mobile-article-route{font-size:13px!important;color:#6e6e73!important;background:#f2f2f7;border-radius:999px;padding:5px 9px;white-space:nowrap}
+      #cards .mobile-article-desc{font-size:17px!important;line-height:1.3!important;font-weight:650!important;text-align:left!important;margin:12px 0!important}
+      #cards .mobile-logistics{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+      #cards .mobile-logistics span,.mobile-group{border:0!important;background:#f5f5f7!important;border-radius:16px!important}
+      #cards .mobile-logistics span{padding:10px!important;text-align:left!important}
+      #cards .mobile-logistics strong{font-size:18px!important}
+      .mobile-group{padding:12px!important;margin-top:12px!important}
+      .mobile-group-title{font-size:13px!important;text-align:left!important;letter-spacing:0!important;text-transform:none!important;color:#1d1d1f!important}
+      .mobile-group-hint{text-align:left!important;color:#6e6e73!important;font-size:12px!important}
+      .mobile-row.five{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+      .mobile-card .stock-input,#cards .stock-input{height:54px!important;border-radius:14px!important;border:1px solid #d2d2d7!important;background:#fff!important;font-size:22px!important;font-weight:700!important;text-align:center!important;box-shadow:inset 0 1px 2px rgba(0,0,0,.03)}
+      .stock-input:focus{border-color:#007aff!important;box-shadow:0 0 0 4px rgba(0,122,255,.16)!important;outline:none!important}
+      .mobile-total{border:0!important;border-radius:16px!important;background:#e9f8ef!important;color:#166534!important;padding:12px!important;font-size:14px!important;text-align:center!important}
+      #viewConteo .save-footer{border:0!important;border-radius:20px 20px 0 0!important;background:rgba(255,255,255,.96)!important;backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);box-shadow:0 -10px 30px rgba(0,0,0,.16)!important;padding:14px 14px calc(14px + env(safe-area-inset-bottom))!important}
+      #viewConteo .save-title{font-size:17px!important;color:#1d1d1f!important}
+      #viewConteo .save-sub{font-size:12px!important;color:#6e6e73!important}
+      #viewConteo .save-btn{height:54px!important;border-radius:16px!important;background:#34c759!important;border-color:#34c759!important;color:#fff!important;font-size:16px!important;box-shadow:none!important}
+      .modal-box{border-radius:18px!important}
+      .modal-actions .btn{min-height:48px!important;border-radius:14px!important}
+    }
+    @media(max-width:520px){
+      .shell{padding-left:10px!important;padding-right:10px!important}
+      .top{border-radius:16px;padding:11px!important}
+      .tabs{overflow-x:auto!important;scrollbar-width:none}
+      .tabs::-webkit-scrollbar,.pending-days-list::-webkit-scrollbar{display:none}
+      #cards .mobile-carousel-bar{top:54px!important}
+      #cards .mobile-article-code{font-size:21px!important}
+      .mobile-card .stock-input,#cards .stock-input{height:56px!important;font-size:24px!important}
+    }
+    @media(max-width:1280px){
+      :root[data-theme="dark"] body{background:var(--bg)!important;color:var(--txt)!important}
+      :root[data-theme="dark"] .top,
+      :root[data-theme="dark"] #viewConteo .panel,
+      :root[data-theme="dark"] #cards .mobile-card,
+      :root[data-theme="dark"] #cards .mobile-carousel-bar,
+      :root[data-theme="dark"] #viewConteo .save-footer,
+      :root[data-theme="dark"] .modal-box{background:rgba(25,31,42,.96)!important;color:var(--txt)!important;border-color:var(--brd)!important}
+      :root[data-theme="dark"] .tabs,
+      :root[data-theme="dark"] #viewConteo .field input,
+      :root[data-theme="dark"] #viewConteo .field select,
+      :root[data-theme="dark"] #viewConteo .pill,
+      :root[data-theme="dark"] #cards .mobile-logistics span,
+      :root[data-theme="dark"] .mobile-group,
+      :root[data-theme="dark"] .mobile-card .stock-input,
+      :root[data-theme="dark"] #cards .stock-input{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}
+      :root[data-theme="dark"] .tab.active{background:var(--surf)!important;color:var(--txt)!important}
+      :root[data-theme="dark"] .top h1,
+      :root[data-theme="dark"] #cards .mobile-article-code,
+      :root[data-theme="dark"] #cards .mobile-article-desc,
+      :root[data-theme="dark"] .mobile-group-title,
+      :root[data-theme="dark"] #viewConteo .save-title{color:var(--txt)!important}
+      :root[data-theme="dark"] .pending-days,
+      :root[data-theme="dark"] .time-note{background:var(--ora-bg)!important;color:var(--ora)!important;border-color:var(--ora-bd)!important}
+    }
+    /* Apple-like coherence layer for every stock-control tab */
+    body{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",sans-serif;letter-spacing:0;background:#f5f5f7;color:#1d1d1f}
+    .shell{max-width:1480px}
+    .top{align-items:center;background:rgba(255,255,255,.82);border:1px solid rgba(0,0,0,.06);border-radius:20px;padding:16px 18px;box-shadow:0 10px 32px rgba(0,0,0,.06);backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px)}
+    .eyebrow{letter-spacing:.12em;color:#0066cc}.top h1{font-size:28px;letter-spacing:0;color:#1d1d1f}.sub{color:#6e6e73;line-height:1.35}
+    .btn{min-height:40px;border-radius:12px;border-color:#d2d2d7;background:#fff;color:#1d1d1f;font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.04);transition:background .16s ease,transform .16s ease,box-shadow .16s ease}
+    .btn:hover{background:#f5f5f7;box-shadow:0 3px 10px rgba(0,0,0,.08)}.btn:active{transform:scale(.98)}
+    .btn.primary{background:#0071e3;border-color:#0071e3;color:#fff}.btn.ok{background:#34c759;border-color:#34c759;color:#fff}
+    .tabs-wrap{position:relative;margin:12px 0}.tabs{gap:6px;background:rgba(255,255,255,.72);border-color:rgba(0,0,0,.08);border-radius:16px;padding:5px;box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 4px 16px rgba(0,0,0,.04)}
+    .tab{border-radius:12px;color:#6e6e73;letter-spacing:0;min-height:38px}.tab.active{background:#fff;color:#1d1d1f;box-shadow:0 5px 16px rgba(0,0,0,.10)}
+    .panel,.table-wrap,.kpi-card,.chart-panel,.summary-card,.abc-mobile-card,.resp-card,.articulos-card,.article-result-card,.mobile-card{border-color:rgba(0,0,0,.08);border-radius:18px;background:#fff;box-shadow:0 8px 28px rgba(0,0,0,.05)}
+    .panel{overflow:hidden}.grid{background:#fff}.field{border-color:#f0f0f2;padding:10px}.field label{font-size:11px;text-transform:none;letter-spacing:0;color:#6e6e73;margin-bottom:6px}
+    .field input,.field select,.stock-input,.obs-input{min-height:42px;border-radius:12px;border-color:#d2d2d7;background:#fbfbfd;color:#1d1d1f;font-size:15px;outline:none;transition:border-color .16s ease,box-shadow .16s ease,background .16s ease}
+    .field input:focus,.field select:focus,.stock-input:focus,.obs-input:focus{border-color:#0071e3;box-shadow:0 0 0 4px rgba(0,113,227,.14);background:#fff}
+    .stats{background:#fbfbfd}.pill{border-radius:999px;border-color:#e5e5ea;background:#f5f5f7;color:#1d1d1f;letter-spacing:0;padding:8px 11px}
+    .status{color:#6e6e73;line-height:1.4}.time-note{border-radius:16px}
+    .table-wrap{border-color:#d2d2d7;overflow:auto}.table-wrap table{font-size:12px}.table-wrap th{background:#f5f5f7;color:#1d1d1f;border-color:#d2d2d7;letter-spacing:0;text-transform:none}.table-wrap td{border-color:#e5e5ea}.table-wrap tr:hover td{background:#fbfbfd}
+    .table-wrap th:first-child{background:#1d1d1f;color:#fff}.table-wrap td:first-child{background:#fbfbfd}
+    .kpi-label,.chart-title,.section-title{letter-spacing:0;color:#1d1d1f;text-transform:none}.kpi-label{color:#6e6e73}.kpi-value{letter-spacing:0;font-weight:800}.kpi-note,.legend,.bar-name,.summary-meta,.abc-mobile-desc,.abc-mobile-obs,.resp-card-status,.articulos-card-desc,.articulos-card-foot{color:#6e6e73}
+    .chart-panel{padding:16px}.bar-track{background:#e5e5ea}.bar-fill{background:#0071e3}.donut{background:conic-gradient(#0071e3 0deg,#e5e5ea 0deg)}.donut::after{background:#fff}
+    .summary-grid span,.abc-month-pill,.articulos-card-grid span,.article-result-metric{border-color:#e5e5ea;border-radius:14px;background:#f5f5f7}
+    .pending-days{border-color:#ffcc80;border-radius:16px;background:#fff8ed;color:#7a3500}.pending-days strong{color:#7a3500}
+    .logistic-missing{color:#b45309;font-weight:800}
+    @media(max-width:1280px){
+      .shell{padding:12px 12px calc(18px + env(safe-area-inset-bottom))}
+      .top{border-radius:22px;padding:14px}.top>div:last-child{gap:8px}.top .btn{min-height:44px}
+      .tabs-wrap{margin:10px -4px 12px}.tabs{overflow-x:auto;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}.tab{flex:0 0 auto;scroll-snap-align:start;white-space:nowrap}
+      .view .panel{border-radius:20px;margin-bottom:12px}.view .grid{grid-template-columns:repeat(2,minmax(0,1fr))}.field.w2,.field.w3{grid-column:1/-1}
+      .view .field{border-right:0;padding:11px 12px}.view .field input,.view .field select,.stock-input,.obs-input{min-height:48px;font-size:16px}
+      .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:10px}.stats .pill{min-width:0;text-align:left;font-size:12px}
+      .dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.kpi-card{padding:14px;min-height:112px}.kpi-value{font-size:24px}.kpi-label{font-size:11px}.kpi-note{font-size:12px}
+      .charts-grid{grid-template-columns:1fr;gap:10px}.chart-panel{padding:14px}.donut-wrap{align-items:center;justify-content:space-between}.bar-row{grid-template-columns:minmax(88px,150px) 1fr 54px}
+      .table-wrap{border-radius:18px;max-height:58vh}.summary-card,.abc-mobile-card,.resp-card,.articulos-card,.article-result-card,.mobile-card{border-radius:18px;padding:14px;margin:10px 0}
+      .resp-card-actions .btn{min-height:46px}.articulos-card-grid,.summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .section-title{margin:16px 2px 8px}.save-footer{border-radius:20px 20px 0 0}
+      .tabs::-webkit-scrollbar,.table-wrap::-webkit-scrollbar{display:none}
+    }
+    @media(max-width:560px){
+      .shell{padding:8px 8px calc(16px + env(safe-area-inset-bottom))}
+      .top{align-items:stretch}.top h1{font-size:25px}.top>div:last-child{grid-template-columns:1fr 1fr}.top .btn{padding:10px 8px}
+      .view .grid{grid-template-columns:1fr}.view .field{grid-column:1/-1}.stats{grid-template-columns:1fr}
+      .dashboard-grid{grid-template-columns:1fr 1fr;gap:8px}.kpi-card{min-height:104px;padding:12px}.kpi-value{font-size:21px}.kpi-note{font-size:11px}
+      .bar-row{grid-template-columns:1fr;gap:5px}.bar-value{text-align:left}.donut-wrap{flex-direction:column;align-items:flex-start}
+      .abc-month-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.articulos-card-grid,.summary-grid{grid-template-columns:1fr 1fr}
+    }
+    @media(max-width:1280px){
+      :root[data-theme="dark"] body{background:#000;color:#f5f5f7}
+      :root[data-theme="dark"] .top,
+      :root[data-theme="dark"] .tabs,
+      :root[data-theme="dark"] .panel,
+      :root[data-theme="dark"] .table-wrap,
+      :root[data-theme="dark"] .kpi-card,
+      :root[data-theme="dark"] .chart-panel,
+      :root[data-theme="dark"] .summary-card,
+      :root[data-theme="dark"] .abc-mobile-card,
+      :root[data-theme="dark"] .resp-card,
+      :root[data-theme="dark"] .articulos-card,
+      :root[data-theme="dark"] .article-result-card,
+      :root[data-theme="dark"] .mobile-card{background:#1c1c1e;border-color:#38383a;color:#f5f5f7}
+      :root[data-theme="dark"] .grid,
+      :root[data-theme="dark"] .stats{background:#1c1c1e}
+      :root[data-theme="dark"] .field input,
+      :root[data-theme="dark"] .field select,
+      :root[data-theme="dark"] .stock-input,
+      :root[data-theme="dark"] .obs-input,
+      :root[data-theme="dark"] .summary-grid span,
+      :root[data-theme="dark"] .abc-month-pill,
+      :root[data-theme="dark"] .articulos-card-grid span,
+      :root[data-theme="dark"] .article-result-metric,
+      :root[data-theme="dark"] .pill{background:#2c2c2e;border-color:#48484a;color:#f5f5f7}
+      :root[data-theme="dark"] .top h1,
+      :root[data-theme="dark"] .tab.active,
+      :root[data-theme="dark"] .kpi-value,
+      :root[data-theme="dark"] .chart-title,
+      :root[data-theme="dark"] .section-title{color:#f5f5f7}
+      :root[data-theme="dark"] .tab.active,
+      :root[data-theme="dark"] .donut::after{background:#2c2c2e}
+      :root[data-theme="dark"] .table-wrap th{background:#2c2c2e;color:#f5f5f7;border-color:#48484a}
+      :root[data-theme="dark"] .table-wrap td{border-color:#38383a}
+      :root[data-theme="dark"] .table-wrap th:first-child{background:#f5f5f7;color:#1d1d1f}
+      :root[data-theme="dark"] .table-wrap td:first-child{background:#242426}
+    }
+    /* High-contrast dark mode across every stock-control tab */
+    :root[data-theme="dark"] body{background:#050507!important;color:#f7f7fb!important}
+    :root[data-theme="dark"] .top,
+    :root[data-theme="dark"] .tabs,
+    :root[data-theme="dark"] .panel,
+    :root[data-theme="dark"] .grid,
+    :root[data-theme="dark"] .stats,
+    :root[data-theme="dark"] .table-wrap,
+    :root[data-theme="dark"] .kpi-card,
+    :root[data-theme="dark"] .chart-panel,
+    :root[data-theme="dark"] .summary-card,
+    :root[data-theme="dark"] .abc-mobile-card,
+    :root[data-theme="dark"] .resp-card,
+    :root[data-theme="dark"] .articulos-card,
+    :root[data-theme="dark"] .article-result-card,
+    :root[data-theme="dark"] .mobile-card{background:#17171a!important;border-color:#3f3f46!important;color:#f7f7fb!important}
+    :root[data-theme="dark"] .top h1,
+    :root[data-theme="dark"] .summary-head,
+    :root[data-theme="dark"] .abc-mobile-head,
+    :root[data-theme="dark"] .resp-card-head,
+    :root[data-theme="dark"] .articulos-card-head,
+    :root[data-theme="dark"] .article-result-head,
+    :root[data-theme="dark"] .article-result-label,
+    :root[data-theme="dark"] .kpi-value,
+    :root[data-theme="dark"] .chart-title,
+    :root[data-theme="dark"] .section-title,
+    :root[data-theme="dark"] .legend b,
+    :root[data-theme="dark"] .pending-row strong,
+    :root[data-theme="dark"] .abc-month-pill b,
+    :root[data-theme="dark"] .articulos-card-grid span b,
+    :root[data-theme="dark"] .summary-grid b{color:#ffffff!important}
+    :root[data-theme="dark"] .sub,
+    :root[data-theme="dark"] .field label,
+    :root[data-theme="dark"] .status,
+    :root[data-theme="dark"] .kpi-label,
+    :root[data-theme="dark"] .kpi-note,
+    :root[data-theme="dark"] .legend,
+    :root[data-theme="dark"] .bar-name,
+    :root[data-theme="dark"] .summary-meta,
+    :root[data-theme="dark"] .abc-mobile-desc,
+    :root[data-theme="dark"] .abc-mobile-obs,
+    :root[data-theme="dark"] .resp-card-status,
+    :root[data-theme="dark"] .articulos-card-desc,
+    :root[data-theme="dark"] .articulos-card-foot,
+    :root[data-theme="dark"] .article-result-desc,
+    :root[data-theme="dark"] .article-result-resp,
+    :root[data-theme="dark"] .article-result-help,
+    :root[data-theme="dark"] .pending-row small{color:#d7d7dd!important}
+    :root[data-theme="dark"] .field input,
+    :root[data-theme="dark"] .field select,
+    :root[data-theme="dark"] .stock-input,
+    :root[data-theme="dark"] .obs-input,
+    :root[data-theme="dark"] .pill,
+    :root[data-theme="dark"] .summary-grid span,
+    :root[data-theme="dark"] .abc-month-pill,
+    :root[data-theme="dark"] .articulos-card-grid span,
+    :root[data-theme="dark"] .article-result-metric,
+    :root[data-theme="dark"] .bar-track{background:#26262b!important;border-color:#56565f!important;color:#ffffff!important}
+    :root[data-theme="dark"] .field input::placeholder,
+    :root[data-theme="dark"] .stock-input::placeholder,
+    :root[data-theme="dark"] .obs-input::placeholder{color:#b9b9c2!important}
+    :root[data-theme="dark"] .btn{background:#2c2c31!important;border-color:#63636d!important;color:#ffffff!important}
+    :root[data-theme="dark"] .btn:hover{background:#393941!important}
+    :root[data-theme="dark"] .btn.primary{background:#0a84ff!important;border-color:#0a84ff!important;color:#ffffff!important}
+    :root[data-theme="dark"] .btn.ok{background:#30d158!important;border-color:#30d158!important;color:#061208!important}
+    :root[data-theme="dark"] .tab{color:#e7e7ed!important}
+    :root[data-theme="dark"] .tab.active{background:#f5f5f7!important;color:#111114!important}
+    :root[data-theme="dark"] .table-wrap table{color:#f7f7fb!important}
+    :root[data-theme="dark"] .table-wrap th{background:#2c2c31!important;color:#ffffff!important;border-color:#56565f!important}
+    :root[data-theme="dark"] .table-wrap td{background:#17171a!important;color:#f7f7fb!important;border-color:#3f3f46!important}
+    :root[data-theme="dark"] .table-wrap tr:hover td{background:#232329!important}
+    :root[data-theme="dark"] .table-wrap th:first-child{background:#f5f5f7!important;color:#111114!important}
+    :root[data-theme="dark"] .table-wrap td:first-child{background:#232329!important;color:#ffffff!important}
+    :root[data-theme="dark"] .abc-a,
+    :root[data-theme="dark"] .abc-fill-a{color:#052e16!important}
+    :root[data-theme="dark"] .abc-b,
+    :root[data-theme="dark"] .abc-fill-b{color:#422006!important}
+    :root[data-theme="dark"] .abc-c,
+    :root[data-theme="dark"] .abc-fill-c{color:#450a0a!important}
+    :root[data-theme="dark"] .status-chip.ok{background:#bbf7d0!important;color:#052e16!important}
+    :root[data-theme="dark"] .status-chip.pending{background:#fecaca!important;color:#450a0a!important}
+    :root[data-theme="dark"] .time-note{background:#3a2a12!important;border-color:#b7791f!important;color:#ffe8b5!important}
+    :root[data-theme="dark"] .pending-days{background:#3a2412!important;border-color:#c26a1b!important;color:#ffd8ad!important}
+    :root[data-theme="dark"] .pending-days strong{color:#fff2df!important}
+    :root[data-theme="dark"] .pending-day-chip{background:#4a2d13!important;border-color:#d97706!important;color:#fff2df!important}
+    :root[data-theme="dark"] .logistic-missing{color:#fbbf24!important}
+      /* HIG polish: clean SF-like typography, pure light/dark surfaces, single accent, airy layouts */
+    :root{--cs-bg:#ffffff;--cs-surface:rgba(255,255,255,.82);--cs-surface-strong:#ffffff;--cs-elev:rgba(255,255,255,.72);--cs-text:#111114;--cs-muted:#6e6e73;--cs-muted-2:#8e8e93;--cs-line:rgba(60,60,67,.14);--cs-line-soft:rgba(60,60,67,.08);--cs-accent:#0a84ff;--cs-shadow:0 18px 60px rgba(0,0,0,.08);--cs-shadow-soft:0 8px 30px rgba(0,0,0,.05);--cs-radius-lg:24px;--cs-radius-md:18px;--cs-radius-sm:14px}
+    :root[data-theme="dark"]{--cs-bg:#000000;--cs-surface:rgba(28,28,30,.78);--cs-surface-strong:#1c1c1e;--cs-elev:rgba(44,44,46,.68);--cs-text:#ffffff;--cs-muted:#d1d1d6;--cs-muted-2:#a1a1aa;--cs-line:rgba(235,235,245,.18);--cs-line-soft:rgba(235,235,245,.10);--cs-accent:#0a84ff;--cs-shadow:0 18px 60px rgba(0,0,0,.42);--cs-shadow-soft:0 8px 30px rgba(0,0,0,.28)}
+    html{scroll-behavior:smooth}body{background:var(--cs-bg)!important;color:var(--cs-text)!important;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Inter","Segoe UI",sans-serif!important;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}.shell{padding:18px clamp(12px,2vw,28px) 28px!important}
+    .top{position:sticky;top:10px;z-index:40;align-items:flex-end!important;margin-bottom:16px!important;border:1px solid var(--cs-line-soft)!important;border-radius:var(--cs-radius-lg)!important;background:var(--cs-surface)!important;box-shadow:var(--cs-shadow-soft)!important;backdrop-filter:saturate(180%) blur(24px)!important;-webkit-backdrop-filter:saturate(180%) blur(24px)!important}.top h1{font-size:clamp(28px,3.2vw,44px)!important;line-height:1.04!important;font-weight:850!important;letter-spacing:0!important;color:var(--cs-text)!important}.eyebrow{color:var(--cs-accent)!important;letter-spacing:.12em!important}.sub{max-width:720px;color:var(--cs-muted)!important;font-size:13px!important;line-height:1.45!important}
+    .btn{border:1px solid var(--cs-line)!important;border-radius:999px!important;background:var(--cs-elev)!important;color:var(--cs-text)!important;min-height:42px!important;padding:0 16px!important;font-weight:760!important;box-shadow:none!important;backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);transition:transform .18s cubic-bezier(.2,.8,.2,1),background .18s ease,border-color .18s ease,box-shadow .18s ease!important}.btn:hover{background:var(--cs-surface-strong)!important;border-color:rgba(10,132,255,.35)!important;box-shadow:0 8px 24px rgba(10,132,255,.12)!important}.btn:active{transform:scale(.965)!important}.btn.primary{background:var(--cs-accent)!important;border-color:var(--cs-accent)!important;color:#fff!important}.btn.ok{background:#30d158!important;border-color:#30d158!important;color:#061208!important}
+    .tabs-wrap{position:sticky!important;top:92px!important;z-index:35!important;margin:0 0 18px!important;padding:4px 0 10px!important;background:linear-gradient(var(--cs-bg) 60%,rgba(255,255,255,0))!important}.tabs{border:1px solid var(--cs-line-soft)!important;border-radius:999px!important;background:var(--cs-surface)!important;padding:5px!important;gap:4px!important;box-shadow:var(--cs-shadow-soft)!important;backdrop-filter:saturate(180%) blur(22px)!important;-webkit-backdrop-filter:saturate(180%) blur(22px)!important}.tab{min-height:38px!important;border-radius:999px!important;color:var(--cs-muted)!important;background:transparent!important;font-weight:780!important;letter-spacing:0!important;transition:color .18s ease,background .18s ease,transform .18s ease,box-shadow .18s ease!important}.tab:hover{color:var(--cs-text)!important}.tab:active{transform:scale(.97)!important}.tab.active{background:var(--cs-surface-strong)!important;color:var(--cs-text)!important;box-shadow:0 6px 22px rgba(0,0,0,.10)!important}
+    .panel,.table-wrap,.kpi-card,.chart-panel,.summary-card,.abc-mobile-card,.resp-card,.articulos-card,.article-result-card,.mobile-card,.save-footer,.modal-box{border:1px solid var(--cs-line-soft)!important;border-radius:var(--cs-radius-lg)!important;background:var(--cs-surface)!important;color:var(--cs-text)!important;box-shadow:var(--cs-shadow-soft)!important;backdrop-filter:saturate(180%) blur(22px)!important;-webkit-backdrop-filter:saturate(180%) blur(22px)!important}.panel{margin-bottom:16px!important}.grid,.stats{background:transparent!important}.field{padding:12px 14px!important;border-color:var(--cs-line-soft)!important}.field label{color:var(--cs-muted)!important;font-size:12px!important;font-weight:720!important;letter-spacing:0!important;text-transform:none!important}.field input,.field select,.stock-input,.obs-input{min-height:46px!important;border:1px solid var(--cs-line)!important;border-radius:var(--cs-radius-sm)!important;background:var(--cs-elev)!important;color:var(--cs-text)!important;font-size:15px!important}.field input:focus,.field select:focus,.stock-input:focus,.obs-input:focus{border-color:var(--cs-accent)!important;box-shadow:0 0 0 4px rgba(10,132,255,.18)!important;background:var(--cs-surface-strong)!important}
+    .pill,.summary-grid span,.abc-month-pill,.articulos-card-grid span,.article-result-metric{border:1px solid var(--cs-line-soft)!important;border-radius:var(--cs-radius-sm)!important;background:var(--cs-elev)!important;color:var(--cs-text)!important}.status,.kpi-note,.summary-meta,.abc-mobile-desc,.abc-mobile-obs,.resp-card-status,.articulos-card-desc,.articulos-card-foot,.article-result-desc,.article-result-help,.legend,.bar-name{color:var(--cs-muted)!important}.kpi-label,.chart-title,.section-title,.summary-head,.abc-mobile-head,.resp-card-head,.articulos-card-head,.article-result-head{color:var(--cs-text)!important;font-weight:820!important;letter-spacing:0!important;text-transform:none!important}.kpi-card{min-height:118px!important}.kpi-value{color:var(--cs-text)!important;font-weight:850!important;letter-spacing:0!important}.chart-panel{padding:18px!important}.bar-fill{background:var(--cs-accent)!important}.bar-track{background:var(--cs-elev)!important}.donut{background:conic-gradient(var(--cs-accent) 0deg,var(--cs-elev) 0deg)!important}.donut::after{background:var(--cs-surface-strong)!important}
+    .table-wrap{border-radius:var(--cs-radius-md)!important}.table-wrap th{background:var(--cs-surface-strong)!important;color:var(--cs-text)!important;border-color:var(--cs-line-soft)!important;font-weight:780!important;text-transform:none!important}.table-wrap td{background:transparent!important;color:var(--cs-text)!important;border-color:var(--cs-line-soft)!important}.table-wrap tr:hover td{background:rgba(10,132,255,.06)!important}.table-wrap td:first-child{background:var(--cs-surface-strong)!important}.table-wrap th:first-child{background:var(--cs-accent)!important;color:#fff!important}
+    .time-note,.pending-days{border-radius:var(--cs-radius-md)!important;border:1px solid rgba(255,159,10,.28)!important;box-shadow:var(--cs-shadow-soft)!important}.modal-overlay{backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px)}
+    @media(max-width:820px){.shell{padding:10px 10px calc(88px + env(safe-area-inset-bottom))!important}.top{top:6px!important;display:block!important;padding:16px!important;border-radius:22px!important}.top h1{font-size:30px!important}.top .sub{display:block!important;font-size:12px!important}.top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr!important;margin-top:12px!important}.tabs-wrap{position:fixed!important;left:10px!important;right:10px!important;top:auto!important;bottom:calc(10px + env(safe-area-inset-bottom))!important;z-index:80!important;margin:0!important;padding:0!important;background:transparent!important}.tabs{justify-content:flex-start!important;overflow-x:auto!important;scrollbar-width:none!important;border-radius:24px!important;padding:7px!important}.tabs::-webkit-scrollbar{display:none}.tab{min-width:104px!important;min-height:48px!important;padding:5px 12px!important;font-size:12px!important;white-space:normal!important;line-height:1.05!important}.tab.active{box-shadow:0 8px 26px rgba(10,132,255,.18)!important}.view .panel{border-radius:22px!important}.view .grid{grid-template-columns:1fr!important}.field{border-right:0!important}.stats{grid-template-columns:1fr!important;gap:8px!important}.dashboard-grid{grid-template-columns:1fr 1fr!important}.kpi-card{border-radius:22px!important}.charts-grid{gap:14px!important}.mobile-card{border-radius:24px!important;padding:16px!important}.save-footer{position:fixed!important;left:10px!important;right:10px!important;bottom:calc(74px + env(safe-area-inset-bottom))!important;border-radius:24px!important}}
+    @media(max-width:520px){.top h1{font-size:28px!important}.dashboard-grid{grid-template-columns:1fr!important}.top>div:last-child{grid-template-columns:1fr!important}.tab{min-width:92px!important}.chart-panel,.kpi-card,.panel,.mobile-card{border-radius:22px!important}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
+</style>
 </head>
 <body>
 <main class="shell">
@@ -390,7 +668,7 @@
       <div class="field"><label>Semana</label><select id="semana"><option value="AUTO">Automatica</option><option value="TODAS">TODAS</option><option value="semana1">Semana 1</option><option value="semana2">Semana 2</option><option value="semana3">Semana 3</option><option value="semana4">Semana 4</option></select></div>
       <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option></select></div>
       <div class="field"><label>ABC</label><select id="abc"><option>TODOS</option><option>A</option><option>B</option><option>C</option></select></div>
-      <div class="field"><label>Fecha</label><input id="fecha" type="date" onchange="actualizarEstadoFrescura(this.value,'pFrescura')"></div>
+      <div class="field"><label>Fecha</label><input id="fecha" type="date" onchange="fechaConteoChanged()"></div>
       <div class="field"><label>Responsable control stock</label><select id="responsable"></select></div>
       <div class="field auto-field"><label>Hora inicio</label><input id="horaInicio" type="time"></div>
       <div class="field auto-field"><label>Hora fin</label><input id="horaFin" type="time"></div>
@@ -407,6 +685,7 @@
   </section>
 
   <div class="time-note">El horario de inicio se registra con la primera cantidad cargada. El horario final se registra al tocar “Guardar control y finalizar”.</div>
+  <div class="pending-days" id="pendingDays"></div>
   <div class="status" id="status">Cargando...</div>
   <section class="table-wrap">
     <table>
@@ -695,6 +974,7 @@ async function cargarSucursales(){
 }
 function defaultMonth(){const d=new Date();d.setMonth(d.getMonth()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function currentMonth(){const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
+function previousMonthFromDate(value){const d=parseLocalDate(value||today());d.setMonth(d.getMonth()-1);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`}
 function today(){return new Date().toISOString().slice(0,10)}
 function formatDateTime(value){
   if(!value) return '-';
@@ -756,6 +1036,68 @@ function filtrosEfectivos(){
   if(day==='AUTO') day=diaDesdeFecha(fecha.value);
   if(day==='Sabado'||day==='Domingo') day='TODOS';
   return {semana:sem,dia:day};
+}
+function logVal(value){
+  const n=Number(value||0);
+  return n>0?fmt.format(n):'<span class="logistic-missing">Sin dato</span>';
+}
+function logText(value){
+  const n=Number(value||0);
+  return n>0?fmt.format(n):'Sin dato';
+}
+function logisticaAviso(data, rows){
+  const info=data?.logistica_filtrada||{};
+  const incompletos=Number(info.incompletos||0);
+  if(!incompletos) return '';
+  const total=Number(info.total_articulos||rows?.length||0);
+  return ` | Logistica incompleta: ${fmt.format(incompletos)} de ${fmt.format(total)} articulos sin pisos o bultos/piso. Cargar "Datos faltantes de articulos" para completarlo.`;
+}
+function fechaConteoChanged(){
+  mes.value=previousMonthFromDate(fecha.value);
+  actualizarEstadoFrescura(fecha.value,'pFrescura');
+  loadPlanilla();
+  loadPendientesDias();
+}
+function pendingMonth(){
+  const value=fecha.value||today();
+  return value.slice(0,7);
+}
+function renderPendientesDias(data){
+  const el=document.getElementById('pendingDays');
+  if(!el) return;
+  const sucursales=data.sucursales||[];
+  const pendientes=sucursales.flatMap(s=>(s.pendientes||[]).map(p=>({...p,sucursal_nombre:s.sucursal_nombre,sucursal:s.sucursal})));
+  if(!pendientes.length){
+    el.classList.remove('show');
+    el.innerHTML='';
+    return;
+  }
+  const chips=pendientes.slice(0,18).map(p=>`<button type="button" class="pending-day-chip" onclick="seleccionarPendienteDia('${esc(p.fecha)}','${esc(p.sucursal)}')">${esc(p.sucursal_nombre||p.sucursal)}: ${esc(fechaCorta(p.fecha))} ${esc(p.dia)} (${fmt.format(p.articulos_planificados||0)})</button>`).join('');
+  const extra=pendientes.length>18?`<span class="pending-day-chip">+${fmt.format(pendientes.length-18)} mas</span>`:'';
+  const vencidos=Number(data.total_vencidos||0);
+  el.innerHTML=`<strong>Controles pendientes: ${fmt.format(pendientes.length)} dia(s) sin guardar${vencidos?` | ${fmt.format(vencidos)} vencido(s)`:''}</strong><div>Selecciona una fecha pendiente para cargar la planilla de ese dia. Se muestran ambas sucursales desde ${esc(fechaCorta(data.desde))} hasta ${esc(fechaCorta(data.hasta))}.</div><div class="pending-days-list">${chips}${extra}</div>`;
+  el.classList.add('show');
+}
+function seleccionarPendienteDia(fechaPendiente,sucursalPendiente){
+  fecha.value=fechaPendiente;
+  sucursalConteo.value=sucursalPendiente;
+  mes.value=previousMonthFromDate(fecha.value);
+  syncSucursal('conteo');
+}
+async function loadPendientesDias(){
+  const el=document.getElementById('pendingDays');
+  try{
+    const params=new URLSearchParams({mes:pendingMonth(),hasta:fecha.value||today()});
+    const res=await fetch('/api/control-stock/pendientes-dias?'+params);
+    const data=await res.json();
+    if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo cargar pendientes');
+    renderPendientesDias(data);
+  }catch(error){
+    if(el){
+      el.innerHTML=`<strong>No se pudieron cargar los controles pendientes.</strong><div>${esc(error.message||'Error desconocido')}</div>`;
+      el.classList.add('show');
+    }
+  }
 }
 function syncSucursal(origin){
   if(origin==='abc') sucursalConteo.value=sucursalAbc.value;
@@ -1172,12 +1514,19 @@ function renderAbcMensual(){
 async function loadResponsables(){
   respStatus.textContent='Cargando responsables...';
   const adminMode = activeTab === 'resp';
-  const sucursalObjetivo = adminMode ? sucursalResp.value : sucursalConteo.value;
+  const targetByTab = {
+    resp: sucursalResp.value,
+    resumenArticulo: sucursalResumenArticulo.value,
+    externo: sucursalExterno.value,
+    conteo: sucursalConteo.value,
+  };
+  const sucursalObjetivo = targetByTab[activeTab] || sucursalConteo.value;
   const res=await fetch('/api/control-stock/responsables?sucursal='+encodeURIComponent(sucursalObjetivo)+'&incluir_inactivos=1');
   const data=await res.json();
   if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo cargar');return}
   const rows=data.data||[];
   responsable.innerHTML='<option value="">Seleccionar responsable</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
+  if(![...responsable.options].some(o=>o.value===responsable.value)) responsable.value='';
   const keepResumenArticulo=responsableResumenArticulo.value||'';
   responsableResumenArticulo.innerHTML='<option value="">Todos los responsables</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
   responsableResumenArticulo.value=rows.some(r=>r.activo&&r.nombre===keepResumenArticulo)?keepResumenArticulo:'';
@@ -1325,10 +1674,10 @@ function renderMobileCards(){
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
     <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
     <div class="mobile-logistics">
-      <span>Bultos/Pallet<strong>${fmt.format(r.bultos_por_pallet||0)}</strong></span>
-      <span>Bultos/Piso<strong>${fmt.format(r.bultos_por_piso||0)}</strong></span>
-      <span>Pisos<strong>${fmt.format(r.pisos||0)}</strong></span>
-      <span>Unid/Bulto<strong>${fmt.format(r.unidades_por_bulto||0)}</strong></span>
+      <span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet)}</strong></span>
+      <span>Bultos/Piso<strong>${logVal(r.bultos_por_piso)}</strong></span>
+      <span>Pisos<strong>${logVal(r.pisos)}</strong></span>
+      <span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto)}</strong></span>
     </div>
     <div class="mobile-error" id="mobileError">Cargá al menos un valor para este artículo. Si no hay stock, escribí 0.</div>
     <div class="mobile-group">
@@ -1402,8 +1751,9 @@ function actualizarTotalesExterno(){
   externoFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(externalRows.length)} articulos cargados`;
 }
 function renderControlExterno(){
-  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${fmt.format(r.bultos_por_pallet||0)}</td><td class="num">${fmt.format(r.unidades_por_bulto||0)}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
-  externoCards.innerHTML=externalRows.map(r=>`<article class="mobile-card"><div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · ${esc(r.abc)}</span></div><div class="mobile-article-desc">${esc(r.descripcion)}</div><div class="mobile-logistics"><span>Bultos/Pallet<strong>${fmt.format(r.bultos_por_pallet||0)}</strong></span><span>Unid/Bulto<strong>${fmt.format(r.unidades_por_bulto||0)}</strong></span></div><div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-row five">${[1,2,3,4,5,6].map(n=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div><div class="mobile-group units"><div class="mobile-group-title">Unidades</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div><div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div></article>`).join('');
+  document.querySelector('#viewExterno thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
+  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet)}</td><td class="num">${logVal(r.bultos_por_piso)}</td><td class="num">${logVal(r.pisos)}</td><td class="num">${logVal(r.unidades_por_bulto)}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
+  externoCards.innerHTML=externalRows.map(r=>`<article class="mobile-card"><div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} &middot; ${esc(r.abc)}</span></div><div class="mobile-article-desc">${esc(r.descripcion)}</div><div class="mobile-logistics"><span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet)}</strong></span><span>Bultos/Piso<strong>${logVal(r.bultos_por_piso)}</strong></span><span>Pisos<strong>${logVal(r.pisos)}</strong></span><span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto)}</strong></span></div><div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-row five">${[1,2,3,4,5,6].map(n=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div><div class="mobile-group units"><div class="mobile-group-title">Unidades</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div><div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div></article>`).join('');
   actualizarTotalesExterno();
 }
 async function generarControlExterno(){
@@ -1495,10 +1845,10 @@ async function loadPlanilla(){
   tbody.innerHTML=currentRows.map(r=>`<tr>
     <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
     <td>${esc(rowSemana(r))}</td><td>${esc(rowDia(r))}</td>
-    <td class="num">${fmt.format(r.bultos_por_pallet||0)}</td>
-    <td class="num">${fmt.format(r.bultos_por_piso||0)}</td>
-    <td class="num">${fmt.format(r.pisos||0)}</td>
-    <td class="num">${fmt.format(r.unidades_por_bulto||0)}</td>
+    <td class="num">${logVal(r.bultos_por_pallet)}</td>
+    <td class="num">${logVal(r.bultos_por_piso)}</td>
+    <td class="num">${logVal(r.pisos)}</td>
+    <td class="num">${logVal(r.unidades_por_bulto)}</td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-1" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-2" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-cant="${r.id_articulo}-3" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
@@ -1510,11 +1860,12 @@ async function loadPlanilla(){
     <td class="num" data-unidades="${r.id_articulo}">0</td>
   </tr>`).join('');
   renderMobileCards();
-  status.textContent=`Cantidad de artículos a contar: ${currentRows.length}`;
+  status.textContent=`Cantidad de articulos a contar: ${currentRows.length}${logisticaAviso(data,currentRows)}`;
   if(!isMobileConteo()){
     cargarBorradorLocal();
     actualizarTotales(false);
   }
+  loadPendientesDias();
 }
 async function guardarConteo(){
   if(conteoGuardado){
@@ -1615,6 +1966,7 @@ async function guardarConteo(){
   loadResumenMensual();
   loadResumenArticulo();
   loadArticulosControlados();
+  loadPendientesDias();
   guardandoConteo=false;
 }
 (async function initControlStock(){
@@ -1624,11 +1976,15 @@ async function guardarConteo(){
   await cargarSucursales();
   actualizarEstadoFrescura(fecha.value,'pFrescura');
   actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
-  loadAbc();loadPlanificacion();loadResumenMensual();loadResumenArticulo();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();
+  loadAbc();loadPlanificacion();loadResumenMensual();loadResumenArticulo();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();loadPendientesDias();
   updateTabsFade();
 })();
 </script>
 </body>
 </html>
+
+
+
+
 
 
