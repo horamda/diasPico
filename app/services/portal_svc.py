@@ -194,6 +194,7 @@ def create_initial_admin(username: str, password: str, nombre: str) -> dict:
 def authenticate(username: str, password: str) -> dict | None:
     ensure_tables()
     username = (username or '').strip().lower()
+    password = str(password or '').strip()
     if not username or not password:
         return None
     with pg_cursor() as cur:

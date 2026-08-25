@@ -80,6 +80,15 @@
     }
     textarea { min-height: 82px; resize: vertical; }
     .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--acc-bg); }
+    .password-field { position: relative; }
+    .password-field input { padding-right: 44px; }
+    .toggle-password {
+      position: absolute; right: 6px; bottom: 4px; width: 32px; height: 32px;
+      border: 0; border-radius: 7px; background: transparent; color: var(--soft);
+      display: grid; place-items: center; cursor: pointer;
+    }
+    .toggle-password:hover { background: var(--panel); color: var(--text); }
+    .toggle-password svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .check { display: flex; align-items: center; gap: 8px; min-height: 40px; color: var(--text); font-size: 13px; font-weight: 750; text-transform: none; }
     .check input { width: 18px; height: 18px; min-height: 0; }
     .full { grid-column: 1 / -1; }
@@ -222,7 +231,15 @@
               <input id="uId" type="hidden">
               <label class="field">Nombre<input id="uNombre" required placeholder="Nombre y apellido"></label>
               <label class="field">Usuario<input id="uUsername" required placeholder="usuario"></label>
-              <label class="field">Password<input id="uPassword" type="password" placeholder="Solo completar para crear o cambiar"></label>
+              <label class="field password-field">Password
+                <input id="uPassword" type="password" placeholder="Solo completar para crear o cambiar">
+                <button class="toggle-password" type="button" data-target="uPassword" aria-label="Mostrar password" aria-pressed="false" title="Mostrar password">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+              </label>
               <label class="check"><input id="uAdmin" type="checkbox">Administrador</label>
               <label class="check"><input id="uActivo" type="checkbox" checked>Usuario activo</label>
               <div class="full actions">
@@ -686,6 +703,15 @@
 
     function bind() {
       document.querySelectorAll(".tab").forEach((btn) => btn.addEventListener("click", () => openView(btn.dataset.view)));
+      document.querySelectorAll(".toggle-password").forEach((btn) => btn.addEventListener("click", () => {
+        const input = $(btn.dataset.target);
+        if (!input) return;
+        const showing = input.type === "text";
+        input.type = showing ? "password" : "text";
+        btn.setAttribute("aria-pressed", String(!showing));
+        btn.setAttribute("aria-label", showing ? "Mostrar password" : "Ocultar password");
+        btn.setAttribute("title", showing ? "Mostrar password" : "Ocultar password");
+      }));
       $("userForm").addEventListener("submit", saveUser);
       $("moduleForm").addEventListener("submit", saveModule);
       $("cancelUserBtn").addEventListener("click", resetUserForm);
