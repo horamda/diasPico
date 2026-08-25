@@ -90,12 +90,15 @@
     .empty, .error { padding: 18px; color: var(--muted); font-size: 13px; }
     .error { color: var(--red); }
     @media (max-width: 1180px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } .grid-2, .module-grid { grid-template-columns: 1fr; } }
-    @media (max-width: 720px) {
+    @media (max-width: 900px) {
       .topbar { grid-template-columns: 1fr; padding: 12px; }
       .actions { justify-content: flex-start; }
       .content { padding: 12px; }
-      .kpi-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .brand h1, .brand p { white-space: normal; }
+    }
+    @media (max-width: 560px) {
+      .kpi-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>

@@ -161,7 +161,7 @@
       .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .grid-2, .access-layout { grid-template-columns: 1fr; }
     }
-    @media (max-width: 720px) {
+    @media (max-width: 900px) {
       .shell { padding: 10px; gap: 10px; }
       .top { grid-template-columns: 1fr; align-items: start; }
       .actions { justify-content: stretch; display: grid; grid-template-columns: 1fr 1fr; }
@@ -179,6 +179,13 @@
       .acc-tools { display: grid; grid-template-columns: 1fr 1fr; }
       .acc-tools .btn:last-child { grid-column: 1 / -1; }
       .acc-list { grid-template-columns: 1fr; }
+    }
+    @media (min-width: 720px) and (max-width: 900px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .mobile-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .form-grid { grid-template-columns: 1fr 1fr; }
+      .full { grid-column: 1 / -1; }
+      .acc-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
   </style>
 </head>

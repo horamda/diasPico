@@ -1108,7 +1108,7 @@
       .action-cell { min-width: 210px; max-width: 280px; }
     }
 
-    @media (max-width: 720px) {
+    @media (max-width: 900px) {
       .topbar { grid-template-columns: 1fr; padding: 12px; }
       .top-actions { display: flex; justify-content: flex-start; width: 100%; }
       .top-actions .btn { flex: 0 0 44px; width: 44px; min-width: 0; padding: 0; }
@@ -1165,6 +1165,25 @@
       .help-tip:focus::after { transform: translateY(-2px); }
       .brand h1 { white-space: normal; }
       .brand p { white-space: normal; }
+    }
+    @media (min-width: 720px) and (max-width: 900px) {
+      .kpi-grid,
+      .filters,
+      .config-grid,
+      .weights-grid,
+      .metric-grid,
+      .upload-grid,
+      .exp-filter-grid,
+      .exp-kpi-grid,
+      .map-kpis {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .top-actions .btn {
+        flex: 0 0 auto;
+        width: auto;
+        padding: 0 12px;
+      }
+      .top-actions .btn span { display: inline; }
     }
   </style>
 </head>

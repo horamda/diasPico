@@ -353,7 +353,7 @@ body { display: flex; }
 }
 .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 15; }
 
-@media (max-width: 860px) {
+@media (max-width: 1024px) {
   .sidebar { transform: translateX(-100%); transition: transform var(--t-slow); }
   .sidebar.open { transform: translateX(0); }
   .main { margin-left: 0; }
@@ -361,6 +361,14 @@ body { display: flex; }
   .overlay.show { display: block; }
   .kpi-grid { grid-template-columns: repeat(2, 1fr); }
   .last-updated { display: none; }
+}
+
+@media (min-width: 720px) and (max-width: 1024px) {
+  .content { padding: 18px 18px 34px; }
+  .topbar { padding: 0 18px; }
+  .modules-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .module-hero { height: 96px; }
+  .volume-chart-wrap { height: 280px; }
 }
 </style>
 </head>

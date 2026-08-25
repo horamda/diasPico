@@ -676,6 +676,32 @@ select option { background: var(--surf2); }
 @media (max-width: 1024px) {
   .hide-md { display: none !important; }
 }
+@media (max-width: 900px) {
+  html { font-size: 15px; }
+  .btn {
+    min-height: 40px;
+    justify-content: center;
+  }
+  input[type=text], input[type=number], input[type=date],
+  input[type=month], input[type=password], input[type=email],
+  select, textarea {
+    min-height: 40px;
+    font-size: 14px;
+  }
+  .tabs,
+  .plan-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
+  }
+  .tab,
+  .plan-tab {
+    min-height: 38px;
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+  }
+}
 @media (max-width: 768px) {
   .hide-sm { display: none !important; }
   .rtbl th, .rtbl td { padding: 6px 8px; }

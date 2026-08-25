@@ -367,6 +367,18 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   .rtbl{min-width:720px;}
   #tab-kpis .kpi-group-body{grid-template-columns:1fr;}
   #tab-kpis .kpi-band-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  [style*="grid-template-columns:340px 1fr"],
+  [style*="grid-template-columns: 340px 1fr"]{grid-template-columns:1fr!important;}
+  [style*="grid-template-columns:140px 120px 1fr auto"],
+  [style*="grid-template-columns:130px 1fr 120px auto"],
+  [style*="grid-template-columns:80px 1fr 80px auto"]{grid-template-columns:1fr 1fr!important;}
+}
+@media (min-width:720px) and (max-width:900px){
+  .main{padding:14px;}
+  .sidebar{display:grid;grid-template-columns:minmax(240px,.8fr) minmax(0,1fr);align-items:start;}
+  .mini-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));}
+  .filter-grid,.plan-grid{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .chart-wrap{height:280px;}
 }
 @media (max-width:560px){
   .topbar h1{width:100%;}
