@@ -585,6 +585,552 @@
     @media(max-width:1280px){ #viewConteo .save-footer,#viewExterno .save-footer,.save-footer{position:static!important;left:auto!important;right:auto!important;bottom:auto!important;z-index:auto!important;margin:14px 0 calc(20px + env(safe-area-inset-bottom))!important;border-radius:22px!important;box-shadow:0 8px 28px rgba(0,0,0,.08)!important;padding:14px!important;background:var(--cs-surface)!important}#cards,#externoCards{padding-bottom:20px!important}#viewConteo .save-footer.ready{display:flex!important}#viewConteo .save-footer:not(.ready){display:none!important}#viewExterno .save-footer{display:flex!important}.save-btn{width:100%!important;min-height:54px!important;border-radius:16px!important}.save-title{font-size:16px!important}.save-sub{font-size:12px!important}}
     /* Resumen por articulo usa el mismo carrusel compacto que Control de stock */
     @media(max-width:1280px){ #viewResumenArticulo .table-wrap{display:none!important}#resumenArticuloCards{display:block!important;padding-bottom:20px!important}#resumenArticuloCards .mobile-carousel-bar{display:grid!important;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;position:sticky;top:66px;z-index:8;border:0!important;border-radius:18px!important;background:rgba(255,255,255,.94)!important;backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);box-shadow:0 8px 24px rgba(0,0,0,.10)!important;padding:8px!important;margin:8px 0}#resumenArticuloCards .mobile-carousel-bar .btn{height:44px!important;border-radius:14px!important;font-size:14px!important}#resumenArticuloCards .mobile-carousel-bar .btn.prev{background:#f8fafc!important;border-color:#94a3b8!important;color:#0f172a!important}#resumenArticuloCards .mobile-carousel-bar .btn.next{background:#2563eb!important;border-color:#2563eb!important;color:#fff!important}#resumenArticuloCards .mobile-progress{font-size:15px!important;color:#1d1d1f!important;text-align:center!important;font-weight:950!important;min-width:96px;font-variant-numeric:tabular-nums}#resumenArticuloCards .mobile-progress small{display:block;font-size:11px!important;color:#6e6e73!important}#resumenArticuloCards .article-result-card{display:block!important;min-height:auto!important;border:0!important;border-radius:22px!important;padding:16px!important;margin:10px 0 14px!important;box-shadow:0 12px 32px rgba(0,0,0,.08)!important;text-align:left!important}#resumenArticuloCards .article-result-head{align-items:flex-start!important;text-align:left!important}#resumenArticuloCards .article-result-desc{font-size:17px!important;line-height:1.3!important;font-weight:650!important;text-align:left!important;margin:12px 0!important}#resumenArticuloCards .article-result-grid{grid-template-columns:1fr!important;gap:8px!important}}@media(max-width:520px){ #resumenArticuloCards .mobile-carousel-bar{top:62px!important}}@media(max-width:1280px){ :root[data-theme="dark"] #resumenArticuloCards .article-result-card,:root[data-theme="dark"] #resumenArticuloCards .mobile-carousel-bar{background:rgba(25,31,42,.96)!important;color:var(--txt)!important;border-color:var(--brd)!important}:root[data-theme="dark"] #resumenArticuloCards .mobile-carousel-bar .btn.prev{background:var(--surf2)!important;color:var(--txt)!important;border-color:var(--brd2)!important}:root[data-theme="dark"] #resumenArticuloCards .mobile-carousel-bar .btn.next{background:var(--acc)!important;color:#06101f!important;border-color:var(--acc)!important}:root[data-theme="dark"] #resumenArticuloCards .mobile-progress,:root[data-theme="dark"] #resumenArticuloCards .article-result-desc{color:var(--txt)!important}:root[data-theme="dark"] #resumenArticuloCards .mobile-progress small{color:var(--txt2)!important}}
+    /* Operational responsive layer: compact, touch-friendly and consistent. */
+    :root{
+      --cs-bg:var(--bg);
+      --cs-surface:var(--surf);
+      --cs-surface-strong:var(--surf2);
+      --cs-elev:var(--surf3);
+      --cs-text:var(--txt);
+      --cs-muted:var(--txt2);
+      --cs-muted-2:var(--muted);
+      --cs-line:var(--brd2);
+      --cs-line-soft:var(--brd);
+      --cs-accent:var(--acc);
+      --cs-accent-hover:var(--acc-dk);
+      --cs-accent-bg:var(--acc-bg);
+      --cs-accent-border:var(--acc-bd);
+      --cs-success:var(--grn);
+      --cs-success-bg:var(--grn-bg);
+      --cs-success-border:var(--grn-bd);
+      --cs-danger:var(--red);
+      --cs-danger-bg:var(--red-bg);
+      --cs-danger-border:var(--red-bd);
+      --cs-warning:var(--ora);
+      --cs-warning-bg:var(--ora-bg);
+      --cs-warning-border:var(--ora-bd);
+      --cs-info:var(--blu);
+      --cs-info-bg:var(--blu-bg);
+      --cs-info-border:var(--blu-bd);
+      --cs-on-accent:var(--bg);
+      --cs-on-success:var(--bg);
+      --cs-shadow:none;
+      --cs-shadow-soft:var(--shadow-sm);
+      --cs-radius-lg:var(--r);
+      --cs-radius-md:var(--r);
+      --cs-radius-sm:var(--r-sm);
+    }
+    :root[data-theme="light"]{--cs-on-accent:#fff;--cs-on-success:#fff}
+    body{background:var(--cs-bg)!important;color:var(--cs-text)!important}
+    .shell{max-width:1500px!important;padding:16px 18px 28px!important}
+    .top{
+      position:relative!important;
+      top:auto!important;
+      z-index:auto!important;
+      display:flex!important;
+      align-items:flex-end!important;
+      padding:0 0 12px!important;
+      margin-bottom:0!important;
+      border:0!important;
+      border-radius:0!important;
+      background:transparent!important;
+      box-shadow:none!important;
+      backdrop-filter:none!important;
+      -webkit-backdrop-filter:none!important;
+    }
+    .top h1{font-size:26px!important;line-height:1.15!important;margin:2px 0!important}
+    .top .sub{font-size:12px!important;line-height:1.4!important}
+    .top>div:last-child{display:flex!important;gap:8px!important;flex-wrap:wrap!important;width:auto!important}
+    .top>div:last-child .btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+    .btn{
+      min-height:42px!important;
+      border-radius:6px!important;
+      padding:0 14px!important;
+      background:var(--cs-surface-strong)!important;
+      color:var(--cs-text)!important;
+      border-color:var(--cs-line)!important;
+      box-shadow:none!important;
+      backdrop-filter:none!important;
+      -webkit-backdrop-filter:none!important;
+    }
+    .btn:hover{background:var(--cs-elev)!important;border-color:var(--cs-accent-border)!important;box-shadow:none!important}
+    .btn:active{transform:none!important}
+    .btn:disabled{cursor:not-allowed!important;opacity:.45!important;box-shadow:none!important}
+    .btn:focus-visible,.tab:focus-visible,.mobile-progress:focus-visible,.mobile-section-current:focus-visible,.mobile-section-menu:focus-visible,.section-sheet-item:focus-visible{
+      outline:3px solid var(--cs-accent-border)!important;
+      outline-offset:2px!important;
+    }
+    .btn.primary{background:var(--cs-accent)!important;border-color:var(--cs-accent)!important;color:var(--cs-on-accent)!important}
+    .btn.primary:hover{background:var(--cs-accent-hover)!important;border-color:var(--cs-accent-hover)!important}
+    .btn.ok{background:var(--cs-success)!important;border-color:var(--cs-success)!important;color:var(--cs-on-success)!important}
+    .btn.ok:hover{filter:brightness(.92)}
+    .btn.danger{background:var(--cs-danger-bg)!important;border-color:var(--cs-danger-border)!important;color:var(--cs-danger)!important}
+    .btn.danger:hover{filter:brightness(.94)}
+    .tabs-wrap{
+      position:sticky!important;
+      top:0!important;
+      z-index:35!important;
+      margin:0 0 12px!important;
+      padding:8px 0!important;
+      background:var(--cs-bg)!important;
+    }
+    .tabs{
+      overflow-x:auto!important;
+      overscroll-behavior-inline:contain;
+      scrollbar-width:thin;
+      border-radius:8px!important;
+      border-color:var(--cs-line)!important;
+      background:var(--cs-surface)!important;
+      box-shadow:var(--cs-shadow-soft)!important;
+      scroll-snap-type:x proximity;
+    }
+    .tab{
+      flex:0 0 auto;
+      min-height:42px!important;
+      border-radius:6px!important;
+      padding:0 13px!important;
+      color:var(--cs-muted)!important;
+      scroll-snap-align:start;
+      white-space:nowrap;
+    }
+    .tab.active{background:var(--cs-accent-bg)!important;color:var(--cs-accent)!important;box-shadow:inset 0 0 0 1px var(--cs-accent-border)!important}
+    .panel,.table-wrap,.kpi-card,.chart-panel,.summary-card,.abc-mobile-card,.resp-card,.articulos-card,.article-result-card,.mobile-card,.save-footer,.modal-box{
+      border-radius:8px!important;
+      border-color:var(--cs-line)!important;
+      background:var(--cs-surface)!important;
+      color:var(--cs-text)!important;
+      box-shadow:var(--cs-shadow-soft)!important;
+      backdrop-filter:none!important;
+      -webkit-backdrop-filter:none!important;
+    }
+    .panel{margin-bottom:12px!important}
+    .view .grid{grid-template-columns:repeat(6,minmax(145px,1fr))!important}
+    #viewConteo .grid{grid-template-columns:repeat(4,minmax(170px,1fr))!important}
+    .field{padding:9px 10px!important;border-color:var(--cs-line-soft)!important}
+    .field label{font-size:11px!important;font-weight:800!important;color:var(--cs-muted)!important;margin-bottom:5px!important}
+    .field input,.field select,.stock-input,.obs-input{
+      min-height:44px!important;
+      border-radius:6px!important;
+      border-color:var(--cs-line)!important;
+      background:var(--cs-elev)!important;
+      color:var(--cs-text)!important;
+      font-size:15px!important;
+    }
+    .field input:focus,.field select:focus,.stock-input:focus,.obs-input:focus{
+      border-color:var(--cs-accent)!important;
+      box-shadow:0 0 0 3px var(--cs-accent-bg)!important;
+      background:var(--cs-surface-strong)!important;
+    }
+    .field .btn{width:100%}
+    .stats{
+      display:grid!important;
+      grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;
+      gap:6px!important;
+      padding:8px!important;
+      position:static!important;
+      background:transparent!important;
+    }
+    .pill{
+      display:flex;
+      align-items:center;
+      min-height:36px;
+      border-radius:6px!important;
+      padding:6px 9px!important;
+      background:var(--cs-elev)!important;
+      color:var(--cs-text)!important;
+      border-color:var(--cs-line-soft)!important;
+    }
+    .status{min-height:20px;margin:8px 2px 10px!important;line-height:1.4!important}
+    .table-wrap{border-radius:8px!important;scrollbar-gutter:stable}
+    .table-wrap th{height:38px;background:var(--cs-surface-strong)!important;color:var(--cs-text)!important}
+    .table-wrap td{height:36px;background:var(--cs-surface)!important;color:var(--cs-text)!important}
+    .table-wrap tr:hover td{background:var(--cs-accent-bg)!important}
+    .kpi-card{min-height:104px!important;padding:12px!important}
+    .chart-panel{padding:14px!important}
+    .time-note,.pending-days{border-radius:8px!important;box-shadow:none!important}
+    .modal-box{max-width:560px!important}
+    .modal-actions{background:var(--cs-surface)!important}
+    .section-sheet-item{border-radius:6px!important;min-height:54px}
+    .section-sheet-item.active{background:var(--cs-accent)!important;border-color:var(--cs-accent)!important}
+    .mobile-section-current,.mobile-section-menu{border-radius:6px!important}
+    .mobile-section-menu{background:var(--cs-accent)!important;color:var(--cs-on-accent)!important}
+
+    @media(max-width:1280px){
+      .shell{padding:12px 14px 24px!important}
+      .top h1{font-size:24px!important}
+      .view .grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+      #viewConteo .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      #viewExterno .grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+      .field.w2{grid-column:span 2!important}
+      .field.w3{grid-column:span 3!important}
+      #cards,#externoCards,#resumenArticuloCards{padding-bottom:8px!important}
+      #cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar,#resumenArticuloCards .mobile-carousel-bar{
+        display:grid!important;
+        grid-template-columns:minmax(110px,1fr) minmax(100px,auto) minmax(110px,1fr)!important;
+        gap:8px!important;
+        top:62px!important;
+        margin:8px 0 10px!important;
+        padding:8px!important;
+        border:1px solid var(--cs-line)!important;
+        border-radius:8px!important;
+        background:var(--cs-surface)!important;
+        box-shadow:var(--cs-shadow-soft)!important;
+        backdrop-filter:none!important;
+        -webkit-backdrop-filter:none!important;
+      }
+      #cards .mobile-carousel-bar .btn,#externoCards .mobile-carousel-bar .btn,#resumenArticuloCards .mobile-carousel-bar .btn{
+        min-height:44px!important;
+        height:44px!important;
+        border-radius:6px!important;
+      }
+      .mobile-progress{min-width:0!important;color:var(--cs-text)!important}
+      .mobile-progress small{color:var(--cs-muted)!important}
+      #cards .mobile-card,#externoCards .mobile-card,#resumenArticuloCards .article-result-card{
+        min-height:0!important;
+        margin:0 0 12px!important;
+        padding:16px!important;
+        border:1px solid var(--cs-line)!important;
+        border-radius:8px!important;
+        background:var(--cs-surface)!important;
+        box-shadow:var(--cs-shadow-soft)!important;
+        text-align:left!important;
+      }
+      #cards .mobile-head,#externoCards .mobile-head{align-items:flex-start!important;text-align:left!important}
+      #cards .mobile-head span,#externoCards .mobile-head span{flex:unset!important}
+      #cards .mobile-article-code,#externoCards .mobile-article-code{font-size:20px!important;color:var(--cs-text)!important}
+      #cards .mobile-article-desc,#externoCards .mobile-article-desc{font-size:16px!important;text-align:left!important;color:var(--cs-text)!important}
+      #cards .mobile-logistics,#externoCards .mobile-logistics{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:0!important;border:1px solid var(--cs-line-soft);border-radius:6px;overflow:hidden}
+      #cards .mobile-logistics span,#externoCards .mobile-logistics span{
+        min-width:0;
+        border:0!important;
+        border-right:1px solid var(--cs-line-soft)!important;
+        border-radius:0!important;
+        background:var(--cs-elev)!important;
+        padding:8px!important;
+      }
+      #cards .mobile-logistics span:last-child,#externoCards .mobile-logistics span:last-child{border-right:0!important}
+      #cards .mobile-logistics strong,#externoCards .mobile-logistics strong{font-size:16px!important;color:var(--cs-text)!important}
+      .mobile-group{
+        margin-top:12px!important;
+        padding:12px 0 0!important;
+        border:0!important;
+        border-top:1px solid var(--cs-line-soft)!important;
+        border-radius:0!important;
+        background:transparent!important;
+      }
+      .mobile-row.five{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}
+      #cards .stock-input,#externoCards .stock-input{height:50px!important;font-size:20px!important;text-align:center!important}
+      .mobile-total{min-height:44px!important;justify-content:center!important;margin-top:12px!important}
+      #viewConteo .save-footer,#viewExterno .save-footer{
+        position:static!important;
+        display:flex!important;
+        flex-direction:row!important;
+        align-items:center!important;
+        margin:12px 0 20px!important;
+        padding:12px!important;
+        border-radius:8px!important;
+      }
+      #viewConteo .save-footer:not(.ready){display:none!important}
+      .save-btn{width:auto!important;min-width:240px!important;min-height:48px!important;border-radius:6px!important}
+      #resumenArticuloCards .article-result-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+      #resumenArticuloCards .article-result-metric{display:block!important;text-align:left!important}
+      #resumenArticuloCards .article-result-value{display:block;margin-top:8px;text-align:left!important}
+    }
+
+    @media(max-width:1024px){
+      .shell{padding:10px 12px 22px!important}
+      .tabs-wrap{display:none!important}
+      .mobile-section-bar{
+        display:grid!important;
+        grid-template-columns:minmax(0,1fr) auto!important;
+        position:sticky!important;
+        top:0!important;
+        left:auto!important;
+        right:auto!important;
+        bottom:auto!important;
+        z-index:75!important;
+        margin:0 0 10px!important;
+        padding:7px!important;
+        border:1px solid var(--cs-line)!important;
+        border-radius:8px!important;
+        background:var(--cs-surface)!important;
+        box-shadow:0 2px 8px rgba(15,23,42,.12)!important;
+        backdrop-filter:none!important;
+        -webkit-backdrop-filter:none!important;
+      }
+      .mobile-section-current{min-height:48px!important;padding:6px 10px!important;background:var(--cs-elev)!important}
+      .mobile-section-current strong{font-size:15px!important}
+      .mobile-section-menu{min-height:48px!important;padding:0 14px!important}
+      #cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar,#resumenArticuloCards .mobile-carousel-bar{top:70px!important}
+      #viewExterno .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      #viewResp .table-wrap,#viewArticulos .table-wrap,#viewAbcMensual .table-wrap{display:none!important}
+      #viewResp .resp-mobile-list,#viewArticulos .articulos-mobile-list,#viewAbcMensual .abc-mobile-list{display:block!important}
+      #viewAbc .table-wrap,#viewPlan .table-wrap{display:block!important;max-height:60vh!important}
+      .dashboard-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      .charts-grid{grid-template-columns:1fr!important}
+    }
+
+    @media(max-width:700px){
+      .shell{padding:8px 8px 18px!important}
+      .top{display:block!important;padding-bottom:10px!important}
+      .top h1{font-size:22px!important}
+      .top .sub{display:none!important}
+      .top>div:last-child{display:grid!important;grid-template-columns:1fr 1fr!important;width:100%!important;margin-top:10px!important}
+      .view .grid,#viewConteo .grid,#viewExterno .grid{grid-template-columns:1fr!important}
+      .field.w2,.field.w3{grid-column:span 1!important}
+      .stats{grid-template-columns:1fr!important}
+      #cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar,#resumenArticuloCards .mobile-carousel-bar{grid-template-columns:1fr auto 1fr!important;top:70px!important}
+      #cards .mobile-carousel-bar .btn,#externoCards .mobile-carousel-bar .btn,#resumenArticuloCards .mobile-carousel-bar .btn{padding:0 9px!important;font-size:12px!important}
+      #cards .mobile-logistics,#externoCards .mobile-logistics{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      #cards .mobile-logistics span:nth-child(2),#externoCards .mobile-logistics span:nth-child(2){border-right:0!important}
+      #cards .mobile-logistics span:nth-child(-n+2),#externoCards .mobile-logistics span:nth-child(-n+2){border-bottom:1px solid var(--cs-line-soft)!important}
+      .mobile-row.five{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+      #viewConteo .save-footer,#viewExterno .save-footer{flex-direction:column!important;align-items:stretch!important}
+      .save-btn{width:100%!important;min-width:0!important}
+      #resumenArticuloCards .article-result-grid{grid-template-columns:1fr!important}
+      .dashboard-grid{grid-template-columns:1fr!important}
+      .modal-overlay{padding:8px!important}
+      .modal-box{border-radius:8px 8px 0 0!important}
+    }
+
+    @media(max-width:430px){
+      .top>div:last-child{grid-template-columns:1fr!important}
+      .mobile-section-current span{display:none!important}
+      .mobile-section-current strong{margin-top:0!important}
+      #cards .mobile-carousel-bar,#externoCards .mobile-carousel-bar,#resumenArticuloCards .mobile-carousel-bar{gap:5px!important;padding:6px!important}
+      #cards .mobile-card,#externoCards .mobile-card,#resumenArticuloCards .article-result-card{padding:12px!important}
+    }
+
+    /* Unified theme hierarchy: brand, semantic states and mobile actions. */
+    .eyebrow{color:var(--cs-accent)!important}
+    .theme-toggle{
+      min-height:44px!important;
+      border:1px solid var(--cs-line)!important;
+      border-radius:6px!important;
+      background:var(--cs-surface-strong)!important;
+      color:var(--cs-text)!important;
+      box-shadow:var(--shadow)!important;
+    }
+    .theme-toggle:hover{background:var(--cs-elev)!important;border-color:var(--cs-accent-border)!important}
+    .theme-toggle:focus-visible{outline:3px solid var(--cs-accent-border)!important;outline-offset:2px!important}
+    :root[data-theme] .btn.primary{
+      background:var(--cs-accent)!important;
+      border-color:var(--cs-accent)!important;
+      color:var(--cs-on-accent)!important;
+    }
+    :root[data-theme] .btn.primary:hover{background:var(--cs-accent-hover)!important;border-color:var(--cs-accent-hover)!important}
+    :root[data-theme] .btn.ok,
+    :root[data-theme] #viewConteo .save-btn,
+    :root[data-theme] #viewExterno .save-btn{
+      background:var(--cs-success)!important;
+      border-color:var(--cs-success)!important;
+      color:var(--cs-on-success)!important;
+    }
+    :root[data-theme] .btn.danger{background:var(--cs-danger-bg)!important;border-color:var(--cs-danger-border)!important;color:var(--cs-danger)!important}
+    :root[data-theme] .btn.danger:hover{filter:brightness(.94)}
+    :root[data-theme] .tab.active{
+      background:var(--cs-accent-bg)!important;
+      border-color:var(--cs-accent-border)!important;
+      color:var(--cs-accent)!important;
+      box-shadow:inset 0 0 0 1px var(--cs-accent-border)!important;
+    }
+    :root[data-theme] #viewConteo .pill,:root[data-theme] .pill{
+      background:var(--cs-surface-strong)!important;
+      border-color:var(--cs-line-soft)!important;
+      color:var(--cs-text)!important;
+    }
+    :root[data-theme] .frescura-pill{
+      background:var(--cs-info-bg)!important;
+      border-color:var(--cs-info-border)!important;
+      color:var(--cs-info)!important;
+    }
+    :root[data-theme] .frescura-pill.ok,:root[data-theme] .status-chip.ok,:root[data-theme] .control-mark{
+      background:var(--cs-success-bg)!important;
+      border-color:var(--cs-success-border)!important;
+      color:var(--cs-success)!important;
+    }
+    :root[data-theme] .frescura-pill.alert,:root[data-theme] .status-chip.pending,.mobile-error,.modal-error{
+      background:var(--cs-danger-bg)!important;
+      border-color:var(--cs-danger-border)!important;
+      color:var(--cs-danger)!important;
+    }
+    :root[data-theme] .time-note,:root[data-theme] .pending-days{
+      background:var(--cs-warning-bg)!important;
+      border-color:var(--cs-warning-border)!important;
+      color:var(--cs-warning)!important;
+    }
+    .pending-days strong{color:var(--cs-warning)!important}
+    .pending-day-chip,.logistic-missing{
+      background:var(--cs-warning-bg)!important;
+      border-color:var(--cs-warning-border)!important;
+      color:var(--cs-warning)!important;
+    }
+    button.pending-day-chip:hover,.logistic-missing:hover{filter:brightness(.94)}
+    :root[data-theme] .abc-a{
+      background:var(--cs-success-bg)!important;
+      border-color:var(--cs-success-border)!important;
+      color:var(--cs-success)!important;
+    }
+    :root[data-theme] .abc-b{
+      background:var(--cs-warning-bg)!important;
+      border-color:var(--cs-warning-border)!important;
+      color:var(--cs-warning)!important;
+    }
+    :root[data-theme] .abc-c{
+      background:var(--cs-danger-bg)!important;
+      border-color:var(--cs-danger-border)!important;
+      color:var(--cs-danger)!important;
+    }
+    .abc-fill-a{background:var(--cs-success)!important}
+    .abc-fill-b{background:var(--cs-warning)!important}
+    .abc-fill-c{background:var(--cs-danger)!important}
+    :root[data-theme] .article-result-metric.bultos{background:var(--cs-info-bg)!important;border-color:var(--cs-info-border)!important}
+    :root[data-theme] .article-result-metric.unidades{background:var(--cs-success-bg)!important;border-color:var(--cs-success-border)!important}
+    :root[data-theme] .article-result-metric.controles{background:var(--cs-warning-bg)!important;border-color:var(--cs-warning-border)!important}
+    :root[data-theme] #viewConteo .save-footer,
+    :root[data-theme] #viewExterno .save-footer{
+      background:var(--cs-surface)!important;
+      border-color:var(--cs-success-border)!important;
+      color:var(--cs-text)!important;
+    }
+    :root[data-theme] .table-wrap tr:hover td{background:var(--cs-accent-bg)!important}
+    :root[data-theme] .mobile-group{background:transparent!important;border-color:var(--cs-line-soft)!important}
+    #mobileSectionBar .mobile-section-menu,.section-sheet-item.active{
+      background:var(--cs-accent)!important;
+      border-color:var(--cs-accent)!important;
+      color:var(--cs-on-accent)!important;
+    }
+    .section-sheet-item.active span{color:var(--cs-on-accent)!important;opacity:.78}
+    :root[data-theme] #cards .mobile-carousel-bar,
+    :root[data-theme] #externoCards .mobile-carousel-bar,
+    :root[data-theme] #resumenArticuloCards .mobile-carousel-bar,
+    :root[data-theme] #cards .mobile-card,
+    :root[data-theme] #externoCards .mobile-card,
+    :root[data-theme] #resumenArticuloCards .article-result-card{
+      background:var(--cs-surface)!important;
+      border-color:var(--cs-line)!important;
+      color:var(--cs-text)!important;
+    }
+    :root[data-theme] #cards .mobile-carousel-bar .btn.prev,
+    :root[data-theme] #externoCards .mobile-carousel-bar .btn.prev,
+    :root[data-theme] #resumenArticuloCards .mobile-carousel-bar .btn.prev{
+      background:var(--cs-surface-strong)!important;
+      border-color:var(--cs-line)!important;
+      color:var(--cs-text)!important;
+    }
+    :root[data-theme] #cards .mobile-carousel-bar .btn.next,
+    :root[data-theme] #externoCards .mobile-carousel-bar .btn.next,
+    :root[data-theme] #resumenArticuloCards .mobile-carousel-bar .btn.next{
+      background:var(--cs-accent)!important;
+      border-color:var(--cs-accent)!important;
+      color:var(--cs-on-accent)!important;
+    }
+    :root[data-theme] #cards .mobile-progress,
+    :root[data-theme] #externoCards .mobile-progress,
+    :root[data-theme] #resumenArticuloCards .mobile-progress,
+    :root[data-theme] #cards .mobile-article-code,
+    :root[data-theme] #externoCards .mobile-article-code,
+    :root[data-theme] #cards .mobile-article-desc,
+    :root[data-theme] #externoCards .mobile-article-desc{
+      color:var(--cs-text)!important;
+    }
+    :root[data-theme] #cards .mobile-progress small,
+    :root[data-theme] #externoCards .mobile-progress small,
+    :root[data-theme] #resumenArticuloCards .mobile-progress small,
+    :root[data-theme] #cards .mobile-article-route,
+    :root[data-theme] #externoCards .mobile-article-route{
+      color:var(--cs-muted)!important;
+    }
+    :root[data-theme] #cards .stock-input,
+    :root[data-theme] #externoCards .stock-input{
+      background:var(--cs-surface-strong)!important;
+      border-color:var(--cs-line)!important;
+      color:var(--cs-text)!important;
+    }
+    .status{
+      display:flex!important;
+      align-items:flex-start;
+      gap:10px;
+      min-height:44px!important;
+      margin:10px 2px 12px!important;
+      padding:10px 12px!important;
+      border:1px solid var(--cs-info-border)!important;
+      border-radius:7px!important;
+      background:var(--cs-info-bg)!important;
+      color:var(--cs-info)!important;
+      font-family:inherit!important;
+      font-size:13px!important;
+      font-weight:650;
+      line-height:1.45!important;
+      overflow-wrap:anywhere;
+    }
+    .status:empty{display:none!important}
+    .status::before{
+      content:"i";
+      display:grid;
+      flex:0 0 20px;
+      width:20px;
+      height:20px;
+      place-items:center;
+      margin-top:0;
+      border:1px solid currentColor;
+      border-radius:50%;
+      font-size:12px;
+      font-weight:900;
+      line-height:1;
+    }
+    .status[data-tone="loading"]{background:var(--cs-info-bg)!important;border-color:var(--cs-info-border)!important;color:var(--cs-info)!important}
+    .status[data-tone="loading"]::before{
+      content:"";
+      box-sizing:border-box;
+      border:2px solid var(--cs-info-border);
+      border-top-color:var(--cs-info);
+      animation:status-spin .8s linear infinite;
+    }
+    .status[data-tone="success"]{background:var(--cs-success-bg)!important;border-color:var(--cs-success-border)!important;color:var(--cs-success)!important}
+    .status[data-tone="success"]::before{content:"\2713"}
+    .status[data-tone="warning"]{background:var(--cs-warning-bg)!important;border-color:var(--cs-warning-border)!important;color:var(--cs-warning)!important}
+    .status[data-tone="warning"]::before{content:"!"}
+    .status[data-tone="error"]{background:var(--cs-danger-bg)!important;border-color:var(--cs-danger-border)!important;color:var(--cs-danger)!important}
+    .status[data-tone="error"]::before{content:"\00d7";font-size:17px}
+    @keyframes status-spin{to{transform:rotate(360deg)}}
+    @media(prefers-reduced-motion:reduce){.status[data-tone="loading"]::before{animation:none}}
+    .modal-feedback-head{
+      display:grid;
+      grid-template-columns:38px minmax(0,1fr);
+      gap:12px;
+      align-items:center;
+      padding:18px 18px 0;
+    }
+    .modal-feedback-head .modal-title{padding:0;color:var(--cs-text)!important;letter-spacing:0}
+    .modal-feedback-icon{
+      display:grid;
+      width:38px;
+      height:38px;
+      place-items:center;
+      border:1px solid var(--cs-info-border);
+      border-radius:50%;
+      background:var(--cs-info-bg);
+      color:var(--cs-info);
+      font-size:18px;
+      font-weight:900;
+    }
+    .modal-feedback-head.tone-success .modal-feedback-icon{background:var(--cs-success-bg);border-color:var(--cs-success-border);color:var(--cs-success)}
+    .modal-feedback-head.tone-warning .modal-feedback-icon{background:var(--cs-warning-bg);border-color:var(--cs-warning-border);color:var(--cs-warning)}
+    .modal-feedback-head.tone-error .modal-feedback-icon{background:var(--cs-danger-bg);border-color:var(--cs-danger-border);color:var(--cs-danger)}
+    .modal-message{padding-top:12px!important;color:var(--cs-text)!important;font-size:14px;line-height:1.55;overflow-wrap:anywhere}
+    @media(max-width:1024px){
+      .shell{padding-bottom:calc(72px + env(safe-area-inset-bottom))!important}
+    }
+    @media(max-width:700px){
+      .status{margin:8px 0 10px!important;padding:10px!important;font-size:13px!important}
+      .modal-feedback-head{padding:16px 16px 0}
+      .modal-message{padding:12px 16px!important}
+    }
+    @media(max-width:430px){
+      .theme-toggle{width:44px!important;min-width:44px!important;padding:0!important}
+      .theme-toggle span:last-child{display:none!important}
+    }
 </style>
 </head>
 <body>
@@ -596,7 +1142,7 @@
       <div class="sub">ABC generado con ventas del mes anterior. La planilla se filtra por semana y día para contar stock.</div>
     </div>
     <div>
-      <button class="btn primary" onclick="loadPlanilla()">Actualizar planilla</button>
+      <button class="btn primary" type="button" onclick="openTab('conteo')">Abrir conteo</button>
       <a class="btn" href="/portal" title="Volver al inicio del portal">Inicio portal</a>
     </div>
   </header>
@@ -617,11 +1163,11 @@
   <div class="tabs-fade right" id="tabsFadeRight"></div>
   </div>
   <div class="mobile-section-bar" id="mobileSectionBar">
-    <button class="mobile-section-current" type="button" onclick="abrirSeccionesMobile()">
+    <button class="mobile-section-current" type="button" onclick="abrirSeccionesMobile()" aria-haspopup="dialog">
       <span>Solapa actual</span>
       <strong id="mobileSectionLabel">Analisis ABC</strong>
     </button>
-    <button class="mobile-section-menu" type="button" onclick="abrirSeccionesMobile()" aria-label="Cambiar solapa">Cambiar</button>
+    <button class="mobile-section-menu" type="button" onclick="abrirSeccionesMobile()" aria-haspopup="dialog" aria-label="Cambiar solapa">Cambiar</button>
   </div>
 
   <section class="view active" id="viewAbc" role="tabpanel" aria-labelledby="tabAbc">
@@ -637,7 +1183,7 @@
         <span class="pill" id="aBultos">Bultos: -</span>
       </div>
     </section>
-    <div class="status" id="abcStatus">Cargando...</div>
+    <div class="status" id="abcStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap">
       <table>
         <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>Stock-SI</th><th>Activo</th><th>Movil</th><th>Anulado</th><th>Bultos</th><th>%Peso</th><th>%Acum</th><th>ABC</th><th>Semana1</th><th>Semana2</th><th>Semana3</th><th>Semana4</th><th>Lunes</th><th>Martes</th><th>Miercoles</th><th>Jueves</th><th>Viernes</th><th>Participa</th><th>Status</th></tr></thead>
@@ -659,7 +1205,7 @@
         <span class="pill" id="plControles">Controles: -</span>
       </div>
     </section>
-    <div class="status" id="planStatus">Cargando...</div>
+    <div class="status" id="planStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap" style="max-height:none">
       <table>
         <thead><tr><th>Descripcion</th><th>Total</th><th>Frecuencia</th><th>Participacion</th></tr></thead>
@@ -705,8 +1251,8 @@
   </section>
 
   <div class="time-note">El horario de inicio se registra con la primera cantidad cargada. El horario final se registra al tocar “Guardar control y finalizar”.</div>
-  <div class="pending-days" id="pendingDays"></div>
-  <div class="status" id="status">Cargando...</div>
+  <div class="pending-days" id="pendingDays" role="status" aria-live="polite"></div>
+  <div class="status" id="status" role="status" aria-live="polite">Cargando...</div>
   <section class="table-wrap">
     <table>
       <thead><tr><th>Artículo</th><th>Descripción</th><th>ABC</th><th>Semana</th><th>Día</th><th>Stock</th><th>Diferencia</th><th>Observación</th><th>Bultos mes</th><th>%Peso</th></tr></thead>
@@ -717,7 +1263,7 @@
   <section class="save-footer">
     <div>
       <div class="save-title">Finalizar control</div>
-      <div class="save-sub" id="saveFooterSummary">Revisá las cantidades antes de guardar.</div>
+      <div class="save-sub" id="saveFooterSummary" aria-live="polite">Revisá las cantidades antes de guardar.</div>
     </div>
     <button class="btn ok save-btn" id="guardarConteoBtn" onclick="guardarConteo()">Guardar control y finalizar</button>
   </section>
@@ -742,7 +1288,7 @@
       </div>
     </section>
     <div class="time-note">Control aleatorio para personas externas al sector. El stock esperado de Frescura no se muestra; si hay dispersion, se pide revisar antes de guardar.</div>
-    <div class="status" id="externoStatus">Genera un sorteo para comenzar.</div>
+    <div class="status" id="externoStatus" role="status" aria-live="polite">Genera un sorteo para comenzar.</div>
     <section class="table-wrap" id="externoTableWrap">
       <table>
         <thead><tr><th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th></tr></thead>
@@ -753,7 +1299,7 @@
     <section class="save-footer ready">
       <div>
         <div class="save-title">Finalizar control externo</div>
-        <div class="save-sub" id="externoFooterSummary">Genera el sorteo y carga todos los articulos.</div>
+        <div class="save-sub" id="externoFooterSummary" aria-live="polite">Genera el sorteo y carga todos los articulos.</div>
       </div>
       <button class="btn ok save-btn" id="guardarExternoBtn" onclick="guardarControlExterno()">Guardar control externo</button>
     </section>
@@ -774,7 +1320,7 @@
         <span class="pill" id="raTotal">Total: 0 bultos con 0 unidades</span>
       </div>
     </section>
-    <div class="status" id="resumenArticuloStatus">Cargando...</div>
+    <div class="status" id="resumenArticuloStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap" style="max-height:none">
       <table>
         <thead><tr><th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Responsable</th><th>Controles</th><th>Total bultos</th><th>Total unidades</th><th>Accion</th></tr></thead>
@@ -792,7 +1338,7 @@
         <div class="field"><label>Accion</label><button class="btn primary" onclick="loadResumenMensual()">Actualizar resumen</button></div>
       </div>
     </section>
-    <div class="status" id="resumenStatus">Cargando...</div>
+    <div class="status" id="resumenStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="dashboard-grid" id="resumenKpis">
       <article class="kpi-card"><div class="kpi-label">Controles reales</div><div class="kpi-value" id="kpiControles">0</div><div class="kpi-note">guardados en el mes</div></article>
       <article class="kpi-card"><div class="kpi-label">Articulos contados</div><div class="kpi-value" id="kpiArticulos">0</div><div class="kpi-note">suma de items controlados</div></article>
@@ -855,7 +1401,7 @@
         <span class="pill" id="acPendientes">Pendientes: -</span>
       </div>
     </section>
-    <div class="status" id="articulosStatus">Cargando...</div>
+    <div class="status" id="articulosStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap articulos-table" style="max-height:none">
       <table>
         <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>ABC</th><th>Bultos mes</th><th>Control 1</th><th>Control 2</th><th>Control 3</th><th>Control 4</th><th>Veces</th><th>Estado</th></tr></thead>
@@ -879,7 +1425,7 @@
         <span class="pill" id="amCambios">Con cambios: -</span>
       </div>
     </section>
-    <div class="status" id="abcMensualStatus">Cargando...</div>
+    <div class="status" id="abcMensualStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap abc-mensual-table" style="max-height:none">
       <table>
         <thead><tr><th>Articulo</th><th>Descripcion</th><th>Negocio</th><th>Tipo producto</th><th>Ene</th><th>Feb</th><th>Mar</th><th>Abr</th><th>May</th><th>Jun</th><th>Jul</th><th>Ago</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dic</th><th>Observaciones</th></tr></thead>
@@ -897,7 +1443,7 @@
         <div class="field"><label>Accion</label><button class="btn primary" onclick="guardarResponsable()">Agregar / activar</button></div>
       </div>
     </section>
-    <div class="status" id="respStatus">Cargando...</div>
+    <div class="status" id="respStatus" role="status" aria-live="polite">Cargando...</div>
     <section class="table-wrap" style="max-height:none">
       <table><thead><tr><th>Responsable</th><th>Estado</th><th>Accion</th></tr></thead><tbody id="respBody"></tbody></table>
     </section>
@@ -919,7 +1465,7 @@ let articulosLoaded = false;
 let abcMensualLoaded = false;
 let respLoaded = false;
 let activeTab = 'abc';
-let planillaStale = false;
+let planillaStale = true;
 let mobileIndex = 0;
 let resumenArticuloIndex = 0;
 let conteoGuardado = false;
@@ -943,19 +1489,48 @@ const STOCK_TABS=[
 ];
 function esc(v){return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function themeVar(name,fallback){return getComputedStyle(document.documentElement).getPropertyValue(name).trim()||fallback}
+function statusToneFromText(message){
+  const text=String(message||'').trim().toLowerCase();
+  if(!text) return '';
+  if(/^(error|no se pudo)|fall[oó]|duplicad|inv[aá]lid|error desconocido/.test(text)) return 'error';
+  if(/cargando|generando|guardando|validando|consultando|actualizando|activando|desactivando/.test(text)) return 'loading';
+  if(/faltan?|pendiente|revis|recont|atenci[oó]n|sin datos|primero|ingres[aá]|seleccion|no hay|no se encontr|acci[oó]n requerida|incomplet|diferencia importante|dispersi[oó]n|ya fue guardad/.test(text)) return 'warning';
+  if(/guardad|correctamente|generad|cargad|actualizad|\blist[oa]s?\b|filas|controles reales|responsables/.test(text)) return 'success';
+  return 'info';
+}
+function updateStatusTone(element){
+  const tone=statusToneFromText(element.textContent);
+  if(!tone){element.removeAttribute('data-tone');return}
+  element.dataset.tone=tone;
+  element.setAttribute('aria-live',tone==='error'?'assertive':'polite');
+}
+document.querySelectorAll('.status').forEach(element=>{
+  updateStatusTone(element);
+  new MutationObserver(()=>updateStatusTone(element)).observe(element,{childList:true,characterData:true,subtree:true});
+});
+function feedbackMeta(message,{title='',tone=''}={}){
+  const resolvedTone=tone||statusToneFromText(message)||'info';
+  const titles={success:'Acción completada',warning:'Revisión necesaria',error:'No se pudo completar',info:'Información'};
+  const icons={success:'\u2713',warning:'!',error:'\u00d7',info:'i'};
+  return {tone:resolvedTone,title:title||titles[resolvedTone]||titles.info,icon:icons[resolvedTone]||icons.info};
+}
+function modalFeedbackHeader(message,options={}){
+  const meta=feedbackMeta(message,options);
+  return `<div class="modal-feedback-head tone-${meta.tone}"><span class="modal-feedback-icon" aria-hidden="true">${meta.icon}</span><div class="modal-title" id="modalFeedbackTitle">${esc(meta.title)}</div></div>`;
+}
 function closeModal(){modalOverlay.classList.remove('open');modalOverlay.innerHTML='';document.body.style.overflow=''}
-function modalAlert(message,okText='Entendido'){
+function modalAlert(message,okText='Entendido',options={}){
   return new Promise(resolve=>{
-    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true"><div class="modal-body">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
+    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="modalFeedbackTitle" aria-describedby="modalFeedbackMessage">${modalFeedbackHeader(message,options)}<div class="modal-body modal-message" id="modalFeedbackMessage">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
     modalOverlay.classList.add('open');document.body.style.overflow='hidden';
     const btn=document.getElementById('modalOkBtn');
     btn.onclick=()=>{closeModal();resolve()};
     btn.focus();
   });
 }
-function modalConfirm(message,{okText='Confirmar',cancelText='Cancelar'}={}){
+function modalConfirm(message,{okText='Confirmar',cancelText='Cancelar',title='Confirmar acción',tone='warning'}={}){
   return new Promise(resolve=>{
-    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true"><div class="modal-body">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn" id="modalCancelBtn">${esc(cancelText)}</button><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
+    modalOverlay.innerHTML=`<div class="modal-box" role="alertdialog" aria-modal="true" aria-labelledby="modalFeedbackTitle" aria-describedby="modalFeedbackMessage">${modalFeedbackHeader(message,{title,tone})}<div class="modal-body modal-message" id="modalFeedbackMessage">${esc(message).replace(/\n/g,'<br>')}</div><div class="modal-actions"><button class="btn" id="modalCancelBtn">${esc(cancelText)}</button><button class="btn primary" id="modalOkBtn">${esc(okText)}</button></div></div>`;
     modalOverlay.classList.add('open');document.body.style.overflow='hidden';
     const cleanup=val=>{closeModal();resolve(val)};
     document.getElementById('modalCancelBtn').onclick=()=>cleanup(false);
@@ -1010,6 +1585,23 @@ function updateTabsFade(){
 }
 tabsNav.addEventListener('scroll', updateTabsFade, {passive:true});
 window.addEventListener('resize', updateTabsFade);
+tabsNav.addEventListener('keydown',e=>{
+  if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
+  const tabs=[...tabsNav.querySelectorAll('.tab')];
+  const current=Math.max(0,tabs.indexOf(document.activeElement));
+  let next=current;
+  if(e.key==='ArrowRight') next=(current+1)%tabs.length;
+  if(e.key==='ArrowLeft') next=(current-1+tabs.length)%tabs.length;
+  if(e.key==='Home') next=0;
+  if(e.key==='End') next=tabs.length-1;
+  e.preventDefault();
+  tabs[next].focus();
+  openTab(tabs[next].id.replace(/^tab/,'').replace(/^./,c=>c.toLowerCase()));
+});
+window.addEventListener('hashchange',()=>{
+  const requested=location.hash.slice(1);
+  if(STOCK_TABS.some(tab=>tab.name===requested)) openTab(requested,{updateHash:false});
+});
 new MutationObserver(()=>{if(resumenLoaded) loadResumenMensual()}).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
 async function cargarSucursales(){
   try{
@@ -1104,7 +1696,7 @@ function logisticaAviso(data, rows){
   const incompletos=Number(info.incompletos||0);
   if(!incompletos) return '';
   const total=Number(info.total_articulos||rows?.length||0);
-  return ` | Logistica incompleta: ${fmt.format(incompletos)} de ${fmt.format(total)} articulos sin pisos o bultos/piso. Cargar "Datos faltantes de articulos" para completarlo.`;
+  return ` Logística incompleta: ${fmt.format(incompletos)} de ${fmt.format(total)} artículos sin pisos o bultos por piso. Completá "Datos faltantes de artículos" antes de guardar.`;
 }
 function articuloActual(id){
   return [...currentRows,...externalRows].find(r=>String(r.id_articulo)===String(id));
@@ -1142,7 +1734,7 @@ function abrirModalLogistica(idArticulo){
       const data=await res.json();
       if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo guardar');
       closeModal();
-      status.textContent='Datos logisticos guardados. Actualizando planilla...';
+      status.textContent='Datos logísticos guardados. Actualizando la planilla...';
       if(activeTab==='externo'&&externalRows.length){
         externalRows=externalRows.map(r=>String(r.id_articulo)===String(row.id_articulo)?{...r,...data.data}:r);
         renderControlExterno();
@@ -1253,8 +1845,10 @@ function syncSucursal(origin){
   };
   tabLoaders[activeTab]?.();
 }
-function openTab(name){
+function openTab(name,{updateHash=true}={}){
+  if(!STOCK_TABS.some(tab=>tab.name===name)) return;
   activeTab=name;
+  if(updateHash&&location.hash!==`#${name}`) history.replaceState(null,'',`#${name}`);
   tabAbc.classList.toggle('active', name==='abc');
   tabPlan.classList.toggle('active', name==='plan');
   tabConteo.classList.toggle('active', name==='conteo');
@@ -1265,7 +1859,11 @@ function openTab(name){
   tabAbcMensual.classList.toggle('active', name==='abcMensual');
   tabResp.classList.toggle('active', name==='resp');
   updateMobileSectionLabel();
-  document.querySelectorAll('#tabsNav .tab').forEach(btn=>btn.setAttribute('aria-selected', btn.classList.contains('active')?'true':'false'));
+  document.querySelectorAll('#tabsNav .tab').forEach(btn=>{
+    const selected=btn.classList.contains('active');
+    btn.setAttribute('aria-selected',selected?'true':'false');
+    btn.setAttribute('tabindex',selected?'0':'-1');
+  });
   document.getElementById('tab'+name[0].toUpperCase()+name.slice(1))?.scrollIntoView({inline:'center',block:'nearest',behavior:'smooth'});
   setTimeout(updateTabsFade,220);
   viewAbc.classList.toggle('active', name==='abc');
@@ -1280,7 +1878,7 @@ function openTab(name){
   if(name==='abc' && !abcLoaded) loadAbc();
   if(name==='plan' && !planLoaded) loadPlanificacion();
   if(name==='resumen' && !resumenLoaded) loadResumenMensual();
-  if(name==='resumenArticulo' && !resumenArticuloLoaded) loadResumenArticulo();
+  if(name==='resumenArticulo' && !resumenArticuloLoaded) loadResponsables().then(()=>loadResumenArticulo());
   if(name==='articulos' && !articulosLoaded) loadArticulosControlados();
   if(name==='abcMensual' && !abcMensualLoaded) loadAbcMensual();
   if(name==='resp' && !respLoaded) loadResponsables();
@@ -1305,7 +1903,7 @@ async function loadAbc(){
     <td>${esc(r.lunes)}</td><td>${esc(r.martes)}</td><td>${esc(r.miercoles)}</td><td>${esc(r.jueves)}</td><td>${esc(r.viernes)}</td>
     <td>${esc(r.participa)}</td><td>${esc(r.status)}</td>
   </tr>`).join('');
-  abcStatus.textContent=`${(data.rows||[]).length} filas`;
+  abcStatus.textContent=`Análisis ABC actualizado: ${(data.rows||[]).length} artículos procesados.`;
   abcLoaded = true;
 }
 async function loadPlanificacion(){
@@ -1335,7 +1933,7 @@ async function loadPlanificacion(){
   const pd=data.por_semana_dia||{}, days=['Lunes','Martes','Miercoles','Jueves','Viernes'];
   const weekRows=['SEMANA1','SEMANA2','SEMANA3','SEMANA4'].map(s=>`<tr><td>${s}</td>${days.map(d=>`<td class="num">${fmt.format((pd[s]||{})[d]||0)}</td>`).join('')}</tr>`).join('');
   planDias.innerHTML=weekRows+`<tr><td>Totales</td>${days.map(d=>`<td class="num">${fmt.format((data.totales_dia||{})[d]||0)}</td>`).join('')}</tr>`;
-  planStatus.textContent='Planificacion cargada';
+  planStatus.textContent='Planificación actualizada correctamente.';
   planLoaded=true;
 }
 async function loadResumenMensual(){
@@ -1388,7 +1986,7 @@ async function loadResumenMensual(){
     </div>
     <details><summary>Ver articulos</summary><pre>${esc(r.articulos_detalle||'')}</pre></details>
   </article>`).join('');
-  resumenStatus.textContent=`${totalControles} controles reales · ${fmt.format(totalArticulos)} articulos · ${fmt.format(porControlador.length)} responsables`;
+  resumenStatus.textContent=`Resumen actualizado: ${totalControles} controles, ${fmt.format(totalArticulos)} artículos y ${fmt.format(porControlador.length)} responsables.`;
   resumenLoaded=true;
 }
 async function loadResumenArticulo(){
@@ -1417,7 +2015,7 @@ async function loadResumenArticulo(){
     <td><button class="btn" onclick="editarResumenArticulo(${r.id_articulo})">Editar</button></td>
   </tr>`).join('');
   renderResumenArticuloCards();
-  resumenArticuloStatus.textContent=rows.length?`${rows.length} articulos controlados`:'Sin datos para los filtros seleccionados';
+  resumenArticuloStatus.textContent=rows.length?`Resumen actualizado: ${rows.length} artículos controlados.`:'Sin datos para los filtros seleccionados. Probá otra fecha, sucursal o responsable.';
   resumenArticuloLoaded=true;
 }
 function renderResumenArticuloCards(){
@@ -1425,12 +2023,12 @@ function renderResumenArticuloCards(){
   const compact=isMobileConteo();
   const visibleRows=compact?[resumenArticuloRows[Math.min(resumenArticuloIndex,resumenArticuloRows.length-1)]]:resumenArticuloRows;
   const bar=compact?`<div class="mobile-carousel-bar">
-    <button class="btn prev" onclick="resumenArticuloPrev()">Anterior</button>
-    <div class="mobile-progress">
+    <button type="button" class="btn prev" onclick="resumenArticuloPrev()" aria-label="Artículo anterior" ${resumenArticuloIndex===0?'disabled':''}>Anterior</button>
+    <button type="button" class="mobile-progress" onclick="abrirListaResumenArticulo()" title="Ver todos los artículos y saltar a uno" aria-label="Ver lista del resumen por artículo">
       <span>${Math.min(resumenArticuloIndex+1,resumenArticuloRows.length)} / ${resumenArticuloRows.length}</span>
-      <small>Resumen por articulo</small>
-    </div>
-    <button class="btn next" onclick="resumenArticuloNext()">Siguiente</button>
+      <small>Ver lista de artículos</small>
+    </button>
+    <button type="button" class="btn next" onclick="resumenArticuloNext()" aria-label="Artículo siguiente" ${resumenArticuloIndex===resumenArticuloRows.length-1?'disabled':''}>Siguiente</button>
   </div>`:'';
   resumenArticuloCards.innerHTML=bar+visibleRows.map(r=>`<article class="article-result-card">
     <div class="article-result-head"><span>${esc(r.id_articulo)}</span><span class="abc-badge abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</span></div>
@@ -1442,6 +2040,27 @@ function renderResumenArticuloCards(){
     </div>
     <button class="btn primary" style="width:100%;margin-top:10px" onclick="editarResumenArticulo(${r.id_articulo})">Editar control finalizado</button>
   </article>`).join('');
+}
+function abrirListaResumenArticulo(){
+  if(!resumenArticuloRows.length) return;
+  const itemsHtml=resumenArticuloRows.map((r,i)=>`<button type="button" class="modal-list-item ${i===resumenArticuloIndex?'current':''}" data-idx="${i}">
+    <span class="modal-list-code">${esc(r.id_articulo)} <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span>
+    <span class="modal-list-status ok">${fmt.format(r.controles||0)} control(es)</span>
+    <span class="modal-list-desc">${esc(r.descripcion)}</span>
+  </button>`).join('');
+  modalOverlay.innerHTML=`<div class="modal-box" role="dialog" aria-modal="true">
+    <div class="modal-title">Resumen por artículo · ${resumenArticuloRows.length} artículos</div>
+    <div class="modal-body modal-list">${itemsHtml}</div>
+    <div class="modal-actions"><button class="btn" id="modalCancelBtn">Cerrar</button></div>
+  </div>`;
+  modalOverlay.classList.add('open');document.body.style.overflow='hidden';
+  modalOverlay.querySelectorAll('.modal-list-item').forEach(btn=>btn.addEventListener('click',()=>{
+    resumenArticuloIndex=Number(btn.dataset.idx);
+    closeModal();
+    renderResumenArticuloCards();
+  }));
+  document.getElementById('modalCancelBtn').onclick=closeModal;
+  modalOverlay.querySelector('.modal-list-item.current')?.scrollIntoView({block:'center'});
 }
 function resumenArticuloPrev(){
   if(resumenArticuloIndex>0){resumenArticuloIndex--;renderResumenArticuloCards()}
@@ -1595,7 +2214,7 @@ async function loadArticulosControlados(){
     </div>
     <div class="articulos-card-foot"><span>${fmt.format(r.bultos||0)} bultos mes</span><span>${fmt.format(r.controles||0)} veces</span></div>
   </article>`).join('');
-  articulosStatus.textContent=`${(data.rows||[]).length} articulos`;
+  articulosStatus.textContent=`Seguimiento actualizado: ${(data.rows||[]).length} artículos.`;
   articulosLoaded=true;
 }
 async function loadAbcMensual(){
@@ -1611,7 +2230,7 @@ async function loadAbcMensual(){
   amTotal.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
   amCambios.textContent=`Con cambios: ${fmt.format(data.articulos_con_cambios||0)}`;
   renderAbcMensual();
-  abcMensualStatus.textContent=`${abcMensualRows.length} articulos`;
+  abcMensualStatus.textContent=`ABC mensual actualizado: ${abcMensualRows.length} artículos.`;
   abcMensualLoaded=true;
 }
 function renderAbcMensual(){
@@ -1634,7 +2253,7 @@ function renderAbcMensual(){
     </div>
     <div class="abc-mobile-obs">${esc(r.observaciones||'')}</div>
   </article>`).join('');
-  abcMensualStatus.textContent=`${rows.length} de ${abcMensualRows.length} articulos`;
+  abcMensualStatus.textContent=`Mostrando ${rows.length} de ${abcMensualRows.length} artículos.`;
 }
 async function loadResponsables(){
   respStatus.textContent='Cargando responsables...';
@@ -1655,21 +2274,22 @@ async function loadResponsables(){
   const keepResumenArticulo=responsableResumenArticulo.value||'';
   responsableResumenArticulo.innerHTML='<option value="">Todos los responsables</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
   responsableResumenArticulo.value=rows.some(r=>r.activo&&r.nombre===keepResumenArticulo)?keepResumenArticulo:'';
-  respBody.innerHTML=adminMode ? rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('') : respBody.innerHTML;
+  respBody.innerHTML=adminMode ? rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn ${r.activo?'danger':''}" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('') : respBody.innerHTML;
   respCards.innerHTML=adminMode ? rows.map(r=>`<article class="resp-card">
     <div class="resp-card-head"><span>${esc(r.nombre)}</span></div>
     <div class="resp-card-status">${r.activo?'Activo':'Inactivo'}</div>
     <div class="resp-card-actions">
       <button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button>
-      <button class="btn" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button>
+      <button class="btn ${r.activo?'danger':''}" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button>
     </div>
   </article>`).join('') : respCards.innerHTML;
-  respStatus.textContent=`${rows.length} responsables · ${sucursalObjetivo==='2'?'Dolores':'Casa Central'}`;
+  respStatus.textContent=`Responsables actualizados: ${rows.length} en ${sucursalObjetivo==='2'?'Dolores':'Casa Central'}.`;
   respLoaded=true;
 }
 async function guardarResponsable(){
   const nombre=respNombre.value.trim();
-  if(!nombre){respStatus.textContent='Ingresá un nombre';return}
+  if(!nombre){respStatus.textContent='Ingresá el nombre del responsable antes de guardar.';return}
+  respStatus.textContent='Guardando responsable...';
   const res=await fetch('/api/control-stock/responsables',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sucursal:sucursalResp.value,nombre,activo:true})});
   const data=await res.json();
   if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
@@ -1682,7 +2302,8 @@ async function editarResponsable(id,nombreActual){
   const nombre=await modalPromptText('Editar responsable','Nombre del responsable',nombreActual);
   if(nombre===null) return;
   const limpio=nombre.trim();
-  if(!limpio){respStatus.textContent='El nombre no puede quedar vacio';return}
+  if(!limpio){respStatus.textContent='El nombre del responsable no puede quedar vacío.';return}
+  respStatus.textContent='Actualizando responsable...';
   const res=await fetch('/api/control-stock/responsables/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({nombre:limpio})});
   const data=await res.json();
   if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo actualizar');return}
@@ -1690,6 +2311,7 @@ async function editarResponsable(id,nombreActual){
   await loadResponsables();
 }
 async function toggleResponsable(id,activo){
+  respStatus.textContent=activo?'Activando responsable...':'Desactivando responsable...';
   const res=await fetch('/api/control-stock/responsables/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({activo})});
   const data=await res.json();
   if(!res.ok||data.ok===false){respStatus.textContent='Error: '+(data.error||'No se pudo actualizar');return}
@@ -1754,7 +2376,15 @@ function actualizarTotales(markTime=true){
   if(markTime) guardarBorradorLocal();
 }
 function updateDiffCount(){actualizarTotales()}
-function isMobileConteo(){return window.matchMedia('(max-width: 1280px)').matches}
+const conteoCompactQuery=window.matchMedia('(max-width: 1280px)');
+function isMobileConteo(){return conteoCompactQuery.matches}
+function refreshResponsiveStockViews(){
+  if(currentRows.length) renderMobileCards();
+  if(externalRows.length) renderControlExterno();
+  if(resumenArticuloRows.length) renderResumenArticuloCards();
+}
+if(conteoCompactQuery.addEventListener) conteoCompactQuery.addEventListener('change',refreshResponsiveStockViews);
+else conteoCompactQuery.addListener(refreshResponsiveStockViews);
 function rowTouched(row){
   const a=cantidadInputs(row.id_articulo);
   const b=cantidadInputs(String(row.id_articulo)+'m');
@@ -1792,12 +2422,12 @@ function renderMobileCards(){
   const visibleRows=isMobileConteo()? [currentRows[Math.min(mobileIndex,currentRows.length-1)]] : currentRows;
   const cargados=currentRows.filter(rowTouched).length;
   const bar=isMobileConteo()?`<div class="mobile-carousel-bar">
-    <button class="btn prev" onclick="mobilePrev()">Anterior</button>
-    <button type="button" class="mobile-progress" onclick="abrirListaArticulosConteo()" title="Ver todos los articulos y saltar a uno">
+    <button type="button" class="btn prev" onclick="mobilePrev()" aria-label="Artículo anterior" ${mobileIndex===0?'disabled':''}>Anterior</button>
+    <button type="button" class="mobile-progress" onclick="abrirListaArticulosConteo()" title="Ver todos los articulos y saltar a uno" aria-label="Ver lista de artículos del control">
       <span>${Math.min(mobileIndex+1,currentRows.length)} / ${currentRows.length}</span>
       <small>${cargados} cargados · ver lista</small>
     </button>
-    <button class="btn next" onclick="mobileNext()">Siguiente</button>
+    <button type="button" class="btn next" onclick="mobileNext()" aria-label="Artículo siguiente" ${mobileIndex===currentRows.length-1?'disabled':''}>Siguiente</button>
   </div>`:'';
   cards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
@@ -1945,24 +2575,24 @@ function externalMobileNext(){
 }
 function renderControlExterno(){
   document.querySelector('#viewExterno thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
-  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td><td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td><td class="num">${logVal(r.pisos,r,'pisos')}</td><td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
+  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td><td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td><td class="num">${logVal(r.pisos,r,'pisos')}</td><td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" data-ext-cant="${r.id_articulo}-${n}" value="${esc(externalDraft.values?.[String(r.id_articulo)+'-'+n]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Unidades sueltas" data-ext-unid="${r.id_articulo}" value="${esc(externalDraft.unidades?.[r.id_articulo]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
   const visibleRows=isMobileConteo()? [externalRows[Math.min(mobileIndex,externalRows.length-1)]].filter(Boolean) : externalRows;
   const cargados=externalRows.filter(externalRowTouched).length;
   const bar=isMobileConteo()&&externalRows.length?`<div class="mobile-carousel-bar">
-    <button class="btn prev" onclick="externalMobilePrev()">Anterior</button>
-    <button type="button" class="mobile-progress" onclick="abrirListaArticulosExterno()" title="Ver todos los articulos sorteados y saltar a uno">
+    <button type="button" class="btn prev" onclick="externalMobilePrev()" aria-label="Artículo anterior" ${mobileIndex===0?'disabled':''}>Anterior</button>
+    <button type="button" class="mobile-progress" onclick="abrirListaArticulosExterno()" title="Ver todos los articulos sorteados y saltar a uno" aria-label="Ver lista de artículos del control externo">
       <span>${Math.min(mobileIndex+1,externalRows.length)} / ${externalRows.length}</span>
       <small>${cargados} cargados · ver lista</small>
     </button>
-    <button class="btn next" onclick="externalMobileNext()">Siguiente</button>
+    <button type="button" class="btn next" onclick="externalMobileNext()" aria-label="Artículo siguiente" ${mobileIndex===externalRows.length-1?'disabled':''}>Siguiente</button>
   </div>`:'';
   externoCards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">Externo</span></div>
     <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
     <div class="mobile-logistics"><span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</strong></span><span>Bultos/Piso<strong>${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</strong></span><span>Pisos<strong>${logVal(r.pisos,r,'pisos')}</strong></span><span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</strong></span></div>
     <div class="mobile-error" id="externalMobileError">Carga al menos un valor para este articulo. Si no hay stock, escribi 0.</div>
-    <div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-group-hint">Bultos completos encontrados en el conteo externo.</div><div class="mobile-row five">${[1,2,3,4,5,6].map((n,i)=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-cant="${r.id_articulo}-${n}" value="${esc(cantidadInputsExterno(r.id_articulo).rawValues[i])}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div>
-    <div class="mobile-group units"><div class="mobile-group-title">Unidades</div><div class="mobile-group-hint">Unidades sueltas fuera de bulto completo.</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-ext-unid="${r.id_articulo}" value="${esc(cantidadInputsExterno(r.id_articulo).rawUnidades)}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div>
+    <div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-group-hint">Bultos completos encontrados en el conteo externo.</div><div class="mobile-row five">${[1,2,3,4,5,6].map((n,i)=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" data-ext-cant="${r.id_articulo}-${n}" value="${esc(cantidadInputsExterno(r.id_articulo).rawValues[i])}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div>
+    <div class="mobile-group units"><div class="mobile-group-title">Unidades</div><div class="mobile-group-hint">Unidades sueltas fuera de bulto completo.</div><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Unidades sueltas" data-ext-unid="${r.id_articulo}" value="${esc(cantidadInputsExterno(r.id_articulo).rawUnidades)}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></div>
     <div class="pill mobile-total"><span data-ext-total="${r.id_articulo}">0</span> bultos con <span data-ext-unidades="${r.id_articulo}">0</span> unidades</div>
   </article>`).join('');
   actualizarTotalesExterno();
@@ -1975,7 +2605,7 @@ async function generarControlExterno(){
   const params=new URLSearchParams({mes:mesExterno.value||defaultMonth(),sucursal:sucursalExterno.value,cantidad:cantidadExterno.value||6});
   const res=await fetch('/api/control-stock/control-externo/sorteo?'+params);const data=await res.json();
   if(!res.ok||data.ok===false){externoStatus.textContent='Error: '+(data.error||'No se pudo generar');return}
-  externalRows=data.rows||[];extMes.textContent=`Mes: ${data.mes}`;extArt.textContent=`Articulos: ${externalRows.length}`;externoStatus.textContent=`Sorteo generado: ${externalRows.length} articulos.`;renderControlExterno();
+  externalRows=data.rows||[];extMes.textContent=`Mes: ${data.mes}`;extArt.textContent=`Artículos: ${externalRows.length}`;externoStatus.textContent=`Sorteo listo: ${externalRows.length} artículos. Cargá las cantidades y luego guardá el control.`;renderControlExterno();
 }
 function externalPayload(){
   const items=externalRows.map(r=>{const input=cantidadInputsExterno(r.id_articulo);const norm=normalizarConteo(r,input);return {id_articulo:r.id_articulo,descripcion:r.descripcion,abc:r.abc,semana:'externo',dia:'Externo',cantidad_1:input.values[0],cantidad_2:input.values[1],cantidad_3:input.values[2],cantidad_4:input.values[3],cantidad_5:input.values[4],cantidad_6:input.values[5],unidades_sueltas:norm.unidades,stock:norm.bultos,diferencia:false,observacion:`Control externo | Total: ${norm.bultos} bultos con ${norm.unidades} unidades`}})
@@ -1984,8 +2614,8 @@ function externalPayload(){
 async function guardarControlExterno(){
   guardarBorradorExternoDesdeDom();
   if(externalGuardado){await modalAlert('Este control externo ya fue guardado.');return}
-  if(!externalRows.length){externoStatus.textContent='Primero genera un sorteo.';return}
-  if(!responsableExterno.value.trim()){externoStatus.textContent='Ingresa el responsable externo.';responsableExterno.focus();return}
+  if(!externalRows.length){externoStatus.textContent='Primero generá un sorteo para iniciar el control externo.';return}
+  if(!responsableExterno.value.trim()){externoStatus.textContent='Ingresá el responsable externo antes de guardar.';responsableExterno.focus();return}
   const faltante=externalRows.find(r=>!cantidadInputsExterno(r.id_articulo).touched);
   if(faltante){
     externoStatus.textContent=`Falta cargar el articulo ${faltante.id_articulo}. Si no hay stock, escribi 0.`;
@@ -1997,10 +2627,10 @@ async function guardarControlExterno(){
   if(alertas.length&&externalReviewKey!==sig){externalReviewKey=sig;await modalAlert(`Antes de guardar, volve a controlar estos articulos:\n\n${alertas.slice(0,8).map(a=>`${a.id_articulo} - ${a.descripcion}`).join('\n')}\n\nNo se muestra el stock esperado.`);externoStatus.textContent=`Revisar nuevamente ${alertas.length} articulo(s) con dispersion importante.`;return}
   if(alertas.length&&!await modalConfirm(`Todavia hay ${alertas.length} articulo(s) con dispersion. Confirmas que ya fueron revisados y queres guardar igual?`)) return;
   if(!await modalConfirm(`Guardar control externo con ${externalRows.length} articulos?`)) return;
-  guardarExternoBtn.disabled=true;guardarExternoBtn.textContent='Guardando...';
+  guardarExternoBtn.disabled=true;guardarExternoBtn.textContent='Guardando...';externoStatus.textContent='Guardando el control externo...';
   const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();
   if(!res.ok||data.ok===false){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo';externoStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
-  externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado. Items: ${data.data.items_guardados}.`;await modalAlert('Control externo guardado correctamente.');
+  externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado correctamente: ${data.data.items_guardados} artículos registrados.`;await modalAlert('Control externo guardado correctamente.');
 }
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
@@ -2039,8 +2669,8 @@ function cargarBorradorLocal(){
     horaInicio.value=data.horaInicio||horaInicio.value;
     if(data.responsable && [...responsable.options].some(o=>o.value===data.responsable)) responsable.value=data.responsable;
     observaciones.value=data.observaciones||observaciones.value;
-    Object.entries(data.values||{}).forEach(([k,v])=>{const el=document.querySelector(`[data-cant="${k}"]`); if(el) el.value=v});
-    Object.entries(data.unidades||{}).forEach(([k,v])=>{const el=document.querySelector(`[data-unid="${k}"]`); if(el) el.value=v});
+    Object.entries(data.values||{}).forEach(([k,v])=>document.querySelectorAll(`[data-cant="${k}"]`).forEach(el=>{el.value=v}));
+    Object.entries(data.unidades||{}).forEach(([k,v])=>document.querySelectorAll(`[data-unid="${k}"]`).forEach(el=>{el.value=v}));
   }catch(_){}
 }
 async function loadPlanilla(){
@@ -2085,7 +2715,7 @@ async function loadPlanilla(){
     <td class="num" data-unidades="${r.id_articulo}">0</td>
   </tr>`).join('');
   renderMobileCards();
-  status.textContent=`Cantidad de articulos a contar: ${currentRows.length}${logisticaAviso(data,currentRows)}`;
+  status.textContent=`Planilla lista: ${currentRows.length} artículos para contar.${logisticaAviso(data,currentRows)}`;
   if(!isMobileConteo()){
     cargarBorradorLocal();
     actualizarTotales(false);
@@ -2153,6 +2783,7 @@ async function guardarConteo(){
     guardarConteoBtn.textContent='Guardando...';
   }
   estado.value='Guardando...';
+  status.textContent='Guardando el conteo de stock...';
   const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
   const data=await res.json();
   if(!res.ok||data.ok===false){
@@ -2179,7 +2810,7 @@ async function guardarConteo(){
   const resumenGuardado=`Conteo #${data.data.id} guardado. Articulos guardados: ${data.data.items_guardados}. Total contado: ${totalContado}.`;
   status.textContent=alertasDispersion
     ? `${resumenGuardado} Atencion: ${alertasDispersion} articulo(s) con diferencia importante contra Frescura. Avisar o revisar con supervisor.`
-    : `${resumenGuardado} No se puede volver a grabar el mismo conteo.`;
+    : `${resumenGuardado} El control quedó finalizado.`;
   if(guardarConteoBtn) guardarConteoBtn.textContent='Control guardado';
   await modalAlert(alertasDispersion
     ? `Conteo guardado con ${alertasDispersion} alerta(s) de diferencia contra Frescura.\n\nNro. de conteo: ${data.data.id}\nArticulos guardados: ${data.data.items_guardados}\nTotal contado: ${totalContado}\n\nAccion requerida: avisar o revisar con supervisor.`
@@ -2199,9 +2830,9 @@ async function guardarConteo(){
   [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
   [mes,horaInicio,horaFin,estado].forEach(el=>el.closest('.field').style.display='none');
   await cargarSucursales();
-  actualizarEstadoFrescura(fecha.value,'pFrescura');
-  actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
-  loadAbc();loadPlanificacion();loadResumenMensual();loadResumenArticulo();loadArticulosControlados();loadAbcMensual();loadResponsables();loadPlanilla();loadPendientesDias();
+  const requestedTab=location.hash.slice(1);
+  const initialTab=STOCK_TABS.some(tab=>tab.name===requestedTab)?requestedTab:'abc';
+  openTab(initialTab,{updateHash:false});
   updateTabsFade();
 })();
 </script>
