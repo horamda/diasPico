@@ -43,6 +43,7 @@ Para integraciones externas, usar estas rutas base:
 | Flota | `/api/flota` | Vehiculos, disponibilidad y sync de transportes. |
 | Portal | `/api/portal` | Usuario actual, modulos, dashboard y administracion. |
 | Sync operativo | `/api/sync` | Sincronizacion y consultas operativas desde Sheets. |
+| Integracion logistica v1 | `/api/v1/integracion/logistica` | Volumen diario unificado por camion y chofer para aplicaciones externas. |
 | Simulaciones logisticas | `/api/simulaciones` | Calculo, guardado, avance, cierre y aprendizaje. |
 | Admin proyecto | `/api/admin-proyecto` | Estado tecnico de tablas, indices y dashboard. |
 | Foxtrot review | `/api/foxtrot` | Datasets y edicion de filas de revision. |
@@ -56,7 +57,7 @@ Recomendacion concreta para rechazos: consumir `GET /api/rechazos/diario/integra
 - Filtros comunes: `sucursal=TODAS` o codigo de sucursal.
 - Respuestas exitosas: JSON, salvo endpoints de exportacion o plantillas.
 - Errores esperados: JSON con clave `error` cuando la ruta valida parametros.
-- Autenticacion: el contrato actual no agrega autenticacion propia en los endpoints `/api`; si el despliegue queda detras de login, proxy, API Gateway o reglas de red, el consumidor debe enviar esas credenciales.
+- Autenticacion: los endpoints legacy `/api` no agregan autenticacion propia. La integracion logistica v1 exige una API key exclusiva mediante `INTEGRATION_API_KEY`; el consumidor debe enviar `X-API-Key` o `Authorization: Bearer <clave>`. Si la variable no esta configurada, la ruta responde `503` y no expone datos.
 
 ## Endpoints Principales
 
@@ -65,6 +66,78 @@ Recomendacion concreta para rechazos: consumir `GET /api/rechazos/diario/integra
 | Metodo | Ruta |
 | --- | --- |
 | GET | `/api/health` |
+
+### Integracion Logistica v1
+
+Endpoint recomendado para una aplicacion externa:
+
+```http
+GET /api/v1/integracion/logistica/diaria
+```
+
+La consulta requiere un dia (`fecha`) o un rango inclusivo (`desde` y `hasta`). El rango maximo es de 31 dias.
+
+| Parametro | Requerido | Descripcion |
+| --- | --- | --- |
+| `fecha` | Si, como alternativa al rango | Dia en formato `YYYY-MM-DD`. |
+| `desde` | Si, cuando no se usa `fecha` | Inicio del rango `YYYY-MM-DD`. |
+| `hasta` | Si, cuando no se usa `fecha` | Fin del rango `YYYY-MM-DD`. |
+| `empresa_id` | No | Empresa; valor por defecto `1`. |
+| `sucursal` | No | `TODAS` o identificador de sucursal; valor por defecto `TODAS`. |
+| `incluir_clientes` | No | `1` agrega `clientes_detalle`; valor por defecto `0`. |
+| `limit` | No | Maximo 1000 sin clientes y 200 con detalle de clientes. |
+| `offset` | No | Desplazamiento para paginacion; valor por defecto `0`. |
+
+Ejemplo:
+
+```bash
+curl "https://TU-DOMINIO/api/v1/integracion/logistica/diaria?desde=2026-08-01&hasta=2026-08-24&sucursal=1" \
+  -H "X-API-Key: TU_CLAVE"
+```
+
+Cada elemento de `datos` representa una combinacion de fecha, sucursal, camion y chofer. Campos principales:
+
+```json
+{
+  "fecha": "2026-08-13",
+  "empresa_id": "1",
+  "sucursal_id": "1",
+  "sucursal": "Casa Central",
+  "camion_codigo": "1100",
+  "camion_descripcion": "IVECO TECTOR",
+  "patente": "KTO613",
+  "marca": "IVECO",
+  "modelo": "2018",
+  "carga_maxima_kg": 18000.0,
+  "capacidad_up": 700.0,
+  "camion_en_maestro_flota": true,
+  "chofer_codigo": "15",
+  "chofer": "Nombre del chofer",
+  "clientes": 42,
+  "documentos": 45,
+  "bultos": 520.5,
+  "hl": 48.7,
+  "pallets_estimados": 6.3,
+  "up": 680.0,
+  "lineas_origen": 120,
+  "calidad": {
+    "pallets_completos": true,
+    "articulos_sin_configuracion_pallet": 0,
+    "bultos_sin_conversion_pallet": 0.0,
+    "camion_identificado": true,
+    "chofer_identificado": true
+  }
+}
+```
+
+La respuesta incluye `api_version`, `generado_en`, `filtros`, `cobertura_resultado`, `paginacion`, `calidad_datos` y `datos`. Tambien informa el total en el header `X-Total-Count`.
+
+Fuentes y alcance:
+
+- Volumen, clientes y asignacion camion/chofer: `ventas_detalle`.
+- Patente, marca, modelo y capacidades: `flota_vehiculos`, con fallback a `transportes`.
+- Pallets: estimacion `bultos / bultos_por_pallet`; los faltantes se informan en `calidad`.
+- Solo se incluyen movimientos de mercaderia con una venta registrada; un camion operativo sin venta no genera una fila.
 
 ### Rechazos
 

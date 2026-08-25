@@ -41,6 +41,7 @@ class AppSettings(BaseSettings):
     EXTERNAL_API_BASE_URL: HttpUrl = Field(default='https://control-asistencia.up.railway.app')
     EXTERNAL_API_KEY: str | None = None
     EXTERNAL_API_TIMEOUT: int = 20
+    INTEGRATION_API_KEY: str | None = None
 
     FRESCURA_API_BASE_URL: str | None = None
     FRESCURA_API_USER: str | None = None

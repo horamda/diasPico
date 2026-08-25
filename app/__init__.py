@@ -23,6 +23,7 @@ BLUEPRINT_MODULES = (
     'app.routes.flota',
     'app.routes.simulacion_logistica',
     'app.routes.sync_sheets',
+    'app.routes.integracion_logistica',
     'app.routes.frescura',
     'app.routes.segmentacion',
     'app.routes.admin_proyecto',
