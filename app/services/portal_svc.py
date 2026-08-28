@@ -18,7 +18,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Importaciones de datos',
         'descripcion': 'Carga centralizada de archivos, maestros y sincronizaciones externas.',
         'ruta': '/importaciones-datos',
-        'image_url': None,
+        'image_url': 'https://www.dakosy.de/fileadmin/_processed_/d/8/csm_Dashboard1_9596bec27d.png',
         'orden': 5,
     },
     {
@@ -50,7 +50,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Control de stock',
         'descripcion': 'ABC de articulos activos de Casa Central segun bultos vendidos el ultimo mes.',
         'ruta': '/control-stock',
-        'image_url': None,
+        'image_url': 'https://www.hcoinnovations.com/wp-content/uploads/2024/07/Warehouse-Inventory-Control-1024x585.webp',
         'orden': 27,
     },
     {
@@ -58,7 +58,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Control de pedidos SMK',
         'descripcion': 'Cruce de pedidos de supermercado contra punto de pedido, stock y frescura.',
         'ruta': '/analisis-pedidos',
-        'image_url': None,
+        'image_url': 'https://myginne.com/assets/HomeStore-BKYro7-Q.webp',
         'orden': 28,
     },
     {
@@ -135,8 +135,18 @@ def ensure_tables() -> None:
                            descripcion = 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
                            updated_at = NOW()
                        WHERE codigo = 'panel_proyecto'
-                         AND titulo IN ('Panel Proyecto', 'Panel proyecto', 'Portal_Logistica')"""
+                          AND titulo IN ('Panel Proyecto', 'Panel proyecto', 'Portal_Logistica')"""
                 )
+                for mod in _DEFAULT_MODULES:
+                    if mod.get('image_url'):
+                        cur.execute(
+                            """UPDATE portal_modulos
+                                  SET image_url = %(image_url)s,
+                                      updated_at = NOW()
+                                WHERE codigo = %(codigo)s
+                                  AND (image_url IS NULL OR TRIM(image_url) = '')""",
+                            mod,
+                        )
 
                 # Conservar acceso para usuarios ya creados en modulos
                 # operativos agregados despues del setup inicial.
