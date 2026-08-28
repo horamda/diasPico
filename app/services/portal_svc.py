@@ -55,7 +55,7 @@ _DEFAULT_MODULES = (
     },
     {
         'codigo': 'analisis_pedidos',
-        'titulo': 'Analisis de pedidos',
+        'titulo': 'Control de pedidos SMK',
         'descripcion': 'Cruce de pedidos de supermercado contra punto de pedido, stock y frescura.',
         'ruta': '/analisis-pedidos',
         'image_url': None,
