@@ -924,7 +924,7 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
 
     ws.merge_cells("A1:L1")
     ws["A1"] = "Referencias:  * Campos Obligatorios * Solo Lectura"
-    ws["A1"].font = Font(bold=True, color="666666")
+    ws["A1"].font = Font(bold=True, italic=True, color="000000")
     ws.merge_cells("A3:L3")
     ws["A3"] = "DATOS DEL PEDIDO"
     ws["A3"].font = Font(bold=True, color="FFFFFF")
@@ -943,11 +943,14 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
     for col, value in enumerate(headers, start=1):
         cell = ws.cell(row=4, column=col, value=value)
         cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="1E3A5F")
+        cell.fill = PatternFill("solid", fgColor="5B9BD5")
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for col in (1, 3, 6, 7):
+        ws.cell(row=4, column=col).font = Font(bold=True, color="FF0000")
     for col, value in enumerate(hints, start=1):
         cell = ws.cell(row=5, column=col, value=value)
-        cell.font = Font(italic=True, color="666666", size=9)
+        cell.font = Font(bold=True, color="FFFFFF", size=9)
+        cell.fill = PatternFill("solid", fgColor="5B9BD5")
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     row_idx = 6
@@ -960,14 +963,14 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
         ws.cell(row=row_idx, column=1, value=item.get("solicitud") or "")
         ws.cell(row=row_idx, column=2, value=item.get("entrega") or "")
         ws.cell(row=row_idx, column=3, value=cliente)
-        ws.cell(row=row_idx, column=4, value="")
+        ws.cell(row=row_idx, column=4, value="RMCYO")
         ws.cell(row=row_idx, column=5, value="")
         ws.cell(row=row_idx, column=6, value=item.get("codigo") or "")
         ws.cell(row=row_idx, column=7, value=cantidad)
         ws.cell(row=row_idx, column=8, value=0)
         ws.cell(row=row_idx, column=9, value=0)
         ws.cell(row=row_idx, column=10, value=0)
-        ws.cell(row=row_idx, column=11, value="")
+        ws.cell(row=row_idx, column=11, value=20)
         ws.cell(row=row_idx, column=12, value="")
         row_idx += 1
 

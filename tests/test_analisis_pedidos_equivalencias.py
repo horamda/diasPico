@@ -64,8 +64,10 @@ def test_exportar_pedidos_genericos_completa_template():
     assert ws["F4"].value == "Articulo"
     assert ws["A6"].value == "9001"
     assert ws["C6"].value == "214"
+    assert ws["D6"].value == "RMCYO"
     assert ws["F6"].value == "19026"
     assert ws["G6"].value == 5
+    assert ws["K6"].value == 20
     assert ws["A7"].value is None
     wb.close()
 
