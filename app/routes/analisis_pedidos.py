@@ -43,6 +43,27 @@ def guardar_equivalencia():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/clientes-smk")
+@login_required
+def clientes_smk():
+    try:
+        return jsonify({"ok": True, "data": svc.list_clientes_smk()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/clientes-smk")
+@login_required
+def guardar_cliente_smk():
+    try:
+        data = svc.save_cliente_smk(request.get_json(force=True) or {})
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.post("/analizar")
 @login_required
 def analizar():

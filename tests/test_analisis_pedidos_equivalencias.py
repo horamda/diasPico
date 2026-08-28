@@ -43,14 +43,14 @@ def test_exportar_pedidos_genericos_completa_template():
             {
                 "solicitud": "9001",
                 "entrega": "30/08/2026",
-                "cliente": "100",
+                "cliente": "CENCOSUD -   CALLE 3 389",
                 "codigo": "19026",
                 "cantidad_a_enviar": 5,
             },
             {
                 "solicitud": "9001",
                 "entrega": "30/08/2026",
-                "cliente": "100",
+                "cliente": "CENCOSUD -   CALLE 3 389",
                 "codigo": "13502",
                 "cantidad_a_enviar": 0,
             },
@@ -63,8 +63,16 @@ def test_exportar_pedidos_genericos_completa_template():
     assert ws["A4"].value == "Nro.Pedido"
     assert ws["F4"].value == "Articulo"
     assert ws["A6"].value == "9001"
-    assert ws["C6"].value == "100"
+    assert ws["C6"].value == "214"
     assert ws["F6"].value == "19026"
     assert ws["G6"].value == 5
     assert ws["A7"].value is None
     wb.close()
+
+
+def test_clientes_smk_por_defecto_normalizan_nombre():
+    clientes = svc._default_clientes_smk_map()
+
+    assert svc.resolver_cliente_smk("CENCOSUD -   CALLE 3 389", clientes) == "214"
+    assert svc.resolver_cliente_smk("DIARCO -   RUTA NACIONAL Nø 2 KM", clientes) == "11603"
+    assert svc.resolver_cliente_smk("1029", clientes) == "1029"

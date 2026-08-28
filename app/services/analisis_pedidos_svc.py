@@ -28,6 +28,7 @@ from typing import Any
 import openpyxl
 
 _EQUIVALENCIAS_READY = False
+_CLIENTES_SMK_READY = False
 
 _DEFAULT_EQUIVALENCIAS_SMK = (
     ("24683", "19026", "BUDWEISER CAN 4X6 473 TRANSP"),
@@ -78,6 +79,14 @@ _DEFAULT_EQUIVALENCIAS_SMK = (
     ("31354", "31205", "ANDES ORIGEN RUBIA ORO CAN 4X6 473CC"),
     ("32638", "18355", "PATAGONIA AMBER OW X6 730CC TERM"),
     ("18694", "32292", "NPV SG PET X12 500 PR 0.5L S/G"),
+)
+
+_DEFAULT_CLIENTES_SMK = (
+    ("CENCOSUD - CALLE 3 389", "214"),
+    ("CENCOSUD - SANTIAGO DEL ESTERO", "126"),
+    ("COTO - AV LIBERTADOR 251", "1029"),
+    ("COTO - COLECTORA RUTA INTERBAL", "236"),
+    ("DIARCO - RUTA NACIONAL N 2 KM", "11603"),
 )
 
 # --- Parámetros por defecto (configurables desde la UI) --------------------
@@ -161,6 +170,22 @@ def _default_equivalencias_map() -> dict[str, str]:
     }
 
 
+def _norm_cliente_name(value: Any) -> str:
+    text = _strip_accents(str(value or "")).upper()
+    text = text.replace("NØ", "N").replace("N�", "N")
+    for ch in ("-", ".", ",", ";", ":", "º", "°", "�"):
+        text = text.replace(ch, " ")
+    return " ".join(text.split())
+
+
+def _default_clientes_smk_map() -> dict[str, str]:
+    return {
+        _norm_cliente_name(nombre): _to_codigo(codigo)
+        for nombre, codigo in _DEFAULT_CLIENTES_SMK
+        if _norm_cliente_name(nombre) and _to_codigo(codigo)
+    }
+
+
 def ensure_equivalencias_table() -> None:
     global _EQUIVALENCIAS_READY
     if _EQUIVALENCIAS_READY:
@@ -203,6 +228,48 @@ def ensure_equivalencias_table() -> None:
         return
 
 
+def ensure_clientes_smk_table() -> None:
+    global _CLIENTES_SMK_READY
+    if _CLIENTES_SMK_READY:
+        return
+    try:
+        from app.database import pg_conn
+        import psycopg2.extras
+    except Exception:
+        return
+    try:
+        with pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS analisis_pedidos_clientes_smk (
+                        nombre VARCHAR(255) PRIMARY KEY,
+                        nombre_normalizado VARCHAR(255) NOT NULL UNIQUE,
+                        codigo VARCHAR(50) NOT NULL,
+                        activo BOOLEAN NOT NULL DEFAULT TRUE,
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+                psycopg2.extras.execute_values(
+                    cur,
+                    """
+                    INSERT INTO analisis_pedidos_clientes_smk (
+                        nombre, nombre_normalizado, codigo, activo
+                    ) VALUES %s
+                    ON CONFLICT (nombre) DO NOTHING
+                    """,
+                    [
+                        (nombre, _norm_cliente_name(nombre), _to_codigo(codigo), True)
+                        for nombre, codigo in _DEFAULT_CLIENTES_SMK
+                    ],
+                )
+        _CLIENTES_SMK_READY = True
+    except Exception:
+        return
+
+
 def cargar_equivalencias_articulos(codigos: list[str] | None = None) -> dict[str, str]:
     fallback = _default_equivalencias_map()
     ensure_equivalencias_table()
@@ -237,6 +304,46 @@ def cargar_equivalencias_articulos(codigos: list[str] | None = None) -> dict[str
         }
     except Exception:
         return fallback
+
+
+def cargar_clientes_smk() -> dict[str, str]:
+    fallback = _default_clientes_smk_map()
+    ensure_clientes_smk_table()
+    try:
+        from app.database import pg_conn
+    except Exception:
+        return fallback
+    try:
+        with pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT nombre_normalizado, codigo
+                    FROM analisis_pedidos_clientes_smk
+                    WHERE activo
+                    """
+                )
+                rows = cur.fetchall() or []
+        if not rows:
+            return fallback
+        return {
+            _norm_cliente_name(nombre): _to_codigo(codigo)
+            for nombre, codigo in rows
+            if _norm_cliente_name(nombre) and _to_codigo(codigo)
+        }
+    except Exception:
+        return fallback
+
+
+def resolver_cliente_smk(value: Any, clientes: dict[str, str] | None = None) -> str:
+    original = str(value or "").strip()
+    if not original:
+        return ""
+    codigo_directo = _to_codigo(original)
+    if codigo_directo.isdigit():
+        return codigo_directo
+    clientes = clientes if clientes is not None else cargar_clientes_smk()
+    return clientes.get(_norm_cliente_name(original), original)
 
 
 def list_equivalencias_articulos() -> list[dict[str, Any]]:
@@ -284,6 +391,57 @@ def save_equivalencia_articulo(data: dict[str, Any]) -> dict[str, Any]:
                 "producto_codigo": producto_codigo,
                 "codigo_real": codigo_real,
                 "descripcion": descripcion,
+                "activo": activo,
+            },
+        )
+        row = cur.fetchone()
+    return dict(row or {})
+
+
+def list_clientes_smk() -> list[dict[str, Any]]:
+    ensure_clientes_smk_table()
+    from app.database import pg_cursor
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT nombre, codigo, activo, updated_at
+            FROM analisis_pedidos_clientes_smk
+            ORDER BY nombre
+            """
+        )
+        rows = cur.fetchall() or []
+    return [dict(row) for row in rows]
+
+
+def save_cliente_smk(data: dict[str, Any]) -> dict[str, Any]:
+    ensure_clientes_smk_table()
+    nombre = str(data.get("nombre") or data.get("NOMBRE") or "").strip()
+    codigo = _to_codigo(data.get("codigo") or data.get("CODIGO"))
+    activo = bool(data.get("activo", True))
+    if not nombre or not codigo:
+        raise ValueError("nombre y codigo son obligatorios")
+
+    from app.database import pg_cursor
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO analisis_pedidos_clientes_smk (
+                nombre, nombre_normalizado, codigo, activo
+            )
+            VALUES (%(nombre)s, %(nombre_normalizado)s, %(codigo)s, %(activo)s)
+            ON CONFLICT (nombre) DO UPDATE SET
+                nombre_normalizado = EXCLUDED.nombre_normalizado,
+                codigo = EXCLUDED.codigo,
+                activo = EXCLUDED.activo,
+                updated_at = NOW()
+            RETURNING nombre, codigo, activo, updated_at
+            """,
+            {
+                "nombre": nombre,
+                "nombre_normalizado": _norm_cliente_name(nombre),
+                "codigo": codigo,
                 "activo": activo,
             },
         )
@@ -793,13 +951,15 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
         cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     row_idx = 6
+    clientes_smk = cargar_clientes_smk()
     for item in analisis.get("resultados", []):
         cantidad = float(item.get("cantidad_a_enviar") or 0)
         if cantidad <= 0:
             continue
+        cliente = resolver_cliente_smk(item.get("cliente") or analisis.get("cliente") or "", clientes_smk)
         ws.cell(row=row_idx, column=1, value=item.get("solicitud") or "")
         ws.cell(row=row_idx, column=2, value=item.get("entrega") or "")
-        ws.cell(row=row_idx, column=3, value=item.get("cliente") or analisis.get("cliente") or "")
+        ws.cell(row=row_idx, column=3, value=cliente)
         ws.cell(row=row_idx, column=4, value="")
         ws.cell(row=row_idx, column=5, value="")
         ws.cell(row=row_idx, column=6, value=item.get("codigo") or "")
