@@ -407,6 +407,14 @@
       render();
     }
 
+    function maxQtyForRow(row) {
+      const pedido = Number(row.cantidad_pedida || 0);
+      const maxEnviable = row.max_enviable === undefined || row.max_enviable === null
+        ? pedido
+        : Number(row.max_enviable || 0);
+      return Math.max(0, Math.min(pedido, maxEnviable));
+    }
+
     function render() {
       if (!ultimo) return;
       recalcularResumen();
@@ -470,7 +478,10 @@
       const chk = e.target.closest('[data-force-index]');
       if (chk) {
         const idx = Number(chk.dataset.forceIndex);
-        const qty = document.querySelector(`[data-send-index="${idx}"]`)?.value || 0;
+        const row = ultimo?.resultados?.[idx] || {};
+        const qty = chk.checked ? maxQtyForRow(row) : 0;
+        const input = document.querySelector(`[data-send-index="${idx}"]`);
+        if (input) input.value = qty;
         updateSendQty(idx, qty, chk.checked);
       }
     });

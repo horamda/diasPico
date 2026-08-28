@@ -732,17 +732,31 @@ def cargar_frescura(codigos: list[str], sucursal_id: str | None = None) -> dict[
                 cur.execute(
                     f"""
                     SELECT codigo_articulo,
-                           MIN(dias_frescura_restantes) AS dias
+                           COALESCE(NULLIF(TRIM(lote), ''), 'SIN_LOTE') AS lote,
+                           fecha_vencimiento,
+                           dias_frescura_restantes,
+                           COALESCE(stock_bultos, stock_actual, 0) AS stock_bultos
                     FROM frescura_articulos
                     WHERE codigo_articulo = ANY(%(codigos)s)
+                      AND COALESCE(stock_bultos, stock_actual, 0) > 0
                       {filtro_suc}
-                    GROUP BY codigo_articulo
+                    ORDER BY codigo_articulo,
+                             fecha_vencimiento NULLS LAST,
+                             dias_frescura_restantes NULLS LAST,
+                             lote
                     """,
                     params,
                 )
                 out: dict[str, dict[str, Any]] = {}
-                for codigo, dias in cur.fetchall():
-                    out[_to_codigo(codigo)] = {"dias_frescura": None if dias is None else int(dias)}
+                for codigo, lote, fecha_vencimiento, dias, stock_bultos in cur.fetchall():
+                    code = _to_codigo(codigo)
+                    item = out.setdefault(code, {"lotes_frescura": []})
+                    item["lotes_frescura"].append({
+                        "lote": lote,
+                        "fecha_vencimiento": fecha_vencimiento.isoformat() if hasattr(fecha_vencimiento, "isoformat") else None,
+                        "dias_frescura": None if dias is None else int(dias),
+                        "stock_bultos": _to_float(stock_bultos),
+                    })
                 return out
     except Exception:
         # La frescura es un enriquecimiento opcional: nunca romper el análisis.
@@ -752,6 +766,37 @@ def cargar_frescura(codigos: list[str], sucursal_id: str | None = None) -> dict[
 # ---------------------------------------------------------------------------
 # Núcleo de análisis
 # ---------------------------------------------------------------------------
+
+def _ordinal_frescura(n: int) -> str:
+    return f"{n}ra" if n == 1 else f"{n}da" if n == 2 else f"{n}ra"
+
+
+def _evaluar_lotes_frescura(fr: dict[str, Any] | None, umbral_frescura_dias: float) -> dict[str, Any]:
+    lotes = list((fr or {}).get("lotes_frescura") or [])
+    descartados: list[dict[str, Any]] = []
+    for idx, lote in enumerate(lotes, start=1):
+        dias = lote.get("dias_frescura")
+        apto = dias is None or float(dias) >= umbral_frescura_dias
+        detalle = {
+            "orden": idx,
+            "lote": lote.get("lote") or "",
+            "fecha_vencimiento": lote.get("fecha_vencimiento"),
+            "dias_frescura": dias,
+            "stock_bultos": _to_float(lote.get("stock_bultos")),
+        }
+        if apto:
+            return {
+                "lote_seleccionado": detalle,
+                "lotes_descartados": descartados,
+                "lotes_frescura": lotes,
+            }
+        descartados.append(detalle)
+    return {
+        "lote_seleccionado": None,
+        "lotes_descartados": descartados,
+        "lotes_frescura": lotes,
+    }
+
 
 def _analizar_linea(
     linea: dict[str, Any],
@@ -764,6 +809,9 @@ def _analizar_linea(
     codigo = linea["codigo"]
     cantidad_pedida = float(linea["cantidad_pedida"] or 0)
     descripcion = linea.get("descripcion") or (pp or {}).get("descripcion") or ""
+    frescura_eval = _evaluar_lotes_frescura(fr, umbral_frescura_dias)
+    lote_seleccionado = frescura_eval.get("lote_seleccionado")
+    dias_frescura = (lote_seleccionado or {}).get("dias_frescura")
 
     if pp is None:
         return {
@@ -779,7 +827,11 @@ def _analizar_linea(
             "venta_diaria": None,
             "dias_stock_actual": None,
             "dias_stock_post": None,
-            "dias_frescura": (fr or {}).get("dias_frescura"),
+            "dias_frescura": dias_frescura,
+            "lote_frescura": (lote_seleccionado or {}).get("lote"),
+            "fecha_vencimiento_lote": (lote_seleccionado or {}).get("fecha_vencimiento"),
+            "lotes_descartados_frescura": frescura_eval.get("lotes_descartados") or [],
+            "lotes_frescura": frescura_eval.get("lotes_frescura") or [],
             "cantidad_a_enviar": 0.0,
             "estado": REVISAR,
             "motivos": ["SKU no encontrado en el punto de pedido: revisar manualmente."],
@@ -787,7 +839,6 @@ def _analizar_linea(
 
     stock = float(pp.get("stock") or 0)
     venta_diaria = float(pp.get("venta_diaria") or 0)
-    dias_frescura = (fr or {}).get("dias_frescura")
 
     # Cobertura actual y máximo despachable dejando `dias_min_retail` días.
     dias_stock_actual = (stock / venta_diaria) if venta_diaria > 0 else None
@@ -817,6 +868,31 @@ def _analizar_linea(
         cantidad_a_enviar = 0.0
         motivos.append(
             f"Frescura insuficiente: {dias_frescura} días < mínimo {int(umbral_frescura_dias)} días."
+        )
+
+    lotes_descartados = frescura_eval.get("lotes_descartados") or []
+    if lotes_descartados:
+        rechazados_txt = ", ".join(
+            f"{_ordinal_frescura(int(l.get('orden') or 0))} frescura lote {l.get('lote') or '-'} "
+            f"({l.get('dias_frescura')} dias)"
+            for l in lotes_descartados
+        )
+        motivos.append(
+            f"No se puede enviar con {rechazados_txt}: no cumple minimo {int(umbral_frescura_dias)} dias."
+        )
+
+    if (frescura_eval.get("lotes_frescura") or []) and not lote_seleccionado:
+        estado = NO_ENVIAR
+        cantidad_a_enviar = 0.0
+        motivos.append(
+            f"Ningun lote cumple frescura minima de {int(umbral_frescura_dias)} dias."
+        )
+    elif lote_seleccionado:
+        motivos.append(
+            f"Tomar {_ordinal_frescura(int(lote_seleccionado.get('orden') or 0))} frescura: "
+            f"lote {lote_seleccionado.get('lote') or '-'} con vencimiento "
+            f"{lote_seleccionado.get('fecha_vencimiento') or '-'} "
+            f"({lote_seleccionado.get('dias_frescura')} dias)."
         )
 
     # Regla 3: preservar cobertura para la venta a minoristas.
@@ -855,6 +931,10 @@ def _analizar_linea(
         "dias_stock_actual": None if dias_stock_actual is None else round(dias_stock_actual, 1),
         "dias_stock_post": None if dias_stock_post is None else round(dias_stock_post, 1),
         "dias_frescura": dias_frescura,
+        "lote_frescura": (lote_seleccionado or {}).get("lote"),
+        "fecha_vencimiento_lote": (lote_seleccionado or {}).get("fecha_vencimiento"),
+        "lotes_descartados_frescura": lotes_descartados,
+        "lotes_frescura": frescura_eval.get("lotes_frescura") or [],
         "max_enviable": float(max_enviable),
         "cantidad_a_enviar": cantidad_a_enviar,
         "estado": estado,

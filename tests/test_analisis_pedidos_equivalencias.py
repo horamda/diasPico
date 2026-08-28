@@ -95,3 +95,49 @@ def test_recalcula_cumplimiento_con_cantidad_final():
     assert payload["resumen"]["bultos_a_enviar"] == 70
     assert payload["resumen"]["cumplimiento_pct"] == 70
     assert payload["resumen"]["objetivo_cumplido"] is True
+
+
+def test_analisis_toma_tercera_frescura_si_las_primeras_no_cumplen():
+    result = svc._analizar_linea(
+        {"codigo": "19026", "cantidad_pedida": 10},
+        {"stock": 100, "venta_diaria": 1, "descripcion": "BUD"},
+        {
+            "lotes_frescura": [
+                {"lote": "L1", "fecha_vencimiento": "2026-09-10", "dias_frescura": 20, "stock_bultos": 8},
+                {"lote": "L2", "fecha_vencimiento": "2026-10-01", "dias_frescura": 40, "stock_bultos": 8},
+                {"lote": "L3", "fecha_vencimiento": "2026-11-10", "dias_frescura": 80, "stock_bultos": 8},
+            ]
+        },
+        dias_min_retail=30,
+        umbral_frescura_dias=60,
+    )
+
+    assert result["estado"] == svc.ENVIAR
+    assert result["dias_frescura"] == 80
+    assert result["lote_frescura"] == "L3"
+    assert result["fecha_vencimiento_lote"] == "2026-11-10"
+    assert len(result["lotes_descartados_frescura"]) == 2
+    motivos = " ".join(result["motivos"])
+    assert "1ra frescura" in motivos
+    assert "2da frescura" in motivos
+    assert "Tomar 3ra frescura" in motivos
+
+
+def test_analisis_no_envia_si_ningun_lote_cumple_frescura():
+    result = svc._analizar_linea(
+        {"codigo": "19026", "cantidad_pedida": 10},
+        {"stock": 100, "venta_diaria": 1, "descripcion": "BUD"},
+        {
+            "lotes_frescura": [
+                {"lote": "L1", "fecha_vencimiento": "2026-09-10", "dias_frescura": 20, "stock_bultos": 8},
+                {"lote": "L2", "fecha_vencimiento": "2026-10-01", "dias_frescura": 40, "stock_bultos": 8},
+            ]
+        },
+        dias_min_retail=30,
+        umbral_frescura_dias=60,
+    )
+
+    assert result["estado"] == svc.NO_ENVIAR
+    assert result["cantidad_a_enviar"] == 0
+    assert result["lote_frescura"] is None
+    assert "Ningun lote cumple frescura minima" in " ".join(result["motivos"])
