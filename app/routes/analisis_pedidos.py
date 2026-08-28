@@ -22,6 +22,27 @@ def _leer_params() -> tuple[float, float, bool, str | None]:
     )
 
 
+@bp.get("/equivalencias")
+@login_required
+def equivalencias():
+    try:
+        return jsonify({"ok": True, "data": svc.list_equivalencias_articulos()})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/equivalencias")
+@login_required
+def guardar_equivalencia():
+    try:
+        data = svc.save_equivalencia_articulo(request.get_json(force=True) or {})
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.post("/analizar")
 @login_required
 def analizar():
