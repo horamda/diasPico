@@ -54,6 +54,14 @@ _DEFAULT_MODULES = (
         'orden': 27,
     },
     {
+        'codigo': 'analisis_pedidos',
+        'titulo': 'Analisis de pedidos',
+        'descripcion': 'Cruce de pedidos de supermercado contra punto de pedido, stock y frescura.',
+        'ruta': '/analisis-pedidos',
+        'image_url': None,
+        'orden': 28,
+    },
+    {
         'codigo': 'panel_proyecto',
         'titulo': 'Mantenimiento del sistema',
         'descripcion': 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
@@ -133,7 +141,7 @@ def ensure_tables() -> None:
                 # Conservar acceso para usuarios ya creados en modulos
                 # operativos agregados despues del setup inicial.
                 cur.execute(
-                    "SELECT id FROM portal_modulos WHERE codigo IN ('importaciones_datos', 'control_stock')"
+                    "SELECT id FROM portal_modulos WHERE codigo IN ('importaciones_datos', 'control_stock', 'analisis_pedidos')"
                 )
                 for import_module in cur.fetchall() or []:
                     cur.execute(
