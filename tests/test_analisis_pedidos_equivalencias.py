@@ -60,8 +60,10 @@ def test_exportar_pedidos_genericos_completa_template():
     wb = load_workbook(BytesIO(content), data_only=True)
     assert wb.sheetnames == ["Pedidos", "Documentos"]
     ws = wb["Pedidos"]
+    assert "A3:L3" in {str(rng) for rng in ws.merged_cells.ranges}
     assert ws["A4"].value == "Nro.Pedido"
-    assert ws["F4"].value == "Articulo"
+    assert "Art" in str(ws["F4"].value)
+    assert ws.column_dimensions["L"].width == 25
     assert ws["A6"].value == "9001"
     assert ws["C6"].value == "214"
     assert ws["D6"].value == "RMCYO"

@@ -21,8 +21,11 @@ cobertura es:  max(0, stock - dias_min_retail * venta_diaria).
 from __future__ import annotations
 
 import math
+import os
 import unicodedata
+from copy import copy
 from io import BytesIO
+from pathlib import Path
 from typing import Any
 
 import openpyxl
@@ -913,46 +916,53 @@ def exportar_xlsx(analisis: dict[str, Any]) -> bytes:
     return out.getvalue()
 
 
+def _pedidos_genericos_template_path() -> Path | None:
+    candidates = [
+        os.getenv("PEDIDOS_GENERICOS_TEMPLATE_PATH"),
+        r"C:\Users\horac\Desktop\plantillapedidosgenericos.xlsx",
+        str(Path.cwd() / "plantillapedidosgenericos.xlsx"),
+    ]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        path = Path(candidate)
+        if path.exists():
+            return path
+    return None
+
+
+def _copy_row_format(ws, source_row: int, target_row: int, max_col: int = 12) -> None:
+    ws.row_dimensions[target_row].height = ws.row_dimensions[source_row].height
+    for col in range(1, max_col + 1):
+        src = ws.cell(row=source_row, column=col)
+        dst = ws.cell(row=target_row, column=col)
+        if src.has_style:
+            dst._style = copy(src._style)
+        if src.number_format:
+            dst.number_format = src.number_format
+        if src.alignment:
+            dst.alignment = copy(src.alignment)
+        if src.protection:
+            dst.protection = copy(src.protection)
+
+
+def _clear_pedidos_rows(ws, start_row: int = 6, max_col: int = 12) -> None:
+    if ws.max_row >= start_row:
+        ws.delete_rows(start_row, ws.max_row - start_row + 1)
+    ws.insert_rows(start_row)
+    _copy_row_format(ws, 5, start_row, max_col)
+
+
 def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    template_path = _pedidos_genericos_template_path()
+    if template_path is None:
+        raise ValueError("No se encontro la plantilla plantillapedidosgenericos.xlsx")
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Pedidos"
-    docs = wb.create_sheet("Documentos")
-
-    ws.merge_cells("A1:L1")
-    ws["A1"] = "Referencias:  * Campos Obligatorios * Solo Lectura"
-    ws["A1"].font = Font(bold=True, italic=True, color="000000")
-    ws.merge_cells("A3:L3")
-    ws["A3"] = "DATOS DEL PEDIDO"
-    ws["A3"].font = Font(bold=True, color="FFFFFF")
-    ws["A3"].fill = PatternFill("solid", fgColor="305496")
-
-    headers = [
-        "Nro.Pedido", "Fecha Entrega", "Cliente", "Tipo Documento", "Concepto",
-        "Articulo", "Bultos", "Unidades", "Precio Neto", "Bonificacion",
-        "Vendedor", "Cambio / Sin Cargo",
-    ]
-    hints = [
-        "(Numerico)", "(dd/mm/aaaa)", "(Numerico)", "(Texto)", "(Texto)",
-        "(Numerico)", "(Numerico)", "(Numerico)", "(Decimal)", "(Decimal)",
-        "(Numerico)", "(X=Cambio / S=Sin Cargo)",
-    ]
-    for col, value in enumerate(headers, start=1):
-        cell = ws.cell(row=4, column=col, value=value)
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="5B9BD5")
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    for col in (1, 3, 6, 7):
-        ws.cell(row=4, column=col).font = Font(bold=True, color="FF0000")
-    for col, value in enumerate(hints, start=1):
-        cell = ws.cell(row=5, column=col, value=value)
-        cell.font = Font(bold=True, color="FFFFFF", size=9)
-        cell.fill = PatternFill("solid", fgColor="5B9BD5")
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
+    wb = openpyxl.load_workbook(template_path)
+    if "Pedidos" not in wb.sheetnames:
+        raise ValueError("La plantilla no contiene la hoja Pedidos")
+    ws = wb["Pedidos"]
+    _clear_pedidos_rows(ws)
     row_idx = 6
     clientes_smk = cargar_clientes_smk()
     for item in analisis.get("resultados", []):
@@ -960,6 +970,9 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
         if cantidad <= 0:
             continue
         cliente = resolver_cliente_smk(item.get("cliente") or analisis.get("cliente") or "", clientes_smk)
+        if row_idx > 6:
+            ws.insert_rows(row_idx)
+            _copy_row_format(ws, row_idx - 1, row_idx)
         ws.cell(row=row_idx, column=1, value=item.get("solicitud") or "")
         ws.cell(row=row_idx, column=2, value=item.get("entrega") or "")
         ws.cell(row=row_idx, column=3, value=cliente)
@@ -973,38 +986,6 @@ def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
         ws.cell(row=row_idx, column=11, value=20)
         ws.cell(row=row_idx, column=12, value="")
         row_idx += 1
-
-    widths = [14, 16, 14, 16, 18, 14, 12, 12, 14, 14, 12, 20]
-    for col, width in enumerate(widths, start=1):
-        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
-    ws.freeze_panes = "A6"
-
-    docs["A1"] = "Documentos"
-    docs["A1"].font = Font(bold=True)
-    docs["A2"] = "Identificador"
-    docs["B2"] = "Descripcion"
-    for cell in docs[2]:
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="1E3A5F")
-    documentos = [
-        ("DVMPY", "NOTA DE CREDITO MIPYME"),
-        ("DVVTA", "NOTA DE CREDITO"),
-        ("FCCSG", "FACTURA CIERRE CONSIG."),
-        ("FCMPY", "FACTURA MIPYME"),
-        ("FCVTA", "FACTURA"),
-        ("NDCON", "NOTA DE DEBITO"),
-        ("NDMPY", "NOTA DE DEBITO MIPYME"),
-        ("NDPRE", "DEBITOS PRESUPUESTO"),
-        ("PRCSG", "FACT. PRESUP. CIERRE CONSIG."),
-        ("PRDVO", "DEVOLUCION PRESUPUESTO"),
-        ("PRMPY", "FACT. PRESUPUESTO MIPYME"),
-        ("PRVTA", "FACT. PRESUPUESTO"),
-    ]
-    for idx, (codigo, descripcion) in enumerate(documentos, start=3):
-        docs.cell(row=idx, column=1, value=codigo)
-        docs.cell(row=idx, column=2, value=descripcion)
-    docs.column_dimensions["A"].width = 16
-    docs.column_dimensions["B"].width = 34
 
     out = BytesIO()
     wb.save(out)
