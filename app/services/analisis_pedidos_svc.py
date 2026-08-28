@@ -32,6 +32,7 @@ import openpyxl
 
 _EQUIVALENCIAS_READY = False
 _CLIENTES_SMK_READY = False
+_HISTORIAL_READY = False
 
 _DEFAULT_EQUIVALENCIAS_SMK = (
     ("24683", "19026", "BUDWEISER CAN 4X6 473 TRANSP"),
@@ -452,6 +453,91 @@ def save_cliente_smk(data: dict[str, Any]) -> dict[str, Any]:
     return dict(row or {})
 
 
+def _recalcular_resumen_resultados(payload: dict[str, Any]) -> dict[str, Any]:
+    resultados = payload.get("resultados") or []
+    bultos_pedidos = round(sum(_to_float(r.get("cantidad_pedida")) for r in resultados), 2)
+    bultos_a_enviar = round(sum(_to_float(r.get("cantidad_a_enviar")) for r in resultados), 2)
+    cumplimiento_pct = round((bultos_a_enviar / bultos_pedidos * 100) if bultos_pedidos else 0, 2)
+    resumen = dict(payload.get("resumen") or {})
+    resumen.update({
+        "total_skus": len(resultados),
+        "enviar": sum(1 for r in resultados if r.get("estado") == ENVIAR),
+        "enviar_parcial": sum(1 for r in resultados if r.get("estado") == ENVIAR_PARCIAL),
+        "no_enviar": sum(1 for r in resultados if r.get("estado") == NO_ENVIAR),
+        "revisar": sum(1 for r in resultados if r.get("estado") == REVISAR),
+        "bultos_pedidos": bultos_pedidos,
+        "bultos_a_enviar": bultos_a_enviar,
+        "cumplimiento_pct": cumplimiento_pct,
+        "objetivo_cumplimiento_pct": 70,
+        "objetivo_cumplido": cumplimiento_pct >= 70,
+    })
+    payload["resumen"] = resumen
+    return payload
+
+
+def ensure_historial_table() -> None:
+    global _HISTORIAL_READY
+    if _HISTORIAL_READY:
+        return
+    from app.database import pg_conn
+    with pg_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS analisis_pedidos_historial (
+                    id BIGSERIAL PRIMARY KEY,
+                    cliente TEXT,
+                    solicitudes TEXT,
+                    veredicto VARCHAR(50),
+                    bultos_pedidos NUMERIC(18,4) NOT NULL DEFAULT 0,
+                    bultos_a_enviar NUMERIC(18,4) NOT NULL DEFAULT 0,
+                    cumplimiento_pct NUMERIC(8,2) NOT NULL DEFAULT 0,
+                    objetivo_cumplimiento_pct NUMERIC(8,2) NOT NULL DEFAULT 70,
+                    objetivo_cumplido BOOLEAN NOT NULL DEFAULT FALSE,
+                    payload_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+    _HISTORIAL_READY = True
+
+
+def guardar_historial_exportacion(analisis: dict[str, Any]) -> dict[str, Any]:
+    import psycopg2.extras
+    from app.database import pg_cursor
+
+    analisis = _recalcular_resumen_resultados(dict(analisis))
+    resumen = analisis.get("resumen") or {}
+    ensure_historial_table()
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO analisis_pedidos_historial (
+                cliente, solicitudes, veredicto, bultos_pedidos, bultos_a_enviar,
+                cumplimiento_pct, objetivo_cumplimiento_pct, objetivo_cumplido, payload_json
+            )
+            VALUES (
+                %(cliente)s, %(solicitudes)s, %(veredicto)s, %(bultos_pedidos)s, %(bultos_a_enviar)s,
+                %(cumplimiento_pct)s, %(objetivo_cumplimiento_pct)s, %(objetivo_cumplido)s, %(payload_json)s
+            )
+            RETURNING id, created_at
+            """,
+            {
+                "cliente": analisis.get("cliente") or "",
+                "solicitudes": ", ".join(str(x) for x in (analisis.get("solicitudes") or [])),
+                "veredicto": analisis.get("veredicto") or "",
+                "bultos_pedidos": resumen.get("bultos_pedidos") or 0,
+                "bultos_a_enviar": resumen.get("bultos_a_enviar") or 0,
+                "cumplimiento_pct": resumen.get("cumplimiento_pct") or 0,
+                "objetivo_cumplimiento_pct": resumen.get("objetivo_cumplimiento_pct") or 70,
+                "objetivo_cumplido": bool(resumen.get("objetivo_cumplido")),
+                "payload_json": psycopg2.extras.Json(analisis),
+            },
+        )
+        row = cur.fetchone() or {}
+    return {"id": row.get("id"), "created_at": row.get("created_at")}
+
+
 def _resolver_equivalencias_faltantes(
     lineas: list[dict[str, Any]],
     pp_index: dict[str, dict[str, Any]],
@@ -823,6 +909,9 @@ def analizar(
         "frescura_aplicada": bool(frescura_index),
         "equivalencias_usadas": sum(1 for r in resultados if r.get("codigo_equivalente_usado")),
     }
+    resumen["cumplimiento_pct"] = round((resumen["bultos_a_enviar"] / resumen["bultos_pedidos"] * 100) if resumen["bultos_pedidos"] else 0, 2)
+    resumen["objetivo_cumplimiento_pct"] = 70
+    resumen["objetivo_cumplido"] = resumen["cumplimiento_pct"] >= 70
     # Veredicto global del pedido.
     if resumen["no_enviar"] == 0 and resumen["revisar"] == 0 and resumen["enviar_parcial"] == 0:
         veredicto = "PEDIDO_COMPLETO"

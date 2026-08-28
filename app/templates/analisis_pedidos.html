@@ -46,7 +46,7 @@
     .verdict.PEDIDO_RECHAZADO{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}
     .verdict .vt{font-size:18px;font-weight:900}
     .verdict .vm{font-size:12.5px;margin-top:4px}
-    .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:12px}
+    .kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:10px;margin-bottom:12px}
     .kpi{background:#fff;border:1px solid #cbd5e1;border-radius:9px;padding:12px}
     .kpi .l{font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b}
     .kpi .v{font-size:24px;font-weight:850;margin-top:4px;font-variant-numeric:tabular-nums}
@@ -64,6 +64,8 @@
     .chip.NO_ENVIAR{background:#fee2e2;color:#991b1b}
     .chip.REVISAR{background:#e2e8f0;color:#334155}
     .motivo{white-space:normal;color:#475569;font-size:11.5px;max-width:360px}
+    .send-input{width:86px;border:1px solid #cbd5e1;border-radius:6px;padding:5px;text-align:right}
+    .force-box{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:#475569}
     .filters{display:flex;gap:6px;flex-wrap:wrap}
     .fbtn{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;color:#334155}
     .fbtn.active{background:#1e3a5f;color:#fff;border-color:#1e3a5f}
@@ -157,6 +159,7 @@
       <div class="kpi no"><div class="l">No enviar</div><div class="v" id="kNo">0</div></div>
       <div class="kpi rev"><div class="l">Revisar</div><div class="v" id="kRev">0</div></div>
       <div class="kpi"><div class="l">Bultos env / ped</div><div class="v" id="kBultos">0</div></div>
+      <div class="kpi" id="kCumplCard"><div class="l">Cumplimiento</div><div class="v" id="kCumpl">0%</div></div>
     </div>
 
     <!-- Resultados -->
@@ -179,7 +182,7 @@
               <th class="num">Pedido</th><th class="num">Stock</th>
               <th class="num">Venta/día</th><th class="num">Días stock</th>
               <th class="num">Días post</th><th class="num">Frescura</th>
-              <th class="num">A enviar</th><th>Estado</th><th>Motivo</th>
+              <th class="num">A enviar</th><th>Forzar</th><th>Estado</th><th>Motivo</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -378,8 +381,35 @@
 
     const nf = (v) => (v === null || v === undefined) ? '—' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(1)) : v);
 
+    function recalcularResumen() {
+      if (!ultimo) return;
+      const rows = ultimo.resultados || [];
+      const bPed = rows.reduce((acc, x) => acc + Number(x.cantidad_pedida || 0), 0);
+      const bEnv = rows.reduce((acc, x) => acc + Number(x.cantidad_a_enviar || 0), 0);
+      ultimo.resumen.bultos_pedidos = Math.round(bPed * 100) / 100;
+      ultimo.resumen.bultos_a_enviar = Math.round(bEnv * 100) / 100;
+      ultimo.resumen.cumplimiento_pct = bPed ? Math.round((bEnv / bPed * 100) * 100) / 100 : 0;
+      ultimo.resumen.objetivo_cumplimiento_pct = 70;
+      ultimo.resumen.objetivo_cumplido = ultimo.resumen.cumplimiento_pct >= 70;
+    }
+
+    function updateSendQty(index, value, forced) {
+      if (!ultimo || !ultimo.resultados[index]) return;
+      const row = ultimo.resultados[index];
+      const qty = Math.max(0, Number(value || 0));
+      row.cantidad_a_enviar = qty;
+      row.envio_forzado = !!forced;
+      if (forced && qty > 0 && row.estado === 'NO_ENVIAR') {
+        row.estado = qty >= Number(row.cantidad_pedida || 0) ? 'ENVIAR' : 'ENVIAR_PARCIAL';
+        row.motivos = [...(row.motivos || []), 'Envio forzado manualmente.'];
+      }
+      recalcularResumen();
+      render();
+    }
+
     function render() {
       if (!ultimo) return;
+      recalcularResumen();
       const r = ultimo;
       const V = { PEDIDO_COMPLETO: 'Pedido despachable completo',
                   PEDIDO_PARCIAL: 'Pedido despachable parcialmente',
@@ -399,11 +429,13 @@
       $('kNo').textContent = r.resumen.no_enviar;
       $('kRev').textContent = r.resumen.revisar;
       $('kBultos').textContent = `${nf(r.resumen.bultos_a_enviar)} / ${nf(r.resumen.bultos_pedidos)}`;
+      $('kCumpl').textContent = `${nf(r.resumen.cumplimiento_pct)}%`;
+      $('kCumplCard').style.borderTop = `3px solid ${r.resumen.objetivo_cumplido ? '#16a34a' : '#ef4444'}`;
 
       $('resultPanel').style.display = '';
-      const rows = r.resultados.filter(x => filtro === 'TODOS' || x.estado === filtro);
+      const rows = r.resultados.map((x, index) => ({...x, _index:index})).filter(x => filtro === 'TODOS' || x.estado === filtro);
       const tb = $('tbody');
-      if (!rows.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Sin filas para este filtro.</td></tr>'; return; }
+      if (!rows.length) { tb.innerHTML = '<tr><td colspan="12" class="empty">Sin filas para este filtro.</td></tr>'; return; }
       tb.innerHTML = rows.map(x => `
         <tr>
           <td><b>${x.codigo_equivalente_usado ? `${x.codigo_original} -> ${x.codigo}` : x.codigo}</b></td>
@@ -414,7 +446,8 @@
           <td class="num">${nf(x.dias_stock_actual)}</td>
           <td class="num">${nf(x.dias_stock_post)}</td>
           <td class="num">${nf(x.dias_frescura)}</td>
-          <td class="num"><b>${nf(x.cantidad_a_enviar)}</b></td>
+          <td class="num"><input class="send-input" type="number" min="0" step="1" data-send-index="${x._index}" value="${Number(x.cantidad_a_enviar || 0)}"></td>
+          <td><label class="force-box"><input type="checkbox" data-force-index="${x._index}" ${x.envio_forzado ? 'checked' : ''}>Enviar</label></td>
           <td><span class="chip ${x.estado}">${x.estado.replace('_',' ')}</span></td>
           <td class="motivo">${(x.motivos||[]).join(' ')}</td>
         </tr>`).join('');
@@ -424,6 +457,22 @@
       const b = e.target.closest('.fbtn'); if (!b) return;
       document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active'));
       b.classList.add('active'); filtro = b.dataset.f; render();
+    });
+
+    $('tbody').addEventListener('change', (e) => {
+      const input = e.target.closest('[data-send-index]');
+      if (input) {
+        const idx = Number(input.dataset.sendIndex);
+        const force = document.querySelector(`[data-force-index="${idx}"]`)?.checked;
+        updateSendQty(idx, input.value, force);
+        return;
+      }
+      const chk = e.target.closest('[data-force-index]');
+      if (chk) {
+        const idx = Number(chk.dataset.forceIndex);
+        const qty = document.querySelector(`[data-send-index="${idx}"]`)?.value || 0;
+        updateSendQty(idx, qty, chk.checked);
+      }
     });
 
     $('btnAnalizar').addEventListener('click', async () => {
@@ -465,7 +514,13 @@
     $('btnExportGenerico').addEventListener('click', async () => {
       const s = $('status'); s.className = 'status'; s.textContent = 'Generando pedidos genericos...';
       try {
-        const resp = await fetch('/api/analisis-pedidos/exportar-pedidos-genericos', { method: 'POST', body: fd() });
+        if (!ultimo) throw new Error('Primero analiza el pedido.');
+        recalcularResumen();
+        const resp = await fetch('/api/analisis-pedidos/exportar-pedidos-genericos', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(ultimo),
+        });
         if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || 'Error al exportar'); }
         const blob = await resp.blob();
         const url = URL.createObjectURL(blob);

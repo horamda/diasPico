@@ -125,6 +125,21 @@ def exportar():
 @bp.post("/exportar-pedidos-genericos")
 @login_required
 def exportar_pedidos_genericos():
+    if request.is_json:
+        try:
+            data = svc._recalcular_resumen_resultados(request.get_json(force=True) or {})
+            xlsx = svc.exportar_pedidos_genericos_xlsx(data)
+            svc.guardar_historial_exportacion(data)
+            return Response(
+                xlsx,
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": "attachment; filename=pedidos_genericos_smk.xlsx"},
+            )
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        except Exception as exc:  # pragma: no cover
+            return jsonify({"ok": False, "error": f"No se pudo exportar: {exc}"}), 500
+
     pedido = request.files.get("pedido")
     punto_pedido = request.files.get("punto_pedido")
     if pedido is None or punto_pedido is None:
@@ -141,6 +156,7 @@ def exportar_pedidos_genericos():
             sucursal_id=sucursal_id,
         )
         xlsx = svc.exportar_pedidos_genericos_xlsx(data)
+        svc.guardar_historial_exportacion(data)
         return Response(
             xlsx,
             mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

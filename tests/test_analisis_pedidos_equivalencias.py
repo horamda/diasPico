@@ -80,3 +80,18 @@ def test_clientes_smk_por_defecto_normalizan_nombre():
     assert svc.resolver_cliente_smk("CENCOSUD -   CALLE 3 389", clientes) == "214"
     assert svc.resolver_cliente_smk("DIARCO -   RUTA NACIONAL Nø 2 KM", clientes) == "11603"
     assert svc.resolver_cliente_smk("1029", clientes) == "1029"
+
+
+def test_recalcula_cumplimiento_con_cantidad_final():
+    payload = svc._recalcular_resumen_resultados({
+        "resumen": {},
+        "resultados": [
+            {"estado": svc.ENVIAR, "cantidad_pedida": 60, "cantidad_a_enviar": 40},
+            {"estado": svc.NO_ENVIAR, "cantidad_pedida": 40, "cantidad_a_enviar": 30, "envio_forzado": True},
+        ],
+    })
+
+    assert payload["resumen"]["bultos_pedidos"] == 100
+    assert payload["resumen"]["bultos_a_enviar"] == 70
+    assert payload["resumen"]["cumplimiento_pct"] == 70
+    assert payload["resumen"]["objetivo_cumplido"] is True
