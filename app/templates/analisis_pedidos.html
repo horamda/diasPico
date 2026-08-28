@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Análisis de pedidos · Portal_Logistica</title>
+  {% include 'partials/head_icons.html' %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
+  <style>
+    body{background:#eef2f5;color:#0f172a}
+    .shell{max-width:1400px;margin:auto;padding:14px}
+    .top{display:flex;justify-content:space-between;gap:12px;align-items:end;margin-bottom:12px;flex-wrap:wrap}
+    .eyebrow{font:700 11px var(--mono);letter-spacing:.14em;color:#2563eb;text-transform:uppercase}
+    h1{font-size:24px;margin:2px 0}
+    .sub{font-size:12px;color:#64748b}
+    .btn{background:#fff;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;padding:9px 12px;cursor:pointer;font-weight:600}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+    .btn.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}
+    .panel{background:#fff;border:1px solid #b6c3d1;border-radius:9px;margin-bottom:12px;overflow:hidden}
+    .panel-h{padding:11px 14px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:13px;display:flex;justify-content:space-between;align-items:center}
+    .panel-b{padding:14px}
+    .drop-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .drop{border:2px dashed #94a3b8;border-radius:9px;padding:16px;text-align:center;background:#f8fafc;cursor:pointer;transition:.15s}
+    .drop:hover{border-color:#2563eb;background:#eff6ff}
+    .drop.filled{border-style:solid;border-color:#16a34a;background:#f0fdf4}
+    .drop .ico{font-size:26px}
+    .drop .t{font-weight:800;margin-top:6px;font-size:13px}
+    .drop .d{font-size:11px;color:#64748b;margin-top:3px}
+    .drop .fname{font-size:12px;color:#166534;font-weight:700;margin-top:6px;word-break:break-all}
+    .params{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+    .field label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#475569;margin-bottom:4px}
+    .field input,.field select{width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;color:#0f172a;padding:8px;font-size:13px}
+    .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+    .verdict{border-radius:9px;padding:14px 16px;margin-bottom:12px;display:none;border:1px solid}
+    .verdict.show{display:block}
+    .verdict.PEDIDO_COMPLETO{background:#dcfce7;border-color:#86efac;color:#14532d}
+    .verdict.PEDIDO_PARCIAL{background:#fef9c3;border-color:#fde047;color:#713f12}
+    .verdict.PEDIDO_RECHAZADO{background:#fee2e2;border-color:#fca5a5;color:#7f1d1d}
+    .verdict .vt{font-size:18px;font-weight:900}
+    .verdict .vm{font-size:12.5px;margin-top:4px}
+    .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-bottom:12px}
+    .kpi{background:#fff;border:1px solid #cbd5e1;border-radius:9px;padding:12px}
+    .kpi .l{font-size:10px;font-weight:800;text-transform:uppercase;color:#64748b}
+    .kpi .v{font-size:24px;font-weight:850;margin-top:4px;font-variant-numeric:tabular-nums}
+    .kpi.enviar{border-top:3px solid #16a34a}.kpi.parcial{border-top:3px solid #f59e0b}
+    .kpi.no{border-top:3px solid #ef4444}.kpi.rev{border-top:3px solid #94a3b8}
+    .table-wrap{overflow:auto;max-height:calc(100vh - 200px)}
+    table{border-collapse:collapse;width:100%;font-size:12.5px}
+    th,td{border-bottom:1px solid #e2e8f0;padding:7px 9px;text-align:left;white-space:nowrap}
+    th{position:sticky;top:0;background:#1e3a5f;color:#fff;font-size:11px;text-transform:uppercase;z-index:2}
+    tbody tr:hover{background:#f8fafc}
+    .num{text-align:right;font-variant-numeric:tabular-nums}
+    .chip{display:inline-block;border-radius:999px;padding:3px 9px;font-size:11px;font-weight:800}
+    .chip.ENVIAR{background:#dcfce7;color:#166534}
+    .chip.ENVIAR_PARCIAL{background:#fef9c3;color:#854d0e}
+    .chip.NO_ENVIAR{background:#fee2e2;color:#991b1b}
+    .chip.REVISAR{background:#e2e8f0;color:#334155}
+    .motivo{white-space:normal;color:#475569;font-size:11.5px;max-width:360px}
+    .filters{display:flex;gap:6px;flex-wrap:wrap}
+    .fbtn{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:5px 11px;font-size:12px;font-weight:700;cursor:pointer;color:#334155}
+    .fbtn.active{background:#1e3a5f;color:#fff;border-color:#1e3a5f}
+    .status{font:12px var(--mono);color:#475569;margin:8px 0}
+    .status.err{color:#b91c1c}
+    .empty{padding:40px;text-align:center;color:#94a3b8}
+    a.back{color:#2563eb;text-decoration:none;font-size:12px;font-weight:700}
+    @media(max-width:900px){.drop-grid{grid-template-columns:1fr}.params{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(3,1fr)}}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div>
+        <div class="eyebrow">Logística · Abastecimiento</div>
+        <h1>Análisis de pedidos a supermercado</h1>
+        <div class="sub">Cruza el pedido del super contra stock, venta y frescura para decidir qué se puede despachar sin dejar sin cobertura a la venta minorista.</div>
+      </div>
+      <a class="back" href="/portal">← Volver al portal</a>
+    </div>
+
+    <!-- Carga -->
+    <div class="panel">
+      <div class="panel-h">1 · Cargar archivos <span class="sub">Ambos en formato Excel (.xlsx)</span></div>
+      <div class="panel-b">
+        <div class="drop-grid">
+          <label class="drop" id="dropPedido">
+            <input type="file" accept=".xlsx,.xls" id="filePedido" hidden>
+            <div class="ico">🧾</div>
+            <div class="t">Pedido del supermercado</div>
+            <div class="d">Detalle por SKU (SolicitudId, ProductoCodigo, CantidadEntregada)</div>
+            <div class="fname" id="namePedido"></div>
+          </label>
+          <label class="drop" id="dropPP">
+            <input type="file" accept=".xlsx,.xls" id="filePP" hidden>
+            <div class="ico">📦</div>
+            <div class="t">Punto de pedido (stock + venta)</div>
+            <div class="d">Reporte con STOCK y VTA. CALCULADA por artículo</div>
+            <div class="fname" id="namePP"></div>
+          </label>
+        </div>
+
+        <div class="params">
+          <div class="field">
+            <label>Días mín. cobertura minorista</label>
+            <input type="number" id="diasMin" value="3" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Frescura mínima (días)</label>
+            <input type="number" id="umbralFresc" value="60" min="0" step="1">
+          </div>
+          <div class="field">
+            <label>Aplicar frescura</label>
+            <select id="usarFresc">
+              <option value="true" selected>Sí (si hay datos en el sistema)</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Sucursal (frescura, opcional)</label>
+            <input type="text" id="sucursal" placeholder="Ej: 1">
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn primary" id="btnAnalizar" disabled>Analizar pedido</button>
+          <button class="btn ok" id="btnExport" disabled>Descargar Excel</button>
+          <span class="status" id="status"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Veredicto -->
+    <div class="verdict" id="verdict">
+      <div class="vt" id="verdictT"></div>
+      <div class="vm" id="verdictM"></div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="kpis" id="kpis" style="display:none">
+      <div class="kpi"><div class="l">SKUs</div><div class="v" id="kTotal">0</div></div>
+      <div class="kpi enviar"><div class="l">Enviar</div><div class="v" id="kEnviar">0</div></div>
+      <div class="kpi parcial"><div class="l">Parcial</div><div class="v" id="kParcial">0</div></div>
+      <div class="kpi no"><div class="l">No enviar</div><div class="v" id="kNo">0</div></div>
+      <div class="kpi rev"><div class="l">Revisar</div><div class="v" id="kRev">0</div></div>
+      <div class="kpi"><div class="l">Bultos env / ped</div><div class="v" id="kBultos">0</div></div>
+    </div>
+
+    <!-- Resultados -->
+    <div class="panel" id="resultPanel" style="display:none">
+      <div class="panel-h">
+        2 · Resultado por artículo
+        <div class="filters" id="filters">
+          <button class="fbtn active" data-f="TODOS">Todos</button>
+          <button class="fbtn" data-f="NO_ENVIAR">No enviar</button>
+          <button class="fbtn" data-f="ENVIAR_PARCIAL">Parcial</button>
+          <button class="fbtn" data-f="ENVIAR">Enviar</button>
+          <button class="fbtn" data-f="REVISAR">Revisar</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th><th>Descripción</th>
+              <th class="num">Pedido</th><th class="num">Stock</th>
+              <th class="num">Venta/día</th><th class="num">Días stock</th>
+              <th class="num">Días post</th><th class="num">Frescura</th>
+              <th class="num">A enviar</th><th>Estado</th><th>Motivo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let ultimo = null, filtro = 'TODOS';
+
+    function setDrop(inputEl, dropEl, nameEl) {
+      inputEl.addEventListener('change', () => {
+        const f = inputEl.files[0];
+        if (f) { dropEl.classList.add('filled'); nameEl.textContent = f.name; }
+        else { dropEl.classList.remove('filled'); nameEl.textContent = ''; }
+        refreshBtn();
+      });
+    }
+    setDrop($('filePedido'), $('dropPedido'), $('namePedido'));
+    setDrop($('filePP'), $('dropPP'), $('namePP'));
+
+    function refreshBtn() {
+      const ready = $('filePedido').files[0] && $('filePP').files[0];
+      $('btnAnalizar').disabled = !ready;
+    }
+
+    function fd() {
+      const f = new FormData();
+      f.append('pedido', $('filePedido').files[0]);
+      f.append('punto_pedido', $('filePP').files[0]);
+      f.append('dias_min_retail', $('diasMin').value || '3');
+      f.append('umbral_frescura_dias', $('umbralFresc').value || '60');
+      f.append('usar_frescura', $('usarFresc').value);
+      if ($('sucursal').value.trim()) f.append('sucursal_id', $('sucursal').value.trim());
+      return f;
+    }
+
+    const nf = (v) => (v === null || v === undefined) ? '—' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(1)) : v);
+
+    function render() {
+      if (!ultimo) return;
+      const r = ultimo;
+      const V = { PEDIDO_COMPLETO: 'Pedido despachable completo',
+                  PEDIDO_PARCIAL: 'Pedido despachable parcialmente',
+                  PEDIDO_RECHAZADO: 'Pedido no despachable' };
+      const vEl = $('verdict');
+      vEl.className = 'verdict show ' + r.veredicto;
+      $('verdictT').textContent = V[r.veredicto] || r.veredicto;
+      $('verdictM').textContent =
+        `Cliente: ${r.cliente || '—'} · Solicitud(es): ${(r.solicitudes||[]).join(', ') || '—'}` +
+        ` · Frescura ${r.resumen.frescura_aplicada ? 'aplicada' : 'no disponible'}` +
+        ` · Regla: mantener ≥ ${r.parametros.dias_min_retail} días de cobertura minorista.`;
+
+      $('kpis').style.display = '';
+      $('kTotal').textContent = r.resumen.total_skus;
+      $('kEnviar').textContent = r.resumen.enviar;
+      $('kParcial').textContent = r.resumen.enviar_parcial;
+      $('kNo').textContent = r.resumen.no_enviar;
+      $('kRev').textContent = r.resumen.revisar;
+      $('kBultos').textContent = `${nf(r.resumen.bultos_a_enviar)} / ${nf(r.resumen.bultos_pedidos)}`;
+
+      $('resultPanel').style.display = '';
+      const rows = r.resultados.filter(x => filtro === 'TODOS' || x.estado === filtro);
+      const tb = $('tbody');
+      if (!rows.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Sin filas para este filtro.</td></tr>'; return; }
+      tb.innerHTML = rows.map(x => `
+        <tr>
+          <td><b>${x.codigo}</b></td>
+          <td>${x.descripcion || ''}</td>
+          <td class="num">${nf(x.cantidad_pedida)}</td>
+          <td class="num">${nf(x.stock)}</td>
+          <td class="num">${nf(x.venta_diaria)}</td>
+          <td class="num">${nf(x.dias_stock_actual)}</td>
+          <td class="num">${nf(x.dias_stock_post)}</td>
+          <td class="num">${nf(x.dias_frescura)}</td>
+          <td class="num"><b>${nf(x.cantidad_a_enviar)}</b></td>
+          <td><span class="chip ${x.estado}">${x.estado.replace('_',' ')}</span></td>
+          <td class="motivo">${(x.motivos||[]).join(' ')}</td>
+        </tr>`).join('');
+    }
+
+    $('filters').addEventListener('click', (e) => {
+      const b = e.target.closest('.fbtn'); if (!b) return;
+      document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active'); filtro = b.dataset.f; render();
+    });
+
+    $('btnAnalizar').addEventListener('click', async () => {
+      const s = $('status'); s.className = 'status'; s.textContent = 'Analizando…';
+      $('btnAnalizar').disabled = true;
+      try {
+        const resp = await fetch('/api/analisis-pedidos/analizar', { method: 'POST', body: fd() });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || 'Error al analizar');
+        ultimo = data; filtro = 'TODOS';
+        document.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('active', x.dataset.f === 'TODOS'));
+        render();
+        $('btnExport').disabled = false;
+        s.textContent = 'Listo.';
+      } catch (err) {
+        s.className = 'status err'; s.textContent = err.message;
+      } finally {
+        refreshBtn();
+      }
+    });
+
+    $('btnExport').addEventListener('click', async () => {
+      const s = $('status'); s.className = 'status'; s.textContent = 'Generando Excel…';
+      try {
+        const resp = await fetch('/api/analisis-pedidos/exportar', { method: 'POST', body: fd() });
+        if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || 'Error al exportar'); }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'analisis_pedido.xlsx'; a.click();
+        URL.revokeObjectURL(url);
+        s.textContent = 'Excel descargado.';
+      } catch (err) {
+        s.className = 'status err'; s.textContent = err.message;
+      }
+    });
+  </script>
+</body>
+</html>
