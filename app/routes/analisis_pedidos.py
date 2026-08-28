@@ -99,3 +99,33 @@ def exportar():
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:  # pragma: no cover
         return jsonify({"ok": False, "error": f"No se pudo exportar: {exc}"}), 500
+
+
+@bp.post("/exportar-pedidos-genericos")
+@login_required
+def exportar_pedidos_genericos():
+    pedido = request.files.get("pedido")
+    punto_pedido = request.files.get("punto_pedido")
+    if pedido is None or punto_pedido is None:
+        return jsonify({"ok": False, "error": "Se requieren ambos archivos para exportar."}), 400
+
+    dias_min, umbral, usar_frescura, sucursal_id = _leer_params()
+    try:
+        data = svc.analizar(
+            pedido.read(),
+            punto_pedido.read(),
+            dias_min_retail=dias_min,
+            umbral_frescura_dias=umbral,
+            usar_frescura=usar_frescura,
+            sucursal_id=sucursal_id,
+        )
+        xlsx = svc.exportar_pedidos_genericos_xlsx(data)
+        return Response(
+            xlsx,
+            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": "attachment; filename=pedidos_genericos_smk.xlsx"},
+        )
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:  # pragma: no cover
+        return jsonify({"ok": False, "error": f"No se pudo exportar: {exc}"}), 500

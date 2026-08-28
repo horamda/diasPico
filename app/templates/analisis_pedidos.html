@@ -137,6 +137,7 @@
         <div class="actions">
           <button class="btn primary" id="btnAnalizar" disabled>Analizar pedido</button>
           <button class="btn ok" id="btnExport" disabled>Descargar Excel</button>
+          <button class="btn ok" id="btnExportGenerico" disabled>Completar pedidos genericos</button>
           <span class="status" id="status"></span>
         </div>
       </div>
@@ -436,6 +437,7 @@
         document.querySelectorAll('.fbtn').forEach(x => x.classList.toggle('active', x.dataset.f === 'TODOS'));
         render();
         $('btnExport').disabled = false;
+        $('btnExportGenerico').disabled = false;
         s.textContent = 'Listo.';
       } catch (err) {
         s.className = 'status err'; s.textContent = err.message;
@@ -455,6 +457,22 @@
         a.href = url; a.download = 'analisis_pedido.xlsx'; a.click();
         URL.revokeObjectURL(url);
         s.textContent = 'Excel descargado.';
+      } catch (err) {
+        s.className = 'status err'; s.textContent = err.message;
+      }
+    });
+
+    $('btnExportGenerico').addEventListener('click', async () => {
+      const s = $('status'); s.className = 'status'; s.textContent = 'Generando pedidos genericos...';
+      try {
+        const resp = await fetch('/api/analisis-pedidos/exportar-pedidos-genericos', { method: 'POST', body: fd() });
+        if (!resp.ok) { const e = await resp.json().catch(()=>({})); throw new Error(e.error || 'Error al exportar'); }
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'pedidos_genericos_smk.xlsx'; a.click();
+        URL.revokeObjectURL(url);
+        s.textContent = 'Pedidos genericos descargado.';
       } catch (err) {
         s.className = 'status err'; s.textContent = err.message;
       }

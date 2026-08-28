@@ -524,6 +524,9 @@ def _analizar_linea(
             "codigo_original": linea.get("codigo_original") or codigo,
             "codigo_equivalente_usado": bool(linea.get("codigo_equivalente_usado")),
             "descripcion": descripcion,
+            "cliente": linea.get("cliente") or "",
+            "solicitud": linea.get("solicitud") or "",
+            "entrega": linea.get("entrega") or "",
             "cantidad_pedida": cantidad_pedida,
             "stock": None,
             "venta_diaria": None,
@@ -596,6 +599,9 @@ def _analizar_linea(
         "codigo_original": linea.get("codigo_original") or codigo,
         "codigo_equivalente_usado": bool(linea.get("codigo_equivalente_usado")),
         "descripcion": descripcion,
+        "cliente": linea.get("cliente") or "",
+        "solicitud": linea.get("solicitud") or "",
+        "entrega": linea.get("entrega") or "",
         "cantidad_pedida": cantidad_pedida,
         "stock": stock,
         "venta_diaria": round(venta_diaria, 2),
@@ -743,6 +749,99 @@ def exportar_xlsx(analisis: dict[str, Any]) -> bytes:
     for col, w in enumerate(anchos, start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+
+    out = BytesIO()
+    wb.save(out)
+    return out.getvalue()
+
+
+def exportar_pedidos_genericos_xlsx(analisis: dict[str, Any]) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Pedidos"
+    docs = wb.create_sheet("Documentos")
+
+    ws.merge_cells("A1:L1")
+    ws["A1"] = "Referencias:  * Campos Obligatorios * Solo Lectura"
+    ws["A1"].font = Font(bold=True, color="666666")
+    ws.merge_cells("A3:L3")
+    ws["A3"] = "DATOS DEL PEDIDO"
+    ws["A3"].font = Font(bold=True, color="FFFFFF")
+    ws["A3"].fill = PatternFill("solid", fgColor="305496")
+
+    headers = [
+        "Nro.Pedido", "Fecha Entrega", "Cliente", "Tipo Documento", "Concepto",
+        "Articulo", "Bultos", "Unidades", "Precio Neto", "Bonificacion",
+        "Vendedor", "Cambio / Sin Cargo",
+    ]
+    hints = [
+        "(Numerico)", "(dd/mm/aaaa)", "(Numerico)", "(Texto)", "(Texto)",
+        "(Numerico)", "(Numerico)", "(Numerico)", "(Decimal)", "(Decimal)",
+        "(Numerico)", "(X=Cambio / S=Sin Cargo)",
+    ]
+    for col, value in enumerate(headers, start=1):
+        cell = ws.cell(row=4, column=col, value=value)
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1E3A5F")
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for col, value in enumerate(hints, start=1):
+        cell = ws.cell(row=5, column=col, value=value)
+        cell.font = Font(italic=True, color="666666", size=9)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    row_idx = 6
+    for item in analisis.get("resultados", []):
+        cantidad = float(item.get("cantidad_a_enviar") or 0)
+        if cantidad <= 0:
+            continue
+        ws.cell(row=row_idx, column=1, value=item.get("solicitud") or "")
+        ws.cell(row=row_idx, column=2, value=item.get("entrega") or "")
+        ws.cell(row=row_idx, column=3, value=item.get("cliente") or analisis.get("cliente") or "")
+        ws.cell(row=row_idx, column=4, value="")
+        ws.cell(row=row_idx, column=5, value="")
+        ws.cell(row=row_idx, column=6, value=item.get("codigo") or "")
+        ws.cell(row=row_idx, column=7, value=cantidad)
+        ws.cell(row=row_idx, column=8, value=0)
+        ws.cell(row=row_idx, column=9, value=0)
+        ws.cell(row=row_idx, column=10, value=0)
+        ws.cell(row=row_idx, column=11, value="")
+        ws.cell(row=row_idx, column=12, value="")
+        row_idx += 1
+
+    widths = [14, 16, 14, 16, 18, 14, 12, 12, 14, 14, 12, 20]
+    for col, width in enumerate(widths, start=1):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+    ws.freeze_panes = "A6"
+
+    docs["A1"] = "Documentos"
+    docs["A1"].font = Font(bold=True)
+    docs["A2"] = "Identificador"
+    docs["B2"] = "Descripcion"
+    for cell in docs[2]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="1E3A5F")
+    documentos = [
+        ("DVMPY", "NOTA DE CREDITO MIPYME"),
+        ("DVVTA", "NOTA DE CREDITO"),
+        ("FCCSG", "FACTURA CIERRE CONSIG."),
+        ("FCMPY", "FACTURA MIPYME"),
+        ("FCVTA", "FACTURA"),
+        ("NDCON", "NOTA DE DEBITO"),
+        ("NDMPY", "NOTA DE DEBITO MIPYME"),
+        ("NDPRE", "DEBITOS PRESUPUESTO"),
+        ("PRCSG", "FACT. PRESUP. CIERRE CONSIG."),
+        ("PRDVO", "DEVOLUCION PRESUPUESTO"),
+        ("PRMPY", "FACT. PRESUPUESTO MIPYME"),
+        ("PRVTA", "FACT. PRESUPUESTO"),
+    ]
+    for idx, (codigo, descripcion) in enumerate(documentos, start=3):
+        docs.cell(row=idx, column=1, value=codigo)
+        docs.cell(row=idx, column=2, value=descripcion)
+    docs.column_dimensions["A"].width = 16
+    docs.column_dimensions["B"].width = 34
 
     out = BytesIO()
     wb.save(out)
