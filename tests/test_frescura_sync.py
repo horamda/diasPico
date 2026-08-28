@@ -91,7 +91,16 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
                         'fecVtoLote': '01-01-2030',
                         'cantBultos': '2,5' if deposito == '1' else 3,
                         'cantUnidades': '9' if deposito == '4' else '12',
-                    }
+                    },
+                    {
+                        'idDeposito': deposito,
+                        'idAlmacen': f'ALM-{deposito}',
+                        'idArticulo': '935',
+                        'dsArticulo': 'Articulo excluido',
+                        'fecVtoLote': '01-01-2030',
+                        'cantBultos': '99',
+                        'cantUnidades': '99',
+                    },
                 ]
             }
         }
@@ -112,7 +121,7 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
 
     assert result['ok'] is True
     assert result['mode'] == 'erp'
-    assert result['total_items'] == 2
+    assert result['total_items'] == 4
     assert result['saved_rows'] == 2
     assert result['source_url'].endswith('/stock/')
     assert captured['login']['url'].endswith('/auth/login')
@@ -121,6 +130,7 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
     assert captured['stock_calls'][0]['headers']['Cookie'] == 'SESSION-123'
 
     assert captured['bulk_rows'] is not None
+    assert all(row[1] != '935' for row in captured['bulk_rows'])
     assert captured['bulk_rows'][0][0] == '1'
     assert captured['bulk_rows'][1][0] == '2'
     assert captured['bulk_rows'][0][2] == 'Articulo 1'

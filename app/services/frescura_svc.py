@@ -20,6 +20,7 @@ _CONFIG_CACHE: dict[str, Any] | None = None
 _CONFIG_LOCK = threading.Lock()
 
 _GOOD_CLUSTERS = {'Ganador', 'En crecimiento'}
+_EXCLUDED_ARTICLE_CODES = {'935'}
 _CLUSTER_BONUS = {
     'Ganador': 30,
     'En crecimiento': 20,
@@ -1489,6 +1490,10 @@ def _normalize_api_row(
     }
 
 
+def _is_excluded_article_code(value: Any) -> bool:
+    return _norm(value) in _EXCLUDED_ARTICLE_CODES
+
+
 def _fetch_frescura_payload_legacy(settings: dict[str, Any]) -> dict[str, Any]:
     base_url = settings['base_url']
     token = settings['token']
@@ -1623,7 +1628,7 @@ def sync_frescura_from_api() -> dict[str, Any]:
                 )
                 for item in items
             )
-            if row['codigo_articulo']
+            if row['codigo_articulo'] and not _is_excluded_article_code(row['codigo_articulo'])
         ]
 
         cleanup_ids = sorted(
@@ -1641,6 +1646,13 @@ def sync_frescura_from_api() -> dict[str, Any]:
                         """,
                         {'sucursales': cleanup_ids},
                     )
+                cur.execute(
+                    """
+                    DELETE FROM frescura_articulos
+                     WHERE codigo_articulo = ANY(%(excluded_codes)s)
+                    """,
+                    {'excluded_codes': sorted(_EXCLUDED_ARTICLE_CODES)},
+                )
                 if normalized:
                     psycopg2.extras.execute_values(
                         cur,

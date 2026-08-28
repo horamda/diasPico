@@ -9,6 +9,7 @@ import psycopg2.extras
 
 from app.database import pg_conn, pg_cursor
 from app.services.articulos_svc import ensure_articulos_table
+from app.services import frescura_svc
 from app.services.ventas_svc import ensure_ventas_detalle_table
 
 
@@ -17,6 +18,7 @@ _CONTROL_STOCK_LOCK = Lock()
 _DISPERSION_MIN_BULTOS = 5.0
 _DISPERSION_PCT = 0.20
 _PENDIENTES_DESDE = date(2026, 8, 10)
+_EXCLUDED_ARTICLE_IDS = {935}
 
 
 def ensure_control_stock_tables() -> None:
@@ -158,14 +160,7 @@ def _previous_month_label(mes: str) -> str:
     return f"{year}-{month:02d}"
 
 
-def get_frescura_status(fecha_control: str | None = None) -> dict:
-    ensure_control_stock_tables()
-    control_date = date.today()
-    if fecha_control:
-        try:
-            control_date = date.fromisoformat(str(fecha_control)[:10])
-        except Exception:
-            control_date = date.today()
+def _latest_frescura_sync_row() -> dict | None:
     try:
         with pg_cursor() as cur:
             cur.execute(
@@ -175,8 +170,12 @@ def get_frescura_status(fecha_control: str | None = None) -> dict:
                    LIMIT 1"""
             )
             row = cur.fetchone()
+            return dict(row) if row else None
     except Exception:
-        row = None
+        return None
+
+
+def _format_frescura_status(row: dict | None, control_date: date, auto_sync: dict | None = None) -> dict:
     if not row:
         return {
             "ok": True,
@@ -185,6 +184,7 @@ def get_frescura_status(fecha_control: str | None = None) -> dict:
             "dias_diferencia": None,
             "estado_alerta": "sin_datos",
             "mensaje": "Sin datos de actualizacion de Frescura",
+            "auto_sync": auto_sync,
         }
     finished = row.get("finished_at") or row.get("started_at")
     if isinstance(finished, datetime):
@@ -211,7 +211,35 @@ def get_frescura_status(fecha_control: str | None = None) -> dict:
         "dias_diferencia": diff,
         "estado_alerta": "desactualizado" if stale else "ok",
         "mensaje": "Frescura desactualizada para esta fecha de control" if stale else "Frescura actualizada",
+        "auto_sync": auto_sync,
     }
+
+
+def get_frescura_status(fecha_control: str | None = None, auto_sync: bool = True) -> dict:
+    ensure_control_stock_tables()
+    control_date = date.today()
+    if fecha_control:
+        try:
+            control_date = date.fromisoformat(str(fecha_control)[:10])
+        except Exception:
+            control_date = date.today()
+    row = _latest_frescura_sync_row()
+    status = _format_frescura_status(row, control_date)
+    should_sync = status["estado_alerta"] in {"sin_datos", "desactualizado"}
+    if not auto_sync or not should_sync:
+        return status
+    try:
+        sync_result = frescura_svc.sync_frescura_from_api()
+        refreshed = _latest_frescura_sync_row()
+        return _format_frescura_status(refreshed, control_date, auto_sync={
+            "ok": True,
+            "triggered": True,
+            "saved_rows": int(sync_result.get("saved_rows") or 0),
+            "total_items": int(sync_result.get("total_items") or 0),
+        })
+    except Exception as exc:
+        status["auto_sync"] = {"ok": False, "triggered": True, "error": str(exc)}
+        return status
 
 
 def _business_days_count(ini: date, fin: date) -> int:
@@ -531,13 +559,14 @@ def get_abc_articulos(mes: str | None = None, limit: int | None = None, sucursal
              AND LOWER(TRIM(COALESCE(v.detalle_documento, ''))) NOT LIKE '%%remit%%'
              AND LOWER(TRIM(COALESCE(v.detalle_documento, ''))) NOT LIKE '%%comod%%'
             WHERE UPPER(TRIM(COALESCE(a.activo, ''))) IN ('SI', 'S', '1', 'TRUE', 'ACTIVO')
+              AND a.id_articulo <> ALL(%(excluded_article_ids)s)
               AND UPPER(TRIM(COALESCE(NULLIF(a.movil, ''), 'SI'))) IN ('SI', 'S', '1', 'TRUE')
               AND UPPER(TRIM(COALESCE(NULLIF(a.anulado, ''), 'NO'))) IN ('NO', 'N', '0', 'FALSE')
               AND UPPER(TRIM(COALESCE(a.tipo_producto, ''))) NOT IN ('P.O.P.', 'ENVASE', 'ESQUELETO', 'MERCHANDISING', '')
             GROUP BY a.id_articulo, a.descripcion, a.unidad_negocio, a.tipo_producto, a.activo_cc, a.activo, a.movil, a.anulado, a.bultos_por_pallet, a.bultos_por_piso, a.pisos, a.apilabilidad, a.unidades_por_bulto, a.rotacion_abc
             ORDER BY bultos DESC, a.id_articulo
             """,
-            params,
+            {**params, "excluded_article_ids": sorted(_EXCLUDED_ARTICLE_IDS)},
         )
         raw_rows = [dict(r) for r in (cur.fetchall() or [])]
 
