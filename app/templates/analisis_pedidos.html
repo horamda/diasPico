@@ -17,6 +17,10 @@
     .btn:disabled{opacity:.5;cursor:not-allowed}
     .btn.primary{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
     .btn.ok{background:#16a34a;border-color:#16a34a;color:#fff;font-weight:700}
+    .tabs{display:flex;gap:6px;margin:10px 0 12px;border-bottom:1px solid #cbd5e1}
+    .tab{border:1px solid transparent;border-bottom:0;background:transparent;color:#475569;padding:9px 13px;border-radius:6px 6px 0 0;font-weight:800;cursor:pointer}
+    .tab.active{background:#fff;border-color:#cbd5e1;color:#0f172a}
+    .view{display:none}.view.active{display:block}
     .panel{background:#fff;border:1px solid #b6c3d1;border-radius:9px;margin-bottom:12px;overflow:hidden}
     .panel-h{padding:11px 14px;border-bottom:1px solid #e2e8f0;font-weight:800;font-size:13px;display:flex;justify-content:space-between;align-items:center}
     .panel-b{padding:14px}
@@ -31,6 +35,9 @@
     .params{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
     .field label{display:block;font-size:10px;font-weight:800;text-transform:uppercase;color:#475569;margin-bottom:4px}
     .field input,.field select{width:100%;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;color:#0f172a;padding:8px;font-size:13px}
+    .eq-form{display:grid;grid-template-columns:160px 160px 1fr 110px auto;gap:10px;align-items:end}
+    .eq-tools{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+    .eq-search{max-width:360px;background:#f8fafc;border:1px solid #cbd5e1;border-radius:6px;color:#0f172a;padding:8px;font-size:13px}
     .actions{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
     .verdict{border-radius:9px;padding:14px 16px;margin-bottom:12px;display:none;border:1px solid}
     .verdict.show{display:block}
@@ -64,7 +71,7 @@
     .status.err{color:#b91c1c}
     .empty{padding:40px;text-align:center;color:#94a3b8}
     a.back{color:#2563eb;text-decoration:none;font-size:12px;font-weight:700}
-    @media(max-width:900px){.drop-grid{grid-template-columns:1fr}.params{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(3,1fr)}}
+    @media(max-width:900px){.drop-grid{grid-template-columns:1fr}.params{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(3,1fr)}.eq-form{grid-template-columns:1fr 1fr}.eq-form .wide{grid-column:1/-1}}
   </style>
 </head>
 <body>
@@ -78,6 +85,12 @@
       <a class="back" href="/portal">← Volver al portal</a>
     </div>
 
+    <div class="tabs" role="tablist">
+      <button class="tab active" type="button" data-tab="analisis">Analisis</button>
+      <button class="tab" type="button" data-tab="equivalencias">Equivalencias</button>
+    </div>
+
+    <div class="view active" id="viewAnalisis">
     <!-- Carga -->
     <div class="panel">
       <div class="panel-h">1 · Cargar archivos <span class="sub">Ambos en formato Excel (.xlsx)</span></div>
@@ -172,11 +185,168 @@
         </table>
       </div>
     </div>
+    </div>
+
+    <div class="view" id="viewEquivalencias">
+      <div class="panel">
+        <div class="panel-h">
+          Equivalencias de articulos
+          <span class="sub">ProductoCodigo del pedido SMK contra codigo real interno</span>
+        </div>
+        <div class="panel-b">
+          <div class="eq-form">
+            <div class="field">
+              <label>ProductoCodigo</label>
+              <input type="text" id="eqProducto" placeholder="Ej: 24683">
+            </div>
+            <div class="field">
+              <label>Codigo real</label>
+              <input type="text" id="eqReal" placeholder="Ej: 19026">
+            </div>
+            <div class="field wide">
+              <label>Descripcion</label>
+              <input type="text" id="eqDesc" placeholder="Descripcion del articulo del pedido">
+            </div>
+            <div class="field">
+              <label>Activo</label>
+              <select id="eqActivo">
+                <option value="true" selected>Si</option>
+                <option value="false">No</option>
+              </select>
+            </div>
+            <button class="btn primary" id="btnEqSave" type="button">Guardar</button>
+          </div>
+          <div class="actions eq-tools">
+            <input class="eq-search" id="eqSearch" type="search" placeholder="Buscar codigo o descripcion">
+            <span class="status" id="eqStatus"></span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ProductoCodigo</th>
+                <th>Codigo real</th>
+                <th>Descripcion</th>
+                <th>Activo</th>
+                <th>Actualizado</th>
+                <th>Accion</th>
+              </tr>
+            </thead>
+            <tbody id="eqTbody">
+              <tr><td colspan="6" class="empty">Cargando equivalencias...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
     let ultimo = null, filtro = 'TODOS';
+    let equivalencias = [];
+
+    function openModuleTab(tab) {
+      document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab));
+      $('viewAnalisis').classList.toggle('active', tab === 'analisis');
+      $('viewEquivalencias').classList.toggle('active', tab === 'equivalencias');
+      if (tab === 'equivalencias') loadEquivalencias();
+    }
+
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => openModuleTab(tab.dataset.tab));
+    });
+
+    function renderEquivalencias() {
+      const q = ($('eqSearch').value || '').trim().toLowerCase();
+      const rows = equivalencias.filter(x => {
+        if (!q) return true;
+        return String(x.producto_codigo || '').toLowerCase().includes(q)
+          || String(x.codigo_real || '').toLowerCase().includes(q)
+          || String(x.producto_descripcion || '').toLowerCase().includes(q);
+      });
+      const tb = $('eqTbody');
+      if (!rows.length) {
+        tb.innerHTML = '<tr><td colspan="6" class="empty">Sin equivalencias para mostrar.</td></tr>';
+        return;
+      }
+      tb.innerHTML = rows.map(x => `
+        <tr>
+          <td><b>${x.producto_codigo || ''}</b></td>
+          <td>${x.codigo_real || ''}</td>
+          <td>${x.producto_descripcion || ''}</td>
+          <td>${x.activo ? 'Si' : 'No'}</td>
+          <td>${x.updated_at || ''}</td>
+          <td><button class="btn" type="button" data-edit-eq="${x.producto_codigo}">Editar</button></td>
+        </tr>
+      `).join('');
+    }
+
+    async function loadEquivalencias() {
+      const s = $('eqStatus');
+      s.className = 'status';
+      s.textContent = 'Cargando...';
+      try {
+        const resp = await fetch('/api/analisis-pedidos/equivalencias');
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || 'No se pudieron cargar las equivalencias');
+        equivalencias = data.data || [];
+        renderEquivalencias();
+        s.textContent = `${equivalencias.length} equivalencias`;
+      } catch (err) {
+        s.className = 'status err';
+        s.textContent = err.message;
+      }
+    }
+
+    $('eqSearch').addEventListener('input', renderEquivalencias);
+    $('eqTbody').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-edit-eq]');
+      if (!b) return;
+      const row = equivalencias.find(x => String(x.producto_codigo) === String(b.dataset.editEq));
+      if (!row) return;
+      $('eqProducto').value = row.producto_codigo || '';
+      $('eqReal').value = row.codigo_real || '';
+      $('eqDesc').value = row.producto_descripcion || '';
+      $('eqActivo').value = row.activo ? 'true' : 'false';
+      $('eqProducto').focus();
+    });
+
+    $('btnEqSave').addEventListener('click', async () => {
+      const s = $('eqStatus');
+      const payload = {
+        producto_codigo: $('eqProducto').value.trim(),
+        codigo_real: $('eqReal').value.trim(),
+        producto_descripcion: $('eqDesc').value.trim(),
+        activo: $('eqActivo').value === 'true',
+      };
+      if (!payload.producto_codigo || !payload.codigo_real) {
+        s.className = 'status err';
+        s.textContent = 'ProductoCodigo y Codigo real son obligatorios.';
+        return;
+      }
+      s.className = 'status';
+      s.textContent = 'Guardando...';
+      try {
+        const resp = await fetch('/api/analisis-pedidos/equivalencias', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) throw new Error(data.error || 'No se pudo guardar la equivalencia');
+        $('eqProducto').value = '';
+        $('eqReal').value = '';
+        $('eqDesc').value = '';
+        $('eqActivo').value = 'true';
+        await loadEquivalencias();
+        s.textContent = 'Equivalencia guardada.';
+      } catch (err) {
+        s.className = 'status err';
+        s.textContent = err.message;
+      }
+    });
 
     function setDrop(inputEl, dropEl, nameEl) {
       inputEl.addEventListener('change', () => {
@@ -235,7 +405,7 @@
       if (!rows.length) { tb.innerHTML = '<tr><td colspan="11" class="empty">Sin filas para este filtro.</td></tr>'; return; }
       tb.innerHTML = rows.map(x => `
         <tr>
-          <td><b>${x.codigo}</b></td>
+          <td><b>${x.codigo_equivalente_usado ? `${x.codigo_original} -> ${x.codigo}` : x.codigo}</b></td>
           <td>${x.descripcion || ''}</td>
           <td class="num">${nf(x.cantidad_pedida)}</td>
           <td class="num">${nf(x.stock)}</td>
