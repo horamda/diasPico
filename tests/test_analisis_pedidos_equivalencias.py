@@ -1,5 +1,6 @@
 from app.services import analisis_pedidos_svc as svc
 from io import BytesIO
+from contextlib import contextmanager
 
 from openpyxl import load_workbook
 
@@ -74,12 +75,66 @@ def test_exportar_pedidos_genericos_completa_template():
     wb.close()
 
 
+def test_exportar_xlsx_agrega_resumen_clientes_con_montos():
+    content = svc.exportar_xlsx({
+        "cliente": "6477 - DAI LIQING",
+        "cliente_datos": [{
+            "cliente": "6477",
+            "sucursal": "2",
+            "razon_social": "DAI LIQING",
+            "nombre_fantasia": "SUPER PLAZA",
+            "localidad": "DOLORES",
+            "provincia": "BUENOS AIRES",
+            "fuerza_venta_1_dias_visita": "MAR,VIE",
+            "activo_maestro": True,
+        }],
+        "solicitudes": ["9001"],
+        "veredicto": "PEDIDO_PARCIAL",
+        "parametros": {"dias_min_retail": 3, "umbral_frescura_dias": 60},
+        "resumen": {},
+        "resultados": [{
+            "codigo": "19026",
+            "descripcion": "BUD",
+            "cliente": "6477 - DAI LIQING",
+            "cliente_codigo": "6477",
+            "cantidad_pedida": 10,
+            "cantidad_a_enviar": 5,
+            "monto_pedido": 12000,
+            "stock": 100,
+            "venta_diaria": 2,
+            "dias_stock_actual": 50,
+            "dias_stock_post": 47.5,
+            "dias_frescura": 80,
+            "estado": svc.ENVIAR_PARCIAL,
+            "motivos": ["Parcial"],
+        }],
+    })
+
+    wb = load_workbook(BytesIO(content), data_only=True)
+    assert wb.sheetnames == ["Analisis pedido", "Clientes"]
+    ws = wb["Analisis pedido"]
+    assert ws["A7"].value == "Cliente"
+    assert ws["A8"].value == "6477"
+    assert ws["B8"].value == "2"
+    assert ws["F8"].value == 12000
+    assert ws["M8"].value == 6000
+    ws_cli = wb["Clientes"]
+    assert ws_cli["A2"].value == "6477"
+    assert ws_cli["C2"].value == "2"
+    assert ws_cli["D2"].value == "DAI LIQING"
+    assert ws_cli["K2"].value == 10
+    assert ws_cli["L2"].value == 5
+    assert ws_cli["N2"].value == 6000
+    wb.close()
+
+
 def test_clientes_smk_por_defecto_normalizan_nombre():
     clientes = svc._default_clientes_smk_map()
 
     assert svc.resolver_cliente_smk("CENCOSUD -   CALLE 3 389", clientes) == "214"
     assert svc.resolver_cliente_smk("DIARCO -   RUTA NACIONAL Nø 2 KM", clientes) == "11603"
     assert svc.resolver_cliente_smk("1029", clientes) == "1029"
+    assert svc.resolver_cliente_smk("6477 - DAI LIQING", clientes) == "6477"
 
 
 def test_recalcula_cumplimiento_con_cantidad_final():
@@ -95,6 +150,65 @@ def test_recalcula_cumplimiento_con_cantidad_final():
     assert payload["resumen"]["bultos_a_enviar"] == 70
     assert payload["resumen"]["cumplimiento_pct"] == 70
     assert payload["resumen"]["objetivo_cumplido"] is True
+
+
+def test_cargar_datos_clientes_maestro_resuelve_codigo_compuesto(monkeypatch):
+    captured = {}
+
+    class Cursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def execute(self, sql, params):
+            captured["sql"] = sql
+            captured["params"] = params
+
+        def fetchall(self):
+            return [
+                {
+                    "cliente": "6477",
+                    "descripcion": None,
+                    "sucursal": "2",
+                    "razon_social": "DAI LIQING",
+                    "nombre_fantasia": "SUPER PLAZA",
+                    "telefonos": None,
+                    "movil": None,
+                    "email": None,
+                    "domicilio": "BELGRANO N 317",
+                    "localidad": "DOLORES",
+                    "provincia": "BUENOS AIRES",
+                    "departamento": None,
+                    "area": None,
+                    "subcanal": None,
+                    "ramo": None,
+                    "categoria": None,
+                    "fuerza_venta_1_dias_visita": "MAR,VIE",
+                    "activo_maestro": True,
+                    "ultima_importacion_clientes": None,
+                }
+            ]
+
+    class Conn:
+        def cursor(self, *_, **__):
+            return Cursor()
+
+    @contextmanager
+    def fake_pg_conn():
+        yield Conn()
+
+    import app.database
+
+    monkeypatch.setattr(app.database, "pg_conn", fake_pg_conn)
+
+    result = svc.cargar_datos_clientes_maestro(["6477 - DAI LIQING"], "2")
+
+    assert captured["params"]["codigos"] == ["6477"]
+    assert captured["params"]["sucursal_id"] == "2"
+    assert result["6477 - DAI LIQING"]["cliente"] == "6477"
+    assert result["6477"]["nombre_fantasia"] == "SUPER PLAZA"
 
 
 def test_analisis_toma_tercera_frescura_si_las_primeras_no_cumplen():

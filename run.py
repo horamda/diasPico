@@ -13,7 +13,7 @@ def _rerun_with_local_venv() -> None:
         current = Path(sys.executable).resolve()
         target = venv_python.resolve()
     except OSError:
-        return
+        returngit
     if current == target:
         return
     print(f"Usando entorno virtual local: {target}", flush=True)

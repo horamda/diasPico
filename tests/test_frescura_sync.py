@@ -117,7 +117,7 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
         monkeypatch.setattr(frescura_svc.requests, 'get', fake_get)
         monkeypatch.setattr(frescura_svc.psycopg2.extras, 'execute_values', fake_execute_values)
 
-        result = frescura_svc.sync_frescura_from_api()
+        result = frescura_svc.sync_frescura_from_api(fecha_stock=date(2026, 9, 5))
 
     assert result['ok'] is True
     assert result['mode'] == 'erp'
@@ -127,7 +127,9 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
     assert captured['login']['url'].endswith('/auth/login')
     assert captured['login']['json'] == {'usuario': 'APIPUBLICA', 'password': 'secret'}
     assert [call['params']['idDeposito'] for call in captured['stock_calls']] == ['1', '4']
+    assert [call['params']['fechaStock'] for call in captured['stock_calls']] == ['05-09-2026', '05-09-2026']
     assert captured['stock_calls'][0]['headers']['Cookie'] == 'SESSION-123'
+    assert result['fecha_stock'] == '2026-09-05'
 
     assert captured['bulk_rows'] is not None
     assert all(row[1] != '935' for row in captured['bulk_rows'])

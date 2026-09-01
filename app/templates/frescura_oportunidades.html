@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Frescura y oportunidades</title>
+  <title>FEFO</title>
   {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="/static/design-system.css">
   <style>
@@ -85,6 +85,15 @@
       flex-wrap: wrap;
       justify-content: flex-end;
       width: 100%;
+    }
+    .sync-date {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--panel-2);
+      color: var(--txt-main);
+      padding: 8px 10px;
+      font-size: 12px;
     }
 
     .badge {
@@ -776,16 +785,17 @@
   <div class="page">
     <section class="hero">
       <div>
-        <h1>Frescura y oportunidades</h1>
+        <h1>FEFO</h1>
         <p>
-          Articulos con frescura critica o en alerta, con cobertura comercial y cartera priorizada
-          segun clientes activos, recencia de compra y potencial de recuperacion.
+          Primero en vencer, primero en salir: lotes con vencimiento critico o en alerta,
+          cobertura comercial y cartera priorizada.
         </p>
       </div>
       <div class="hero-meta">
         <span class="badge" id="lastSync">Ultima sincronizacion: -</span>
         <div class="hero-actions">
           <a class="btn ghost" href="/portal" title="Volver al inicio del portal">Inicio portal</a>
+          <input id="syncFecha" type="date" class="sync-date" title="Fecha de stock para sincronizar">
           <button class="btn primary" id="syncBtn" onclick="syncFreshness()">Sincronizar</button>
           <button class="btn ghost" onclick="loadArticles(true)">Solo criticos</button>
         </div>
@@ -793,7 +803,11 @@
     </section>
 
     <div class="tabs-bar">
-      <button class="tab-btn active" id="tabBtnFrescura" onclick="switchTab('frescura')">Frescura y oportunidades</button>
+      <button class="tab-btn active" id="tabBtnFrescura" onclick="switchTab('frescura')">FEFO</button>
+      <button class="tab-btn" id="tabBtnDiferencias" onclick="switchTab('diferencias')">
+        Diferencias control
+        <span class="tab-badge" id="diffBadge" style="display:none">0</span>
+      </button>
       <button class="tab-btn" id="tabBtnErrores" onclick="switchTab('errores')">
         Errores de stock
         <span class="tab-badge" id="erroresBadge" style="display:none">0</span>
@@ -917,6 +931,70 @@
   </div>
 
   </div><!-- /tabFrescura -->
+
+  <div id="tabDiferencias" style="display:none">
+    <div class="errores-hero">
+      <div class="icon">!</div>
+      <div style="flex:1">
+        <h3>Diferencias del control de frescura</h3>
+        <p>Solo se muestran lotes donde el control fisico difiere del stock de Frescura o de la fecha de vencimiento informada por el sistema.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <div class="field" style="min-width:150px">
+          <label for="diffSucursalFilter">Sucursal</label>
+          <select id="diffSucursalFilter" onchange="loadDiferenciasControl()">
+            <option value="1">Casa Central</option>
+            <option value="2">Dolores</option>
+          </select>
+        </div>
+        <div class="field" style="min-width:145px">
+          <label for="diffDesde">Desde</label>
+          <input id="diffDesde" type="date" onchange="loadDiferenciasControl()">
+        </div>
+        <div class="field" style="min-width:145px">
+          <label for="diffHasta">Hasta</label>
+          <input id="diffHasta" type="date" onchange="loadDiferenciasControl()">
+        </div>
+        <button class="btn small primary" onclick="loadDiferenciasControl()" style="margin-top:18px">Actualizar</button>
+      </div>
+    </div>
+
+    <div class="errores-kpi" id="diffKpi" style="margin-top:4px"></div>
+
+    <div style="background:var(--panel);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow-soft);overflow:hidden;margin-top:4px">
+      <div class="section-header">
+        <h2>Lotes con diferencias</h2>
+        <div class="meta" id="diffMeta">-</div>
+      </div>
+      <div class="table-wrap" style="padding:0 0 8px">
+        <table>
+          <thead>
+            <tr>
+              <th>Control</th>
+              <th>Fecha</th>
+              <th>Sucursal</th>
+              <th>Responsable</th>
+              <th>Codigo</th>
+              <th>Descripcion</th>
+              <th>Lote</th>
+              <th>Fecha sistema</th>
+              <th>Fecha control</th>
+              <th class="num">Sist. bultos</th>
+              <th class="num">Cont. bultos</th>
+              <th class="num">Sist. unid.</th>
+              <th class="num">Cont. unid.</th>
+              <th>Tipo</th>
+              <th>Observacion</th>
+            </tr>
+          </thead>
+          <tbody id="diffTbody">
+            <tr><td colspan="15" class="empty">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="mobile-list" id="diffMobile"></div>
+    </div>
+  </div><!-- /tabDiferencias -->
 
   <div id="tabErrores" style="display:none">
     <div class="errores-hero">
@@ -1143,6 +1221,14 @@
       return date.toLocaleDateString('es-AR');
     }
 
+    function todayIso() {
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function monthStartIso(value = todayIso()) {
+      return `${String(value).slice(0, 8)}01`;
+    }
+
     function lotTitle(lotes) {
       if (!Array.isArray(lotes) || !lotes.length) return 'Sin lotes';
       return lotes.map((lot) => {
@@ -1279,22 +1365,29 @@
       return { cls: 'ok', label: `Frescura actualizada: ${Math.max(1, Math.round(hours))} h` };
     }
 
+    function syncStockDate(sync) {
+      const payload = sync?.payload_json || {};
+      return payload.fecha_stock || sync?.fecha_stock || '';
+    }
+
     function formatSyncResult(result) {
       const data = result?.data || result || {};
       const rows = fmtInt.format(Number(data.saved_rows || 0));
       const total = fmtInt.format(Number(data.total_items || 0));
       const deposits = Array.isArray(data.deposits) ? data.deposits.join(', ') : '-';
+      const fechaStock = data.fecha_stock ? ` | stock ${formatDate(data.fecha_stock)}` : '';
       const finished = data.last_sync?.finished_at
         ? new Date(data.last_sync.finished_at).toLocaleString('es-AR')
         : new Date().toLocaleString('es-AR');
-      return `Sync OK: ${rows} registros guardados de ${total} items | depositos ${deposits} | ${finished}`;
+      return `Sync OK: ${rows} registros guardados de ${total} items | depositos ${deposits}${fechaStock} | ${finished}`;
     }
 
     function renderMeta(data) {
       const parts = [];
       if (data.last_sync && data.last_sync.finished_at) {
         const status = syncStatus(data.last_sync);
-        parts.push(`${status.label} (${new Date(data.last_sync.finished_at).toLocaleString('es-AR')})`);
+        const stockDate = syncStockDate(data.last_sync);
+        parts.push(`${status.label}${stockDate ? ` | stock ${formatDate(stockDate)}` : ''} (${new Date(data.last_sync.finished_at).toLocaleString('es-AR')})`);
       } else {
         parts.push('Sin sincronizacion registrada');
       }
@@ -1306,7 +1399,7 @@
       lastSync.classList.remove('ok', 'warn', 'error');
       lastSync.classList.add(status.cls);
       lastSync.innerHTML = data.last_sync && data.last_sync.finished_at
-        ? `${status.label}: <strong>${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}</strong>`
+        ? `${status.label}: <strong>${new Date(data.last_sync.finished_at).toLocaleString('es-AR')}</strong>${syncStockDate(data.last_sync) ? ` · stock ${formatDate(syncStockDate(data.last_sync))}` : ''}`
         : '<strong>Sin sincronizacion registrada</strong>';
     }
 
@@ -1456,7 +1549,8 @@
     async function syncFreshness() {
       try {
         setLoading(true, 'Sincronizando...');
-        const result = await api('/api/frescura/sync');
+        const fecha = document.getElementById('syncFecha')?.value || todayIso();
+        const result = await api('/api/frescura/sync?fecha=' + encodeURIComponent(fecha));
         showToast(formatSyncResult(result));
         await loadArticles(false, true);
       } catch (error) {
@@ -1533,13 +1627,113 @@
 
     function switchTab(tab) {
       const isFrescura = tab === 'frescura';
+      const isDiferencias = tab === 'diferencias';
       document.getElementById('tabFrescura').style.display = isFrescura ? '' : 'none';
-      document.getElementById('tabErrores').style.display  = isFrescura ? 'none' : '';
+      document.getElementById('tabDiferencias').style.display = isDiferencias ? '' : 'none';
+      document.getElementById('tabErrores').style.display  = (!isFrescura && !isDiferencias) ? '' : 'none';
       document.getElementById('tabBtnFrescura').classList.toggle('active',  isFrescura);
-      document.getElementById('tabBtnErrores').classList.toggle('active', !isFrescura);
-      if (!isFrescura && document.getElementById('erroresTbody').textContent.trim() === 'Cargando...') {
+      document.getElementById('tabBtnDiferencias').classList.toggle('active', isDiferencias);
+      document.getElementById('tabBtnErrores').classList.toggle('active', !isFrescura && !isDiferencias);
+      if (isDiferencias && document.getElementById('diffTbody').textContent.trim() === 'Cargando...') {
+        loadDiferenciasControl();
+      }
+      if (!isFrescura && !isDiferencias && document.getElementById('erroresTbody').textContent.trim() === 'Cargando...') {
         loadErroresStock();
       }
+    }
+
+    async function loadDiferenciasControl() {
+      const tbody = document.getElementById('diffTbody');
+      if (!tbody) return;
+      tbody.innerHTML = '<tr><td colspan="15" class="empty"><div class="loading"><div class="spinner"></div></div></td></tr>';
+      const sucursal = document.getElementById('diffSucursalFilter')?.value || '1';
+      const desde = document.getElementById('diffDesde')?.value || monthStartIso();
+      const hasta = document.getElementById('diffHasta')?.value || todayIso();
+      try {
+        const data = await api(`/api/control-stock/frescura-diferencias?sucursal=${encodeURIComponent(sucursal)}&desde=${encodeURIComponent(desde)}&hasta=${encodeURIComponent(hasta)}`);
+        renderDiferenciasControl(data.data || data);
+      } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="15" class="empty" style="color:var(--red)">${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderDiferenciasControl(data) {
+      const items = data.rows || [];
+      const badge = document.getElementById('diffBadge');
+      if (badge) {
+        badge.style.display = items.length ? '' : 'none';
+        badge.textContent = items.length ? fmtInt.format(items.length) : '0';
+      }
+      const kpiEl = document.getElementById('diffKpi');
+      if (kpiEl) {
+        const articulos = new Set(items.map(r => r.codigo_articulo)).size;
+        kpiEl.innerHTML = `
+          <div class="kpi-pill"><div class="num">${fmtInt.format(items.length)}</div><div class="lbl">Diferencias</div></div>
+          <div class="kpi-pill"><div class="num">${fmtInt.format(data.diferencias_stock || 0)}</div><div class="lbl">Stock</div></div>
+          <div class="kpi-pill"><div class="num">${fmtInt.format(data.diferencias_fecha || 0)}</div><div class="lbl">Fechas</div></div>
+          <div class="kpi-pill"><div class="num">${fmtInt.format(articulos)}</div><div class="lbl">Articulos</div></div>
+        `;
+      }
+      const metaEl = document.getElementById('diffMeta');
+      if (metaEl) metaEl.textContent = items.length ? `${fmtInt.format(items.length)} diferencias guardadas` : 'Sin diferencias guardadas';
+      const tbody = document.getElementById('diffTbody');
+      renderDiffCards(items);
+      if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="15" class="empty" style="color:var(--grn)">Sin diferencias guardadas para los filtros seleccionados.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = items.map(row => {
+        const tipo = [row.diferencia_stock ? 'Stock' : '', row.diferencia_fecha ? 'Fecha' : ''].filter(Boolean).join(' + ');
+        return `
+          <tr>
+            <td class="mono">${esc(row.conteo_id || '-')}</td>
+            <td class="mono">${formatDate(row.fecha)}</td>
+            <td>${esc(row.sucursal_nombre || row.sucursal || '-')}</td>
+            <td>${esc(row.responsable || '-')}</td>
+            <td class="mono">${esc(row.codigo_articulo || '-')}</td>
+            <td>${esc(row.descripcion_articulo || '-')}</td>
+            <td class="mono">${esc(row.lote || 'SIN_LOTE')}</td>
+            <td class="mono">${formatDate(row.fecha_vencimiento_sistema)}</td>
+            <td class="mono">${formatDate(row.fecha_vencimiento_controlada)}</td>
+            <td class="num mono">${fmt.format(row.stock_sistema_bultos || 0)}</td>
+            <td class="num mono">${fmt.format(row.stock_contado_bultos || 0)}</td>
+            <td class="num mono">${fmt.format(row.stock_sistema_unidades || 0)}</td>
+            <td class="num mono">${fmt.format(row.stock_contado_unidades || 0)}</td>
+            <td><span class="chip alerta">${esc(tipo)}</span></td>
+            <td>${esc(row.observacion || '')}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function renderDiffCards(items) {
+      const mobile = document.getElementById('diffMobile');
+      if (!mobile) return;
+      if (!items.length) {
+        mobile.innerHTML = '<div class="empty">Sin diferencias guardadas.</div>';
+        return;
+      }
+      mobile.innerHTML = items.map(row => {
+        const tipo = [row.diferencia_stock ? 'Stock' : '', row.diferencia_fecha ? 'Fecha' : ''].filter(Boolean).join(' + ');
+        return `
+          <article class="article-mobile-card">
+            <div class="mobile-card-head">
+              <div>
+                <strong>${esc(row.codigo_articulo || '-')} · ${esc(row.descripcion_articulo || '-')}</strong>
+                <small>${esc(row.sucursal_nombre || '-')} · ${formatDate(row.fecha)} · ${esc(row.responsable || '-')}</small>
+              </div>
+              <span class="chip alerta">${esc(tipo)}</span>
+            </div>
+            <div class="mobile-metrics">
+              <span><b>${esc(row.lote || 'SIN_LOTE')}</b>Lote</span>
+              <span><b>${formatDate(row.fecha_vencimiento_sistema)}</b>Fecha sistema</span>
+              <span><b>${formatDate(row.fecha_vencimiento_controlada)}</b>Fecha control</span>
+              <span><b>${fmt.format(row.stock_sistema_bultos || 0)} / ${fmt.format(row.stock_contado_bultos || 0)}</b>Bultos</span>
+            </div>
+            <div class="mobile-card-desc">${esc(row.observacion || '')}</div>
+          </article>
+        `;
+      }).join('');
     }
 
     async function loadErroresStock() {
@@ -1841,7 +2035,11 @@
       if (event.key === 'Escape') closeDrawer();
     });
 
+    document.getElementById('syncFecha').value = todayIso();
+    document.getElementById('diffDesde').value = monthStartIso();
+    document.getElementById('diffHasta').value = todayIso();
     loadConfig().then(() => loadArticles());
+    loadDiferenciasControl().catch(() => {});
     // Carga silenciosa del conteo de errores para mostrar el badge
     api('/api/frescura/errores-stock').then(d => {
       const total = d?.data?.total ?? 0;

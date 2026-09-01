@@ -842,7 +842,11 @@ def _freshness_rows(filters: dict[str, Any]) -> list[dict[str, Any]]:
              AND UPPER(TRIM(COALESCE(a.tipo_producto, ''))) = 'MERCADERIA'
             LEFT JOIN sucursales suc ON suc.id = fa.sucursal_id
             WHERE {where_sql}
-              AND fa.stock_actual > 0
+              AND (
+                    COALESCE(fa.stock_bultos, 0) <> 0
+                 OR COALESCE(fa.stock_unidades, 0) <> 0
+                 OR COALESCE(fa.stock_actual, 0) <> 0
+              )
             GROUP BY fa.sucursal_id, suc.nombre, fa.codigo_articulo
             ORDER BY
                 CASE
@@ -1535,7 +1539,7 @@ def get_last_sync() -> dict[str, Any] | None:
     with pg_cursor() as cur:
         cur.execute(
             """
-            SELECT id, started_at, finished_at, estado, source_url, total_items, saved_rows, error_message
+            SELECT id, started_at, finished_at, estado, source_url, total_items, saved_rows, error_message, payload_json
             FROM frescura_sync_log
             ORDER BY started_at DESC, id DESC
             LIMIT 1
@@ -1545,7 +1549,7 @@ def get_last_sync() -> dict[str, Any] | None:
         return dict(row) if row else None
 
 
-def sync_frescura_from_api() -> dict[str, Any]:
+def sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> dict[str, Any]:
     _ensure_tables()
     settings = _frescura_api_settings()
     base_url = settings['base_url']
@@ -1561,6 +1565,16 @@ def sync_frescura_from_api() -> dict[str, Any]:
             'Configura FRESCURA_API_USER y FRESCURA_API_PASSWORD para el ERP o FRESCURA_API_TOKEN para el modo legacy.',
             503,
         )
+    if isinstance(fecha_stock, datetime):
+        fecha_stock_date = fecha_stock.date()
+    elif isinstance(fecha_stock, date):
+        fecha_stock_date = fecha_stock
+    elif fecha_stock:
+        fecha_stock_date = _parse_date(fecha_stock)
+        if fecha_stock_date is None:
+            raise FrescuraApiError('fecha_stock debe tener formato YYYY-MM-DD o DD-MM-YYYY.', 400)
+    else:
+        fecha_stock_date = date.today()
 
     source_url = urljoin(base_url.rstrip('/') + '/', 'stock/' if mode == 'erp' else settings['path'].lstrip('/'))
     log_id: int | None = None
@@ -1581,6 +1595,7 @@ def sync_frescura_from_api() -> dict[str, Any]:
                             'mode': mode,
                             'source_url': source_url,
                             'deposits': deposits,
+                            'fecha_stock': fecha_stock_date.isoformat(),
                         }),
                     },
                 )
@@ -1589,16 +1604,15 @@ def sync_frescura_from_api() -> dict[str, Any]:
 
         if mode == 'erp':
             session_id = _frescura_login(base_url, user, password, timeout)
-            fecha_stock = date.today()
             for deposito in deposits:
-                raw_payload = _frescura_fetch_stock(base_url, session_id, deposito, timeout, fecha_stock=fecha_stock)
+                raw_payload = _frescura_fetch_stock(base_url, session_id, deposito, timeout, fecha_stock=fecha_stock_date)
                 for item in _extract_frescura_stock_items(raw_payload):
                     items.append(
                         _build_frescura_payload_metadata(
                             item,
                             deposito_id=deposito,
                             sucursal_id=_map_frescura_deposito_to_sucursal(deposito, deposit_map),
-                            fecha_stock=fecha_stock.strftime('%d-%m-%Y'),
+                            fecha_stock=fecha_stock_date.strftime('%d-%m-%Y'),
                             origen_dato='erp_chess_stock',
                         )
                     )
@@ -1729,6 +1743,7 @@ def sync_frescura_from_api() -> dict[str, Any]:
                             'mode': mode,
                             'deposits': deposits,
                             'branch_ids': cleanup_ids,
+                            'fecha_stock': fecha_stock_date.isoformat(),
                         }),
                     },
                 )
@@ -1740,6 +1755,7 @@ def sync_frescura_from_api() -> dict[str, Any]:
             'saved_rows': len(normalized),
             'mode': mode,
             'deposits': deposits,
+            'fecha_stock': fecha_stock_date.isoformat(),
             'log_id': log_id,
             'last_sync': get_last_sync(),
         }
@@ -1759,7 +1775,12 @@ def sync_frescura_from_api() -> dict[str, Any]:
                         {
                             'id': log_id,
                             'err': str(exc),
-                            'payload_json': psycopg2.extras.Json({'source_url': source_url, 'error': str(exc), 'mode': mode}),
+                            'payload_json': psycopg2.extras.Json({
+                                'source_url': source_url,
+                                'error': str(exc),
+                                'mode': mode,
+                                'fecha_stock': fecha_stock_date.isoformat(),
+                            }),
                         },
                     )
         raise
@@ -1779,7 +1800,12 @@ def sync_frescura_from_api() -> dict[str, Any]:
                         {
                             'id': log_id,
                             'err': str(exc),
-                            'payload_json': psycopg2.extras.Json({'source_url': source_url, 'error': str(exc), 'mode': mode}),
+                            'payload_json': psycopg2.extras.Json({
+                                'source_url': source_url,
+                                'error': str(exc),
+                                'mode': mode,
+                                'fecha_stock': fecha_stock_date.isoformat(),
+                            }),
                         },
                     )
         raise

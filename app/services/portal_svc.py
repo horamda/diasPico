@@ -18,7 +18,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Importaciones de datos',
         'descripcion': 'Carga centralizada de archivos, maestros y sincronizaciones externas.',
         'ruta': '/importaciones-datos',
-        'image_url': 'https://www.dakosy.de/fileadmin/_processed_/d/8/csm_Dashboard1_9596bec27d.png',
+        'image_url': 'https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1200&q=70',
         'orden': 5,
     },
     {
@@ -26,7 +26,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Panel Dias Pico',
         'descripcion': 'Analisis operativo de dias pico, volumenes y desempeno por sucursal.',
         'ruta': '/dias-pico',
-        'image_url': 'https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1200&q=60',
+        'image_url': 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1200&q=70',
         'orden': 10,
     },
     {
@@ -34,15 +34,15 @@ _DEFAULT_MODULES = (
         'titulo': 'Cluster de Clientes',
         'descripcion': 'Segmentacion DPO, score logistico-comercial y plan de servicio por cliente.',
         'ruta': '/segmentacion-clientes',
-        'image_url': 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=60',
+        'image_url': 'https://images.unsplash.com/photo-1552664730-d307ca884978?auto=format&fit=crop&w=1200&q=70',
         'orden': 20,
     },
     {
         'codigo': 'frescura_oportunidades',
-        'titulo': 'Frescura y oportunidades',
-        'descripcion': 'Articulos con frescura critica y oportunidades comerciales por cliente.',
+        'titulo': 'FEFO',
+        'descripcion': 'Primero en vencer, primero en salir: lotes, vencimientos y oportunidades comerciales.',
         'ruta': '/frescura-oportunidades',
-        'image_url': 'https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1200&q=60',
+        'image_url': 'https://images.unsplash.com/photo-1587293852726-70cdb56c2866?auto=format&fit=crop&w=1200&q=70',
         'orden': 25,
     },
     {
@@ -50,15 +50,15 @@ _DEFAULT_MODULES = (
         'titulo': 'Control de stock',
         'descripcion': 'ABC de articulos activos de Casa Central segun bultos vendidos el ultimo mes.',
         'ruta': '/control-stock',
-        'image_url': 'https://www.hcoinnovations.com/wp-content/uploads/2024/07/Warehouse-Inventory-Control-1024x585.webp',
+        'image_url': 'https://images.unsplash.com/photo-1580674285054-bed31e145f59?auto=format&fit=crop&w=1200&q=70',
         'orden': 27,
     },
     {
         'codigo': 'analisis_pedidos',
-        'titulo': 'Control de pedidos SMK',
-        'descripcion': 'Cruce de pedidos de supermercado contra punto de pedido, stock y frescura.',
+        'titulo': 'Analisis de Pedidos',
+        'descripcion': 'Cruce de pedidos contra clientes, sucursales, punto de pedido, stock y frescura.',
         'ruta': '/analisis-pedidos',
-        'image_url': 'https://myginne.com/assets/HomeStore-BKYro7-Q.webp',
+        'image_url': 'https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?auto=format&fit=crop&w=1200&q=70',
         'orden': 28,
     },
     {
@@ -66,7 +66,7 @@ _DEFAULT_MODULES = (
         'titulo': 'Mantenimiento del sistema',
         'descripcion': 'Estado tecnico del sistema, base de datos, indices y mantenimiento.',
         'ruta': '/dashboard',
-        'image_url': 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=60',
+        'image_url': 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=70',
         'orden': 30,
     },
 )
@@ -137,14 +137,29 @@ def ensure_tables() -> None:
                        WHERE codigo = 'panel_proyecto'
                           AND titulo IN ('Panel Proyecto', 'Panel proyecto', 'Portal_Logistica')"""
                 )
+                cur.execute(
+                    """UPDATE portal_modulos
+                       SET titulo = 'Analisis de Pedidos',
+                           descripcion = 'Cruce de pedidos contra clientes, sucursales, punto de pedido, stock y frescura.',
+                           updated_at = NOW()
+                       WHERE codigo = 'analisis_pedidos'
+                         AND titulo IN ('Control de pedidos SMK', 'Ingreso de pedidos', 'Ingreso de Pedidos')"""
+                )
+                cur.execute(
+                    """UPDATE portal_modulos
+                       SET titulo = 'FEFO',
+                           descripcion = 'Primero en vencer, primero en salir: lotes, vencimientos y oportunidades comerciales.',
+                           updated_at = NOW()
+                       WHERE codigo = 'frescura_oportunidades'
+                         AND titulo IN ('Frescura y oportunidades', 'Frescura Oportunidades')"""
+                )
                 for mod in _DEFAULT_MODULES:
                     if mod.get('image_url'):
                         cur.execute(
                             """UPDATE portal_modulos
                                   SET image_url = %(image_url)s,
                                       updated_at = NOW()
-                                WHERE codigo = %(codigo)s
-                                  AND (image_url IS NULL OR TRIM(image_url) = '')""",
+                                WHERE codigo = %(codigo)s""",
                             mod,
                         )
 

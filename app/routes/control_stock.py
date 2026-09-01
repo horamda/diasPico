@@ -176,12 +176,58 @@ def frescura_status():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/frescura-planilla")
+@login_required
+def frescura_planilla():
+    try:
+        return jsonify(control_stock_svc.get_control_frescura_planilla(
+            fecha_control=request.args.get("fecha"),
+            sucursal=request.args.get("sucursal", "1"),
+        ))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/frescura-diferencias")
+@login_required
+def frescura_diferencias():
+    try:
+        return jsonify(control_stock_svc.get_control_frescura_diferencias(
+            sucursal=request.args.get("sucursal", "1"),
+            desde=request.args.get("desde"),
+            hasta=request.args.get("hasta"),
+            responsable=request.args.get("responsable", ""),
+        ))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.post("/conteos")
 @login_required
 def guardar_conteo():
     try:
         user = getattr(g, "portal_user", None) or {}
         data = control_stock_svc.guardar_conteo(
+            request.get_json(force=True) or {},
+            responsable_default=str(user.get("nombre") or user.get("username") or ""),
+        )
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/frescura-conteos")
+@login_required
+def guardar_control_frescura():
+    try:
+        user = getattr(g, "portal_user", None) or {}
+        data = control_stock_svc.guardar_control_frescura(
             request.get_json(force=True) or {},
             responsable_default=str(user.get("nombre") or user.get("username") or ""),
         )

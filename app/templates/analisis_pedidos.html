@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Control de pedidos SMK · Portal_Logistica</title>
+  <title>Analisis de Pedidos · Portal_Logistica</title>
   {% include 'partials/head_icons.html' %}
   <link rel="stylesheet" href="{{ url_for('static', filename='design-system.css') }}">
   <style>
@@ -72,6 +72,8 @@
     .status{font:12px var(--mono);color:#475569;margin:8px 0}
     .status.err{color:#b91c1c}
     .empty{padding:40px;text-align:center;color:#94a3b8}
+    .client-name{font-weight:800}
+    .client-sub{font-size:11px;color:#64748b;margin-top:2px}
     a.back{color:#2563eb;text-decoration:none;font-size:12px;font-weight:700}
     @media(max-width:900px){.drop-grid{grid-template-columns:1fr}.params{grid-template-columns:1fr 1fr}.kpis{grid-template-columns:repeat(3,1fr)}.eq-form{grid-template-columns:1fr 1fr}.eq-form .wide{grid-column:1/-1}}
   </style>
@@ -81,7 +83,7 @@
     <div class="top">
       <div>
         <div class="eyebrow">Logística · Abastecimiento</div>
-        <h1>Control de pedidos SMK</h1>
+        <h1>Analisis de Pedidos</h1>
         <div class="sub">Cruza el pedido del super contra stock, venta y frescura para decidir qué se puede despachar sin dejar sin cobertura a la venta minorista.</div>
       </div>
       <a class="back" href="/portal">← Volver al portal</a>
@@ -160,6 +162,22 @@
       <div class="kpi rev"><div class="l">Revisar</div><div class="v" id="kRev">0</div></div>
       <div class="kpi"><div class="l">Bultos env / ped</div><div class="v" id="kBultos">0</div></div>
       <div class="kpi" id="kCumplCard"><div class="l">Cumplimiento</div><div class="v" id="kCumpl">0%</div></div>
+    </div>
+
+    <div class="panel" id="clientPanel" style="display:none">
+      <div class="panel-h">2 · Clientes y sucursales</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Cliente</th><th>Sucursal</th><th>Localidad</th><th>Dias visita</th>
+              <th class="num">SKUs</th><th class="num">Bultos ped.</th><th class="num">Bultos env.</th>
+              <th class="num">Monto ped.</th><th class="num">Monto env.</th><th class="num">Cumpl.</th>
+            </tr>
+          </thead>
+          <tbody id="clientTbody"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Resultados -->
@@ -381,16 +399,66 @@
 
     const nf = (v) => (v === null || v === undefined) ? '—' : (typeof v === 'number' ? (Number.isInteger(v) ? v : v.toFixed(1)) : v);
 
+    const money = (v) => Number(v || 0) ? Number(v || 0).toLocaleString('es-AR', {maximumFractionDigits: 2}) : '-';
+
     function recalcularResumen() {
       if (!ultimo) return;
       const rows = ultimo.resultados || [];
       const bPed = rows.reduce((acc, x) => acc + Number(x.cantidad_pedida || 0), 0);
       const bEnv = rows.reduce((acc, x) => acc + Number(x.cantidad_a_enviar || 0), 0);
+      rows.forEach((x) => {
+        const cantPed = Number(x.cantidad_pedida || 0);
+        const montoPed = Number(x.monto_pedido || 0);
+        x.monto_a_enviar = montoPed && cantPed ? Math.round((montoPed * Number(x.cantidad_a_enviar || 0) / cantPed) * 100) / 100 : Number(x.monto_a_enviar || 0);
+      });
+      const mPed = rows.reduce((acc, x) => acc + Number(x.monto_pedido || 0), 0);
+      const mEnv = rows.reduce((acc, x) => acc + Number(x.monto_a_enviar || 0), 0);
       ultimo.resumen.bultos_pedidos = Math.round(bPed * 100) / 100;
       ultimo.resumen.bultos_a_enviar = Math.round(bEnv * 100) / 100;
+      ultimo.resumen.monto_pedido = Math.round(mPed * 100) / 100;
+      ultimo.resumen.monto_a_enviar = Math.round(mEnv * 100) / 100;
       ultimo.resumen.cumplimiento_pct = bPed ? Math.round((bEnv / bPed * 100) * 100) / 100 : 0;
       ultimo.resumen.objetivo_cumplimiento_pct = 70;
       ultimo.resumen.objetivo_cumplido = ultimo.resumen.cumplimiento_pct >= 70;
+      ultimo.resumen_clientes = buildResumenClientes(rows);
+    }
+
+    function buildResumenClientes(rows) {
+      const maestros = new Map((ultimo?.cliente_datos || []).map(c => [String(c.cliente || ''), c]));
+      const acc = new Map();
+      rows.forEach((row) => {
+        const codigo = String(row.cliente_codigo || row.cliente || '').split(' - ')[0].trim();
+        const maestro = maestros.get(codigo) || {};
+        const key = String(maestro.cliente || codigo || row.cliente || '');
+        if (!acc.has(key)) {
+          acc.set(key, {
+            cliente: key,
+            cliente_original: row.cliente || '',
+            sucursal: maestro.sucursal || '',
+            razon_social: maestro.razon_social || maestro.descripcion || '',
+            nombre_fantasia: maestro.nombre_fantasia || '',
+            localidad: maestro.localidad || '',
+            provincia: maestro.provincia || '',
+            activo_maestro: maestro.activo_maestro,
+            dias_visita: maestro.fuerza_venta_1_dias_visita || '',
+            skus: 0, bultos_pedidos: 0, bultos_a_enviar: 0, monto_pedido: 0, monto_a_enviar: 0,
+          });
+        }
+        const item = acc.get(key);
+        item.skus += 1;
+        item.bultos_pedidos += Number(row.cantidad_pedida || 0);
+        item.bultos_a_enviar += Number(row.cantidad_a_enviar || 0);
+        item.monto_pedido += Number(row.monto_pedido || 0);
+        item.monto_a_enviar += Number(row.monto_a_enviar || 0);
+      });
+      return [...acc.values()].map(x => ({
+        ...x,
+        bultos_pedidos: Math.round(x.bultos_pedidos * 100) / 100,
+        bultos_a_enviar: Math.round(x.bultos_a_enviar * 100) / 100,
+        monto_pedido: Math.round(x.monto_pedido * 100) / 100,
+        monto_a_enviar: Math.round(x.monto_a_enviar * 100) / 100,
+        cumplimiento_pct: x.bultos_pedidos ? Math.round((x.bultos_a_enviar / x.bultos_pedidos * 100) * 100) / 100 : 0,
+      }));
     }
 
     function updateSendQty(index, value, forced) {
@@ -439,6 +507,27 @@
       $('kBultos').textContent = `${nf(r.resumen.bultos_a_enviar)} / ${nf(r.resumen.bultos_pedidos)}`;
       $('kCumpl').textContent = `${nf(r.resumen.cumplimiento_pct)}%`;
       $('kCumplCard').style.borderTop = `3px solid ${r.resumen.objetivo_cumplido ? '#16a34a' : '#ef4444'}`;
+
+      $('clientPanel').style.display = '';
+      const clientRows = r.resumen_clientes || [];
+      const ctb = $('clientTbody');
+      if (!clientRows.length) {
+        ctb.innerHTML = '<tr><td colspan="10" class="empty">Sin clientes cruzados con la maestra.</td></tr>';
+      } else {
+        ctb.innerHTML = clientRows.map(c => `
+          <tr>
+            <td><div class="client-name">${c.cliente || '-'}</div><div class="client-sub">${c.razon_social || c.cliente_original || ''}${c.nombre_fantasia ? ' · ' + c.nombre_fantasia : ''}</div></td>
+            <td>${c.sucursal || '-'}</td>
+            <td>${c.localidad || '-'}</td>
+            <td>${c.dias_visita || '-'}</td>
+            <td class="num">${nf(c.skus)}</td>
+            <td class="num">${nf(c.bultos_pedidos)}</td>
+            <td class="num">${nf(c.bultos_a_enviar)}</td>
+            <td class="num">${money(c.monto_pedido)}</td>
+            <td class="num">${money(c.monto_a_enviar)}</td>
+            <td class="num">${nf(c.cumplimiento_pct)}%</td>
+          </tr>`).join('');
+      }
 
       $('resultPanel').style.display = '';
       const rows = r.resultados.map((x, index) => ({...x, _index:index})).filter(x => filtro === 'TODOS' || x.estado === filtro);

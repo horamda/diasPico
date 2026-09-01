@@ -299,33 +299,56 @@ body { display: flex; }
   text-decoration: none;
 }
 .module-hero {
-  height: 110px;
-  display: flex; align-items: center; justify-content: center;
+  height: 132px;
+  display: flex; align-items: flex-end; justify-content: space-between;
   position: relative; overflow: hidden;
   border-bottom: 1px solid var(--brd);
+  padding: 12px;
+  background: var(--surf2);
 }
-.module-hero-icon {
-  font-size: 42px; z-index: 1; position: relative;
-  filter: drop-shadow(0 4px 12px rgba(0,0,0,.4));
+.module-img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  transform: scale(1.01);
+  transition: transform var(--t-slow), filter var(--t);
 }
-.module-hero::before {
-  content: ''; position: absolute; inset: 0;
-  opacity: .12;
-}
-.module-hero.picos::before     { background: radial-gradient(ellipse at 50% 0%, var(--blu), transparent 70%); }
-.module-hero.cluster::before   { background: radial-gradient(ellipse at 50% 0%, var(--grn), transparent 70%); }
-.module-hero.proyecto::before  { background: radial-gradient(ellipse at 50% 0%, var(--acc), transparent 70%); }
-.module-hero.default::before   { background: radial-gradient(ellipse at 50% 0%, var(--pur), transparent 70%); }
-/* subtle grid pattern */
+.module-img.is-broken { display: none; }
+.module-card:hover .module-img { transform: scale(1.06); filter: saturate(1.08) contrast(1.03); }
+.module-hero.picos     { background: linear-gradient(135deg, rgba(37,99,235,.28), rgba(15,23,42,.95)); }
+.module-hero.cluster   { background: linear-gradient(135deg, rgba(34,197,94,.22), rgba(15,23,42,.95)); }
+.module-hero.proyecto  { background: linear-gradient(135deg, rgba(14,165,233,.22), rgba(15,23,42,.95)); }
+.module-hero.default   { background: linear-gradient(135deg, rgba(245,158,11,.20), rgba(15,23,42,.95)); }
 .module-hero::after {
   content: ''; position: absolute; inset: 0;
-  background-image: repeating-linear-gradient(0deg, transparent, transparent 19px, var(--brd) 19px, var(--brd) 20px),
-                    repeating-linear-gradient(90deg, transparent, transparent 19px, var(--brd) 19px, var(--brd) 20px);
-  opacity: .3;
+  background: linear-gradient(180deg, rgba(0,0,0,.02), rgba(0,0,0,.68));
+}
+.module-hero-icon,
+.module-kind {
+  z-index: 1; position: relative;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgba(15,23,42,.72);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.24);
+  backdrop-filter: blur(8px);
+}
+.module-hero-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  font-size: 18px;
+  filter: drop-shadow(0 4px 12px rgba(0,0,0,.35));
+}
+.module-kind {
+  min-height: 28px;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 9px;
+  font-family: var(--mono);
+  letter-spacing: .9px;
+  text-transform: uppercase;
 }
 
 .module-body { padding: 14px 16px; flex: 1; }
-.module-title { font-size: 14px; font-weight: 600; margin-bottom: 5px; }
+.module-title { font-size: 15px; font-weight: 750; margin-bottom: 5px; letter-spacing: 0; }
 .module-desc  { font-size: 11px; color: var(--muted); line-height: 1.55; }
 
 .module-footer {
@@ -519,11 +542,24 @@ body { display: flex; }
           {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo %} cluster
           {%- elif 'proyecto' in m.codigo %} proyecto
           {%- else %} default{% endif %}">
+          {% if m.image_url %}
+          <img class="module-img" src="{{ m.image_url }}" alt="" loading="lazy" onerror="this.classList.add('is-broken')">
+          {% endif %}
           <span class="module-hero-icon">
             {%- if 'pico' in m.codigo -%}📊
             {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo -%}👥
             {%- elif 'proyecto' in m.codigo -%}⚙️
             {%- else -%}📁{%- endif -%}
+          </span>
+          <span class="module-kind">
+            {%- if 'pico' in m.codigo -%}Operacion
+            {%- elif 'cluster' in m.codigo or 'cliente' in m.codigo -%}Clientes
+            {%- elif 'frescura' in m.codigo -%}FEFO
+            {%- elif 'stock' in m.codigo -%}Inventario
+            {%- elif 'pedido' in m.codigo -%}Pedidos
+            {%- elif 'import' in m.codigo -%}Datos
+            {%- elif 'proyecto' in m.codigo -%}Sistema
+            {%- else -%}Modulo{%- endif -%}
           </span>
         </div>
         <div class="module-body">

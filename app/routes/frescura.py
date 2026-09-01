@@ -62,7 +62,7 @@ def save_config():
 @bp.get('/sync')
 def sync():
     try:
-        payload = svc.sync_frescura_from_api()
+        payload = svc.sync_frescura_from_api(fecha_stock=request.args.get('fecha') or request.args.get('fecha_stock'))
         _clear_cache()
         return jsonify({'ok': True, 'data': payload})
     except svc.FrescuraApiError as exc:
@@ -200,4 +200,3 @@ def articulo_plan_accion(codigo_articulo: str):
         return jsonify({'ok': True, 'data': payload}), 201
     except Exception as exc:
         return jsonify({'ok': False, 'error': str(exc)}), 500
-

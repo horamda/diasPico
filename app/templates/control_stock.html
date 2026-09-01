@@ -1153,6 +1153,7 @@
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewPlan" id="tabPlan" onclick="openTab('plan')">Planificacion</button>
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewConteo" id="tabConteo" onclick="openTab('conteo')">Control de stock</button>
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewExterno" id="tabExterno" onclick="openTab('externo')">Control externo</button>
+    <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewFrescura" id="tabFrescura" onclick="openTab('frescura')">Control frescura</button>
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewResumenArticulo" id="tabResumenArticulo" onclick="openTab('resumenArticulo')">Resumen por articulo</button>
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewArticulos" id="tabArticulos" onclick="openTab('articulos')">Articulos controlados</button>
     <button class="tab" type="button" role="tab" aria-selected="false" aria-controls="viewAbcMensual" id="tabAbcMensual" onclick="openTab('abcMensual')">ABC mensual</button>
@@ -1232,7 +1233,7 @@
       <div class="field auto-field"><label>Mes ABC</label><input id="mes" type="month"></div>
       <div class="field"><label>Sucursal</label><select id="sucursalConteo" onchange="syncSucursal('conteo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
       <div class="field"><label>Semana</label><select id="semana"><option value="AUTO">Automatica</option><option value="TODAS">TODAS</option><option value="semana1">Semana 1</option><option value="semana2">Semana 2</option><option value="semana3">Semana 3</option><option value="semana4">Semana 4</option></select></div>
-      <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option></select></div>
+      <div class="field"><label>Día</label><select id="dia"><option value="AUTO">Automatico</option><option value="TODOS">TODOS</option><option>Lunes</option><option>Martes</option><option>Miercoles</option><option>Jueves</option><option>Viernes</option><option>Sabado</option></select></div>
       <div class="field"><label>ABC</label><select id="abc"><option>TODOS</option><option>A</option><option>B</option><option>C</option></select></div>
       <div class="field"><label>Fecha</label><input id="fecha" type="date" onchange="fechaConteoChanged()"></div>
       <div class="field"><label>Responsable control stock</label><select id="responsable"></select></div>
@@ -1302,6 +1303,48 @@
         <div class="save-sub" id="externoFooterSummary" aria-live="polite">Genera el sorteo y carga todos los articulos.</div>
       </div>
       <button class="btn ok save-btn" id="guardarExternoBtn" onclick="guardarControlExterno()">Guardar control externo</button>
+    </section>
+  </section>
+
+  <section class="view" id="viewFrescura" role="tabpanel" aria-labelledby="tabFrescura">
+    <section class="panel">
+      <div class="grid">
+        <div class="field"><label>Sucursal</label><select id="sucursalFrescura" onchange="syncSucursal('frescura')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label>Fecha</label><input id="fechaFrescura" type="date" onchange="loadControlFrescura()"></div>
+        <div class="field"><label>Responsable</label><select id="responsableFrescura"></select></div>
+        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadControlFrescura()">Actualizar lotes</button></div>
+        <div class="field w2"><label>Observaciones</label><input id="observacionesFrescura" placeholder="Opcional"></div>
+      </div>
+      <div class="stats">
+        <span class="pill" id="frFecha">Fecha: -</span>
+        <span class="pill" id="frArticulos">Articulos: -</span>
+        <span class="pill" id="frLotes">Lotes: -</span>
+        <span class="pill" id="frTotal">Sistema: 0 bultos con 0 unidades</span>
+        <span class="pill frescura-pill" id="frSync">Frescura: -</span>
+      </div>
+    </section>
+    <div class="time-note">Control semanal de frescura: se realiza los miercoles. Se muestran todos los lotes de cada articulo con stock en Frescura.</div>
+    <div class="status" id="frescuraControlStatus" role="status" aria-live="polite">Actualizá los lotes para comenzar.</div>
+    <section class="table-wrap" style="max-height:none">
+      <table>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Lote</th><th>Vencimiento</th><th>Dias</th><th>Estado</th><th>Sist. bultos</th><th>Sist. unidades</th><th>Cont. bultos</th><th>Cont. unidades</th><th>Diferencia</th><th>Observacion</th></tr></thead>
+        <tbody id="frescuraControlBody"></tbody>
+      </table>
+    </section>
+    <section class="save-footer ready">
+      <div>
+        <div class="save-title">Finalizar control de frescura</div>
+        <div class="save-sub" id="frescuraFooterSummary" aria-live="polite">Cargá los lotes controlados antes de guardar.</div>
+      </div>
+      <button class="btn ok save-btn" id="guardarFrescuraBtn" onclick="guardarControlFrescura()">Guardar control de frescura</button>
+    </section>
+    <div class="section-title">Diferencias detectadas <span>Stock o fecha de vencimiento distintos a Frescura</span></div>
+    <div class="status" id="frescuraDiffStatus" role="status" aria-live="polite">Sin consultar.</div>
+    <section class="table-wrap" style="max-height:none">
+      <table>
+        <thead><tr><th>Control</th><th>Fecha</th><th>Responsable</th><th>Articulo</th><th>Descripcion</th><th>Lote</th><th>Fecha sistema</th><th>Fecha controlada</th><th>Sist. bultos</th><th>Cont. bultos</th><th>Sist. unidades</th><th>Cont. unidades</th><th>Tipo</th><th>Observacion</th></tr></thead>
+        <tbody id="frescuraDiffBody"></tbody>
+      </table>
     </section>
   </section>
 
@@ -1475,12 +1518,15 @@ let externalRows = [];
 let externalGuardado = false;
 let externalReviewKey = '';
 let externalDraft = {values:{}, unidades:{}};
+let frescuraRows = [];
+let frescuraLoaded = false;
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 const STOCK_TABS=[
   {name:'abc',label:'Analisis ABC',hint:'Clasificacion mensual'},
   {name:'plan',label:'Planificacion',hint:'Frecuencia por semana'},
   {name:'conteo',label:'Control de stock',hint:'Conteo diario'},
   {name:'externo',label:'Control externo',hint:'Sorteo aleatorio'},
+  {name:'frescura',label:'Control frescura',hint:'Lotes por articulo'},
   {name:'resumenArticulo',label:'Resumen por articulo',hint:'Detalle por responsable'},
   {name:'articulos',label:'Articulos controlados',hint:'Seguimiento mensual'},
   {name:'abcMensual',label:'ABC mensual',hint:'Evolucion anual'},
@@ -1609,7 +1655,7 @@ async function cargarSucursales(){
     const rows=await res.json();
     if(Array.isArray(rows)&&rows.length) sucursalesDisponibles=rows.filter(r=>r.activa!==false).map(r=>({value:String(r.value??r.id),label:String(r.label??r.nombre??r.value??r.id)}));
   }catch(_){}
-  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalExterno,sucursalResumenArticulo,sucursalResumen,sucursalArticulos,sucursalAbcMensual,sucursalResp];
+  const ids=[sucursalAbc,sucursalPlan,sucursalConteo,sucursalExterno,sucursalFrescura,sucursalResumenArticulo,sucursalResumen,sucursalArticulos,sucursalAbcMensual,sucursalResp];
   ids.forEach(sel=>{
     const keep=sel.value||'1';
     sel.innerHTML=sucursalesDisponibles.map(s=>`<option value="${esc(s.value)}">${esc(s.label)}</option>`).join('');
@@ -1636,12 +1682,13 @@ async function actualizarEstadoFrescura(fechaValue,targetId){
     if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo consultar Frescura');
     const last=data.last_sync;
     const diff=data.dias_diferencia;
+    const stockDate=data.fecha_stock;
     const isOk=data.estado_alerta==='ok';
     el.classList.toggle('ok',isOk);
     el.classList.toggle('alert',!isOk);
     if(last&&last.finished_at){
-      el.textContent=`Frescura: ${formatDateTime(last.finished_at)} · ${diff ?? '-'} dia(s)`;
-      el.title=`Ultima actualizacion de Frescura: ${formatDateTime(last.finished_at)}. Fecha de control: ${data.fecha_control}. Diferencia: ${diff ?? '-'} dia(s).`;
+      el.textContent=`Frescura: ${stockDate ? fechaCorta(stockDate) : formatDateTime(last.finished_at)} · ${diff ?? '-'} dia(s)`;
+      el.title=`Ultima actualizacion de Frescura: ${formatDateTime(last.finished_at)}. Fecha de stock: ${stockDate || '-'}. Fecha de control: ${data.fecha_control}. Diferencia: ${diff ?? '-'} dia(s).`;
     }else{
       el.textContent='Frescura: sin datos';
       el.title='Sin datos de actualizacion de Frescura.';
@@ -1678,7 +1725,7 @@ function filtrosEfectivos(){
   let day=dia.value;
   if(sem==='AUTO') sem=semanaDesdeFecha(fecha.value);
   if(day==='AUTO') day=diaDesdeFecha(fecha.value);
-  if(day==='Sabado'||day==='Domingo') day='TODOS';
+  if(day==='Domingo') day='TODOS';
   return {semana:sem,dia:day};
 }
 function logVal(value,row=null,field=''){
@@ -1802,6 +1849,7 @@ function syncSucursal(origin){
   if(origin==='abc') sucursalArticulos.value=sucursalAbc.value;
   if(origin==='abc') sucursalAbcMensual.value=sucursalAbc.value;
   if(origin==='abc') sucursalExterno.value=sucursalAbc.value;
+  if(origin==='abc') sucursalFrescura.value=sucursalAbc.value;
   if(origin==='abc') sucursalResp.value=sucursalAbc.value;
   if(origin==='conteo') sucursalAbc.value=sucursalConteo.value;
   if(origin==='conteo') sucursalPlan.value=sucursalConteo.value;
@@ -1810,6 +1858,7 @@ function syncSucursal(origin){
   if(origin==='conteo') sucursalArticulos.value=sucursalConteo.value;
   if(origin==='conteo') sucursalAbcMensual.value=sucursalConteo.value;
   if(origin==='conteo') sucursalExterno.value=sucursalConteo.value;
+  if(origin==='conteo') sucursalFrescura.value=sucursalConteo.value;
   if(origin==='conteo') sucursalResp.value=sucursalConteo.value;
   if(origin==='plan') { sucursalAbc.value=sucursalPlan.value; sucursalConteo.value=sucursalPlan.value; }
   if(origin==='plan') sucursalResumen.value=sucursalPlan.value;
@@ -1817,14 +1866,16 @@ function syncSucursal(origin){
   if(origin==='plan') sucursalArticulos.value=sucursalPlan.value;
   if(origin==='plan') sucursalAbcMensual.value=sucursalPlan.value;
   if(origin==='plan') sucursalExterno.value=sucursalPlan.value;
+  if(origin==='plan') sucursalFrescura.value=sucursalPlan.value;
   if(origin==='plan') sucursalResp.value=sucursalPlan.value;
-  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; sucursalExterno.value=sucursalResumen.value; sucursalResumenArticulo.value=sucursalResumen.value; sucursalArticulos.value=sucursalResumen.value; sucursalAbcMensual.value=sucursalResumen.value; }
+  if(origin==='resumen') { sucursalAbc.value=sucursalResumen.value; sucursalPlan.value=sucursalResumen.value; sucursalConteo.value=sucursalResumen.value; sucursalExterno.value=sucursalResumen.value; sucursalFrescura.value=sucursalResumen.value; sucursalResumenArticulo.value=sucursalResumen.value; sucursalArticulos.value=sucursalResumen.value; sucursalAbcMensual.value=sucursalResumen.value; }
   if(origin==='resumen') sucursalResp.value=sucursalResumen.value;
-  if(origin==='resumenArticulo') { sucursalAbc.value=sucursalResumenArticulo.value; sucursalPlan.value=sucursalResumenArticulo.value; sucursalConteo.value=sucursalResumenArticulo.value; sucursalExterno.value=sucursalResumenArticulo.value; sucursalResumen.value=sucursalResumenArticulo.value; sucursalArticulos.value=sucursalResumenArticulo.value; sucursalAbcMensual.value=sucursalResumenArticulo.value; sucursalResp.value=sucursalResumenArticulo.value; }
-  if(origin==='articulos') { sucursalAbc.value=sucursalArticulos.value; sucursalPlan.value=sucursalArticulos.value; sucursalConteo.value=sucursalArticulos.value; sucursalExterno.value=sucursalArticulos.value; sucursalResumen.value=sucursalArticulos.value; sucursalResumenArticulo.value=sucursalArticulos.value; sucursalAbcMensual.value=sucursalArticulos.value; sucursalResp.value=sucursalArticulos.value; }
-  if(origin==='abcMensual') { sucursalAbc.value=sucursalAbcMensual.value; sucursalPlan.value=sucursalAbcMensual.value; sucursalConteo.value=sucursalAbcMensual.value; sucursalExterno.value=sucursalAbcMensual.value; sucursalResumen.value=sucursalAbcMensual.value; sucursalResumenArticulo.value=sucursalAbcMensual.value; sucursalArticulos.value=sucursalAbcMensual.value; sucursalResp.value=sucursalAbcMensual.value; }
-  if(origin==='externo') { sucursalAbc.value=sucursalExterno.value; sucursalPlan.value=sucursalExterno.value; sucursalConteo.value=sucursalExterno.value; sucursalResumen.value=sucursalExterno.value; sucursalResumenArticulo.value=sucursalExterno.value; sucursalArticulos.value=sucursalExterno.value; sucursalAbcMensual.value=sucursalExterno.value; sucursalResp.value=sucursalExterno.value; }
-  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalExterno.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; sucursalResumenArticulo.value=sucursalResp.value; sucursalArticulos.value=sucursalResp.value; sucursalAbcMensual.value=sucursalResp.value; }
+  if(origin==='resumenArticulo') { sucursalAbc.value=sucursalResumenArticulo.value; sucursalPlan.value=sucursalResumenArticulo.value; sucursalConteo.value=sucursalResumenArticulo.value; sucursalExterno.value=sucursalResumenArticulo.value; sucursalFrescura.value=sucursalResumenArticulo.value; sucursalResumen.value=sucursalResumenArticulo.value; sucursalArticulos.value=sucursalResumenArticulo.value; sucursalAbcMensual.value=sucursalResumenArticulo.value; sucursalResp.value=sucursalResumenArticulo.value; }
+  if(origin==='articulos') { sucursalAbc.value=sucursalArticulos.value; sucursalPlan.value=sucursalArticulos.value; sucursalConteo.value=sucursalArticulos.value; sucursalExterno.value=sucursalArticulos.value; sucursalFrescura.value=sucursalArticulos.value; sucursalResumen.value=sucursalArticulos.value; sucursalResumenArticulo.value=sucursalArticulos.value; sucursalAbcMensual.value=sucursalArticulos.value; sucursalResp.value=sucursalArticulos.value; }
+  if(origin==='abcMensual') { sucursalAbc.value=sucursalAbcMensual.value; sucursalPlan.value=sucursalAbcMensual.value; sucursalConteo.value=sucursalAbcMensual.value; sucursalExterno.value=sucursalAbcMensual.value; sucursalFrescura.value=sucursalAbcMensual.value; sucursalResumen.value=sucursalAbcMensual.value; sucursalResumenArticulo.value=sucursalAbcMensual.value; sucursalArticulos.value=sucursalAbcMensual.value; sucursalResp.value=sucursalAbcMensual.value; }
+  if(origin==='externo') { sucursalAbc.value=sucursalExterno.value; sucursalPlan.value=sucursalExterno.value; sucursalConteo.value=sucursalExterno.value; sucursalResumen.value=sucursalExterno.value; sucursalFrescura.value=sucursalExterno.value; sucursalResumenArticulo.value=sucursalExterno.value; sucursalArticulos.value=sucursalExterno.value; sucursalAbcMensual.value=sucursalExterno.value; sucursalResp.value=sucursalExterno.value; }
+  if(origin==='frescura') { sucursalAbc.value=sucursalFrescura.value; sucursalPlan.value=sucursalFrescura.value; sucursalConteo.value=sucursalFrescura.value; sucursalExterno.value=sucursalFrescura.value; sucursalResumen.value=sucursalFrescura.value; sucursalResumenArticulo.value=sucursalFrescura.value; sucursalArticulos.value=sucursalFrescura.value; sucursalAbcMensual.value=sucursalFrescura.value; sucursalResp.value=sucursalFrescura.value; }
+  if(origin==='resp') { sucursalAbc.value=sucursalResp.value; sucursalPlan.value=sucursalResp.value; sucursalConteo.value=sucursalResp.value; sucursalExterno.value=sucursalResp.value; sucursalFrescura.value=sucursalResp.value; sucursalResumen.value=sucursalResp.value; sucursalResumenArticulo.value=sucursalResp.value; sucursalArticulos.value=sucursalResp.value; sucursalAbcMensual.value=sucursalResp.value; }
   abcLoaded=false;
   planLoaded=false;
   resumenLoaded=false;
@@ -1832,6 +1883,7 @@ function syncSucursal(origin){
   articulosLoaded=false;
   abcMensualLoaded=false;
   respLoaded=false;
+  frescuraLoaded=false;
   planillaStale=true;
   const tabLoaders={
     abc:()=>{loadAbc()},
@@ -1841,6 +1893,7 @@ function syncSucursal(origin){
     articulos:()=>{loadArticulosControlados()},
     abcMensual:()=>{loadAbcMensual()},
     resp:()=>{loadResponsables()},
+    frescura:()=>{loadResponsables().then(()=>loadControlFrescura())},
     conteo:()=>{loadPlanilla();planillaStale=false},
   };
   tabLoaders[activeTab]?.();
@@ -1853,6 +1906,7 @@ function openTab(name,{updateHash=true}={}){
   tabPlan.classList.toggle('active', name==='plan');
   tabConteo.classList.toggle('active', name==='conteo');
   tabExterno.classList.toggle('active', name==='externo');
+  tabFrescura.classList.toggle('active', name==='frescura');
   tabResumenArticulo.classList.toggle('active', name==='resumenArticulo');
   tabResumen.classList.toggle('active', name==='resumen');
   tabArticulos.classList.toggle('active', name==='articulos');
@@ -1870,6 +1924,7 @@ function openTab(name,{updateHash=true}={}){
   viewPlan.classList.toggle('active', name==='plan');
   viewConteo.classList.toggle('active', name==='conteo');
   viewExterno.classList.toggle('active', name==='externo');
+  viewFrescura.classList.toggle('active', name==='frescura');
   viewResumenArticulo.classList.toggle('active', name==='resumenArticulo');
   viewResumen.classList.toggle('active', name==='resumen');
   viewArticulos.classList.toggle('active', name==='articulos');
@@ -1882,6 +1937,7 @@ function openTab(name,{updateHash=true}={}){
   if(name==='articulos' && !articulosLoaded) loadArticulosControlados();
   if(name==='abcMensual' && !abcMensualLoaded) loadAbcMensual();
   if(name==='resp' && !respLoaded) loadResponsables();
+  if(name==='frescura' && !frescuraLoaded) loadResponsables().then(()=>loadControlFrescura());
   if(name==='conteo' && planillaStale){loadPlanilla();planillaStale=false}
 }
 function rowSemana(r){return r.control_semana||r.semana1||r.semana2||r.semana3||r.semana4||''}
@@ -2255,6 +2311,165 @@ function renderAbcMensual(){
   </article>`).join('');
   abcMensualStatus.textContent=`Mostrando ${rows.length} de ${abcMensualRows.length} artículos.`;
 }
+function actualizarTotalesFrescura(){
+  let cargados=0,diferencias=0,totalBultos=0,totalUnidades=0;
+  frescuraRows.forEach((r,idx)=>{
+    const b=document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '';
+    const u=document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '';
+    const cb=b===''?null:Number(b);
+    const cu=u===''?null:Number(u);
+    if(cb!==null||cu!==null) cargados+=1;
+    const realB=cb??0, realU=cu??0;
+    totalBultos+=realB; totalUnidades+=realU;
+    const diff=(cb!==null&&Math.abs(realB-Number(r.stock_sistema_bultos||0))>0.001)||(cu!==null&&Math.abs(realU-Number(r.stock_sistema_unidades||0))>0.001);
+    if(diff) diferencias+=1;
+    const cell=document.querySelector(`[data-fr-diff="${idx}"]`);
+    if(cell) cell.innerHTML=diff?'<span class="status-chip pending">Diferencia</span>':'<span class="status-chip ok">OK</span>';
+  });
+  frescuraFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(frescuraRows.length)} lotes cargados · ${fmt.format(diferencias)} con diferencia · ${fmt.format(totalBultos)} bultos con ${fmt.format(totalUnidades)} unidades`;
+  frescuraFooterSummary.dataset.loaded=String(cargados);
+}
+function estadoFrescuraDesdeDias(dias){
+  if(dias===null||Number.isNaN(dias)) return 'SIN_FECHA';
+  if(dias<30) return 'CRITICO';
+  if(dias<=60) return 'ALERTA';
+  return 'OK';
+}
+function fechaFrescuraLoteChanged(idx){
+  const input=document.querySelector(`[data-fr-vto="${idx}"]`);
+  const diasCell=document.querySelector(`[data-fr-dias="${idx}"]`);
+  const estadoCell=document.querySelector(`[data-fr-estado="${idx}"]`);
+  const value=input?.value||'';
+  frescuraRows[idx].fecha_vencimiento=value;
+  if(!value){
+    frescuraRows[idx].dias_frescura_restantes=null;
+    frescuraRows[idx].estado_frescura='SIN_FECHA';
+    if(diasCell) diasCell.textContent='-';
+    if(estadoCell) estadoCell.textContent='SIN_FECHA';
+    return;
+  }
+  const dias=Math.round((parseLocalDate(value)-parseLocalDate(fechaFrescura.value||today()))/86400000);
+  const estado=estadoFrescuraDesdeDias(dias);
+  frescuraRows[idx].dias_frescura_restantes=dias;
+  frescuraRows[idx].estado_frescura=estado;
+  if(diasCell) diasCell.textContent=String(dias);
+  if(estadoCell) estadoCell.textContent=estado;
+}
+async function loadControlFrescura(){
+  frescuraControlStatus.textContent='Consultando Frescura y cargando lotes...';
+  actualizarEstadoFrescura(fechaFrescura.value,'frSync');
+  const params=new URLSearchParams({fecha:fechaFrescura.value||today(),sucursal:sucursalFrescura.value});
+  const res=await fetch('/api/control-stock/frescura-planilla?'+params);
+  const data=await res.json();
+  if(!res.ok||data.ok===false){frescuraControlStatus.textContent='Error: '+(data.error||'No se pudo cargar Frescura');return}
+  frescuraRows=data.rows||[];
+  frFecha.textContent=`Fecha: ${fechaCorta(data.fecha)} | ${data.dia}`;
+  frArticulos.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
+  frLotes.textContent=`Lotes: ${fmt.format(data.total_lotes||0)}`;
+  frTotal.textContent=`Sistema: ${fmt.format(data.total_bultos||0)} bultos con ${fmt.format(data.total_unidades||0)} unidades`;
+  frescuraControlStatus.textContent=data.es_miercoles
+    ? `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar.`
+    : `La fecha seleccionada es ${data.dia}. El guardado del control de frescura solo se permite los miercoles.`;
+  frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>`<tr>
+    <td class="num">${esc(r.codigo_articulo)}</td>
+    <td>${esc(r.descripcion_articulo)}</td>
+    <td>${esc(r.lote)}</td>
+    <td><input class="stock-input ${r.fecha_vencimiento?'':'logistic-missing'}" style="width:132px;text-align:left" type="date" value="${esc(r.fecha_vencimiento||'')}" data-fr-vto="${idx}" onchange="fechaFrescuraLoteChanged(${idx})" title="${r.fecha_vencimiento?'Fecha de vencimiento':'Cargar vencimiento del lote'}"></td>
+    <td class="num" data-fr-dias="${idx}">${r.dias_frescura_restantes ?? '-'}</td>
+    <td data-fr-estado="${idx}">${esc(r.estado_frescura)}</td>
+    <td class="num">${fmt.format(r.stock_sistema_bultos||0)}</td>
+    <td class="num">${fmt.format(r.stock_sistema_unidades||0)}</td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></td>
+    <td data-fr-diff="${idx}">-</td>
+    <td><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional"></td>
+  </tr>`).join('');
+  frescuraLoaded=true;
+  actualizarTotalesFrescura();
+  loadDiferenciasFrescura();
+}
+async function loadDiferenciasFrescura(){
+  const desde=(fechaFrescura.value||today()).slice(0,8)+'01';
+  const hasta=fechaFrescura.value||today();
+  const params=new URLSearchParams({sucursal:sucursalFrescura.value,desde,hasta});
+  if(responsableFrescura.value) params.set('responsable',responsableFrescura.value);
+  frescuraDiffStatus.textContent='Consultando diferencias...';
+  try{
+    const res=await fetch('/api/control-stock/frescura-diferencias?'+params);
+    const data=await res.json();
+    if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudieron cargar diferencias');
+    const rows=data.rows||[];
+    frescuraDiffStatus.textContent=rows.length
+      ? `${fmt.format(rows.length)} diferencia(s): ${fmt.format(data.diferencias_stock||0)} de stock y ${fmt.format(data.diferencias_fecha||0)} de fecha.`
+      : 'Sin diferencias guardadas para los filtros actuales.';
+    frescuraDiffBody.innerHTML=rows.map(r=>{
+      const tipo=[r.diferencia_stock?'Stock':'',r.diferencia_fecha?'Fecha':''].filter(Boolean).join(' + ');
+      return `<tr>
+        <td class="num">${esc(r.conteo_id)}</td>
+        <td>${esc(fechaCorta(r.fecha))}</td>
+        <td>${esc(r.responsable)}</td>
+        <td class="num">${esc(r.codigo_articulo)}</td>
+        <td>${esc(r.descripcion_articulo)}</td>
+        <td>${esc(r.lote)}</td>
+        <td>${esc(r.fecha_vencimiento_sistema?fechaCorta(r.fecha_vencimiento_sistema):'-')}</td>
+        <td>${esc(r.fecha_vencimiento_controlada?fechaCorta(r.fecha_vencimiento_controlada):'-')}</td>
+        <td class="num">${fmt.format(r.stock_sistema_bultos||0)}</td>
+        <td class="num">${fmt.format(r.stock_contado_bultos||0)}</td>
+        <td class="num">${fmt.format(r.stock_sistema_unidades||0)}</td>
+        <td class="num">${fmt.format(r.stock_contado_unidades||0)}</td>
+        <td><span class="status-chip pending">${esc(tipo)}</span></td>
+        <td>${esc(r.observacion||'')}</td>
+      </tr>`;
+    }).join('');
+  }catch(error){
+    frescuraDiffStatus.textContent='No se pudieron cargar diferencias: '+(error.message||'error desconocido');
+  }
+}
+async function guardarControlFrescura(){
+  if(!responsableFrescura.value){await modalAlert('Selecciona un responsable para guardar el control de frescura.');return}
+  const loaded=Number(frescuraFooterSummary?.dataset?.loaded||0);
+  if(!loaded){await modalAlert('Carga al menos un lote antes de guardar.');return}
+  const sinFecha=frescuraRows.filter((r,idx)=>{
+    const b=document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '';
+    const u=document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '';
+    const vto=document.querySelector(`[data-fr-vto="${idx}"]`)?.value ?? '';
+    return (b!==''||u!=='')&&!vto;
+  });
+  if(sinFecha.length){
+    await modalAlert(`Hay ${sinFecha.length} lote(s) controlados sin fecha de vencimiento. Cargá la fecha antes de guardar.`);
+    return;
+  }
+  if(!await modalConfirm(`Vas a guardar el control de frescura.\n\nSucursal: ${sucursalFrescura.options[sucursalFrescura.selectedIndex]?.text || sucursalFrescura.value}\nFecha: ${fechaCorta(fechaFrescura.value)}\nResponsable: ${responsableFrescura.value}\nLotes cargados: ${loaded}`,{okText:'Guardar frescura'})) return;
+  guardarFrescuraBtn.disabled=true;
+  guardarFrescuraBtn.textContent='Guardando...';
+  const items=frescuraRows.map((r,idx)=>({
+    ...r,
+    fecha_vencimiento_sistema:r.fecha_vencimiento_sistema||'',
+    fecha_vencimiento:document.querySelector(`[data-fr-vto="${idx}"]`)?.value ?? r.fecha_vencimiento,
+    stock_contado_bultos:document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '',
+    stock_contado_unidades:document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '',
+    observacion:document.querySelector(`[data-fr-obs="${idx}"]`)?.value ?? '',
+  }));
+  try{
+    const res=await fetch('/api/control-stock/frescura-conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      sucursal:sucursalFrescura.value,
+      fecha:fechaFrescura.value,
+      responsable:responsableFrescura.value,
+      observaciones:observacionesFrescura.value,
+      items,
+    })});
+    const data=await res.json();
+    if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo guardar');
+    frescuraControlStatus.textContent=`Control de frescura #${data.data.id} guardado: ${fmt.format(data.data.items_guardados)} lote(s), ${fmt.format(data.data.lotes_con_diferencia||0)} con diferencia.`;
+    await modalAlert(`Control de frescura guardado correctamente.\n\nNro. de control: ${data.data.id}\nLotes guardados: ${data.data.items_guardados}\nDiferencias stock: ${data.data.lotes_con_diferencia_stock||0}\nDiferencias fecha: ${data.data.lotes_con_diferencia_fecha||0}`);
+    loadDiferenciasFrescura();
+  }catch(error){
+    frescuraControlStatus.textContent='No se pudo guardar el control de frescura: '+(error.message||'error desconocido');
+  }finally{
+    guardarFrescuraBtn.disabled=false;
+    guardarFrescuraBtn.textContent='Guardar control de frescura';
+  }
+}
 async function loadResponsables(){
   respStatus.textContent='Cargando responsables...';
   const adminMode = activeTab === 'resp';
@@ -2262,6 +2477,7 @@ async function loadResponsables(){
     resp: sucursalResp.value,
     resumenArticulo: sucursalResumenArticulo.value,
     externo: sucursalExterno.value,
+    frescura: sucursalFrescura.value,
     conteo: sucursalConteo.value,
   };
   const sucursalObjetivo = targetByTab[activeTab] || sucursalConteo.value;
@@ -2274,6 +2490,9 @@ async function loadResponsables(){
   const keepResumenArticulo=responsableResumenArticulo.value||'';
   responsableResumenArticulo.innerHTML='<option value="">Todos los responsables</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
   responsableResumenArticulo.value=rows.some(r=>r.activo&&r.nombre===keepResumenArticulo)?keepResumenArticulo:'';
+  const keepFrescura=responsableFrescura.value||'';
+  responsableFrescura.innerHTML='<option value="">Seleccionar responsable</option>'+rows.filter(r=>r.activo).map(r=>`<option value="${esc(r.nombre)}">${esc(r.nombre)}</option>`).join('');
+  responsableFrescura.value=rows.some(r=>r.activo&&r.nombre===keepFrescura)?keepFrescura:'';
   respBody.innerHTML=adminMode ? rows.map(r=>`<tr><td>${esc(r.nombre)}</td><td>${r.activo?'Activo':'Inactivo'}</td><td><button class="btn" onclick="editarResponsable(${r.id},'${escapeJs(r.nombre)}')">Editar</button> <button class="btn ${r.activo?'danger':''}" onclick="toggleResponsable(${r.id},${r.activo?'false':'true'})">${r.activo?'Desactivar':'Activar'}</button></td></tr>`).join('') : respBody.innerHTML;
   respCards.innerHTML=adminMode ? rows.map(r=>`<article class="resp-card">
     <div class="resp-card-head"><span>${esc(r.nombre)}</span></div>
@@ -2826,7 +3045,7 @@ async function guardarConteo(){
   guardandoConteo=false;
 }
 (async function initControlStock(){
-  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesExterno.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();fechaExterno.value=today();fechaResumenArticulo.value=today();semana.value='AUTO';dia.value='AUTO';
+  mes.value=defaultMonth();mesAbc.value=defaultMonth();mesPlan.value=defaultMonth();mesExterno.value=defaultMonth();mesResumen.value=currentMonth();mesArticulos.value=currentMonth();anioAbcMensual.value=new Date().getFullYear();fecha.value=today();fechaExterno.value=today();fechaFrescura.value=today();fechaResumenArticulo.value=today();semana.value='AUTO';dia.value='AUTO';
   [semana,dia,abc].forEach(el=>el.closest('.field').style.display='none');
   [mes,horaInicio,horaFin,estado].forEach(el=>el.closest('.field').style.display='none');
   await cargarSucursales();

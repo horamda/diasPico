@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import unicodedata
 from copy import copy
 from io import BytesIO
@@ -166,6 +167,15 @@ def _first_present(row: dict[str, Any], *keys: str) -> Any:
     return None
 
 
+def _first_present_like(row: dict[str, Any], *tokens: str) -> Any:
+    wanted = tuple(_norm_header(t) for t in tokens if _norm_header(t))
+    for key, value in row.items():
+        norm = _norm_header(key)
+        if value not in (None, "") and any(token in norm for token in wanted):
+            return value
+    return None
+
+
 def _default_equivalencias_map() -> dict[str, str]:
     return {
         _to_codigo(producto_codigo): _to_codigo(codigo_real)
@@ -180,6 +190,17 @@ def _norm_cliente_name(value: Any) -> str:
     for ch in ("-", ".", ",", ";", ":", "º", "°", "�"):
         text = text.replace(ch, " ")
     return " ".join(text.split())
+
+
+def _extraer_codigo_cliente(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    codigo = _to_codigo(text)
+    if codigo.isdigit():
+        return codigo
+    match = re.match(r"^\s*(\d+)\s*(?:-|/|\|)\s*\S+", text)
+    return match.group(1) if match else ""
 
 
 def _default_clientes_smk_map() -> dict[str, str]:
@@ -343,11 +364,133 @@ def resolver_cliente_smk(value: Any, clientes: dict[str, str] | None = None) -> 
     original = str(value or "").strip()
     if not original:
         return ""
-    codigo_directo = _to_codigo(original)
-    if codigo_directo.isdigit():
+    codigo_directo = _extraer_codigo_cliente(original)
+    if codigo_directo:
         return codigo_directo
     clientes = clientes if clientes is not None else cargar_clientes_smk()
     return clientes.get(_norm_cliente_name(original), original)
+
+
+def cargar_datos_clientes_maestro(
+    clientes_values: list[Any] | set[Any] | tuple[Any, ...],
+    sucursal_id: str | None = None,
+) -> dict[str, dict[str, Any]]:
+    originals = [str(v or "").strip() for v in clientes_values if str(v or "").strip()]
+    if not originals:
+        return {}
+
+    codigos = sorted({c for c in (_extraer_codigo_cliente(v) for v in originals) if c})
+    nombres = sorted({_norm_cliente_name(v) for v in originals if not _extraer_codigo_cliente(v)})
+    if not codigos and not nombres:
+        return {}
+
+    try:
+        from app.database import pg_conn
+        import psycopg2.extras
+    except Exception:
+        return {}
+
+    try:
+        with pg_conn() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                params: dict[str, Any] = {"codigos": codigos, "nombres": nombres}
+                filtro_sucursal = ""
+                if sucursal_id:
+                    filtro_sucursal = "AND c.sucursal = %(sucursal_id)s"
+                    params["sucursal_id"] = str(sucursal_id)
+                cur.execute(
+                    f"""
+                    SELECT c.cliente, c.descripcion, c.sucursal, c.razon_social,
+                           c.nombre_fantasia, c.telefonos, c.movil, c.email,
+                           c.domicilio, c.localidad, c.provincia, c.departamento,
+                           c.area, c.subcanal, c.ramo, c.categoria,
+                           c.fuerza_venta_1_dias_visita, c.activo_maestro,
+                           c.ultima_importacion_clientes
+                    FROM clientes c
+                    WHERE (
+                            c.cliente = ANY(%(codigos)s::varchar[])
+                         OR %(nombres)s::varchar[] && ARRAY[
+                                UPPER(COALESCE(c.descripcion, ''))::varchar,
+                                UPPER(COALESCE(c.razon_social, ''))::varchar,
+                                UPPER(COALESCE(c.nombre_fantasia, ''))::varchar
+                            ]::varchar[]
+                          )
+                      {filtro_sucursal}
+                    ORDER BY c.activo_maestro DESC, c.sucursal NULLS LAST, c.cliente
+                    """,
+                    params,
+                )
+                rows = cur.fetchall() or []
+    except Exception:
+        return {}
+
+    by_codigo: dict[str, dict[str, Any]] = {}
+    by_nombre: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        data = dict(row)
+        if hasattr(data.get("ultima_importacion_clientes"), "isoformat"):
+            data["ultima_importacion_clientes"] = data["ultima_importacion_clientes"].isoformat()
+        codigo = _to_codigo(data.get("cliente"))
+        if codigo and codigo not in by_codigo:
+            by_codigo[codigo] = data
+        for field in ("descripcion", "razon_social", "nombre_fantasia"):
+            key = _norm_cliente_name(data.get(field))
+            if key and key not in by_nombre:
+                by_nombre[key] = data
+
+    out: dict[str, dict[str, Any]] = {}
+    for original in originals:
+        codigo = _extraer_codigo_cliente(original)
+        data = by_codigo.get(codigo) if codigo else by_nombre.get(_norm_cliente_name(original))
+        if data:
+            out[original] = data
+            out[_to_codigo(data.get("cliente"))] = data
+    return out
+
+
+def resumir_resultados_por_cliente(
+    resultados: list[dict[str, Any]],
+    cliente_datos: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    cliente_datos = cliente_datos or {}
+    resumen: dict[str, dict[str, Any]] = {}
+    for row in resultados:
+        original = str(row.get("cliente") or "").strip()
+        codigo = _to_codigo(row.get("cliente_codigo") or resolver_cliente_smk(original))
+        maestro = cliente_datos.get(original) or cliente_datos.get(codigo) or {}
+        key = _to_codigo(maestro.get("cliente") or codigo or original)
+        item = resumen.setdefault(key, {
+            "cliente": key,
+            "cliente_original": original,
+            "sucursal": maestro.get("sucursal") or "",
+            "razon_social": maestro.get("razon_social") or maestro.get("descripcion") or "",
+            "nombre_fantasia": maestro.get("nombre_fantasia") or "",
+            "localidad": maestro.get("localidad") or "",
+            "provincia": maestro.get("provincia") or "",
+            "activo_maestro": maestro.get("activo_maestro"),
+            "dias_visita": maestro.get("fuerza_venta_1_dias_visita") or "",
+            "skus": 0,
+            "bultos_pedidos": 0.0,
+            "bultos_a_enviar": 0.0,
+            "monto_pedido": 0.0,
+            "monto_a_enviar": 0.0,
+        })
+        item["skus"] += 1
+        item["bultos_pedidos"] += _to_float(row.get("cantidad_pedida"))
+        item["bultos_a_enviar"] += _to_float(row.get("cantidad_a_enviar"))
+        item["monto_pedido"] += _to_float(row.get("monto_pedido"))
+        item["monto_a_enviar"] += _to_float(row.get("monto_a_enviar"))
+
+    out = []
+    for item in resumen.values():
+        bultos_pedidos = item["bultos_pedidos"]
+        item["bultos_pedidos"] = round(bultos_pedidos, 2)
+        item["bultos_a_enviar"] = round(item["bultos_a_enviar"], 2)
+        item["monto_pedido"] = round(item["monto_pedido"], 2)
+        item["monto_a_enviar"] = round(item["monto_a_enviar"], 2)
+        item["cumplimiento_pct"] = round((item["bultos_a_enviar"] / bultos_pedidos * 100) if bultos_pedidos else 0, 2)
+        out.append(item)
+    return sorted(out, key=lambda x: (str(x.get("sucursal") or ""), str(x.get("cliente") or "")))
 
 
 def list_equivalencias_articulos() -> list[dict[str, Any]]:
@@ -455,8 +598,19 @@ def save_cliente_smk(data: dict[str, Any]) -> dict[str, Any]:
 
 def _recalcular_resumen_resultados(payload: dict[str, Any]) -> dict[str, Any]:
     resultados = payload.get("resultados") or []
+    for row in resultados:
+        cantidad_pedida = _to_float(row.get("cantidad_pedida"))
+        monto_pedido = _to_float(row.get("monto_pedido"))
+        cantidad_a_enviar = _to_float(row.get("cantidad_a_enviar"))
+        row["monto_a_enviar"] = (
+            round(monto_pedido * (cantidad_a_enviar / cantidad_pedida), 2)
+            if monto_pedido and cantidad_pedida > 0
+            else _to_float(row.get("monto_a_enviar"))
+        )
     bultos_pedidos = round(sum(_to_float(r.get("cantidad_pedida")) for r in resultados), 2)
     bultos_a_enviar = round(sum(_to_float(r.get("cantidad_a_enviar")) for r in resultados), 2)
+    monto_pedido = round(sum(_to_float(r.get("monto_pedido")) for r in resultados), 2)
+    monto_a_enviar = round(sum(_to_float(r.get("monto_a_enviar")) for r in resultados), 2)
     cumplimiento_pct = round((bultos_a_enviar / bultos_pedidos * 100) if bultos_pedidos else 0, 2)
     resumen = dict(payload.get("resumen") or {})
     resumen.update({
@@ -467,11 +621,17 @@ def _recalcular_resumen_resultados(payload: dict[str, Any]) -> dict[str, Any]:
         "revisar": sum(1 for r in resultados if r.get("estado") == REVISAR),
         "bultos_pedidos": bultos_pedidos,
         "bultos_a_enviar": bultos_a_enviar,
+        "monto_pedido": monto_pedido,
+        "monto_a_enviar": monto_a_enviar,
         "cumplimiento_pct": cumplimiento_pct,
         "objetivo_cumplimiento_pct": 70,
         "objetivo_cumplido": cumplimiento_pct >= 70,
     })
     payload["resumen"] = resumen
+    payload["resumen_clientes"] = resumir_resultados_por_cliente(
+        resultados,
+        {str(c.get("cliente")): c for c in (payload.get("cliente_datos") or []) if c.get("cliente")},
+    )
     return payload
 
 
@@ -621,6 +781,7 @@ def parse_pedido(content: bytes) -> dict[str, Any]:
     clientes: set[str] = set()
     solicitudes: set[str] = set()
     entregas: set[str] = set()
+    clientes_smk = cargar_clientes_smk()
 
     for row in rows:
         codigo = _to_codigo(_first_present(row, "PRODUCTOCODIGO", "ARTICULO", "CODIGO", "PRODUCTO CODIGO"))
@@ -629,6 +790,11 @@ def parse_pedido(content: bytes) -> dict[str, Any]:
         cantidad = _to_float(_first_present(
             row, "CANTIDADENTREGADA", "CANTIDAD ENTREGADA", "CANTIDAD", "CANT", "BULTOS",
         ))
+        monto = _to_float(_first_present(
+            row,
+            "IMPORTE", "IMPORTE TOTAL", "TOTAL", "MONTO", "MONTO TOTAL",
+            "VALOR", "VALOR TOTAL", "SUBTOTAL",
+        ) or _first_present_like(row, "IMPORTE", "MONTO", "TOTAL"))
         descripcion = _first_present(row, "PRODUCTODESCRIPCION", "DESCRIPCION", "PRODUCTO DESCRIPCION") or ""
         cliente = _first_present(row, "CLIENTE") or ""
         solicitud = _to_codigo(_first_present(row, "SOLICITUDID", "SOLICITUD", "PEDIDO", "NUMERO"))
@@ -646,7 +812,9 @@ def parse_pedido(content: bytes) -> dict[str, Any]:
             "codigo_original": codigo,
             "descripcion": str(descripcion).strip(),
             "cantidad_pedida": cantidad,
+            "monto_pedido": monto,
             "cliente": str(cliente).strip(),
+            "cliente_codigo": resolver_cliente_smk(cliente, clientes_smk),
             "solicitud": solicitud,
             "entrega": str(entrega).strip(),
         })
@@ -654,11 +822,18 @@ def parse_pedido(content: bytes) -> dict[str, Any]:
     # Consolidar líneas repetidas del mismo SKU (suma cantidades).
     consolidado: dict[str, dict[str, Any]] = {}
     for ln in lineas:
-        key = ln["codigo"]
+        key = "|".join([
+            str(ln.get("codigo") or ""),
+            str(ln.get("cliente_codigo") or ln.get("cliente") or ""),
+            str(ln.get("solicitud") or ""),
+        ])
         if key not in consolidado:
             consolidado[key] = dict(ln)
         else:
             consolidado[key]["cantidad_pedida"] += ln["cantidad_pedida"]
+            consolidado[key]["monto_pedido"] = (
+                _to_float(consolidado[key].get("monto_pedido")) + _to_float(ln.get("monto_pedido"))
+            )
             originales = {
                 code.strip()
                 for code in str(consolidado[key].get("codigo_original") or "").split(",")
@@ -808,6 +983,7 @@ def _analizar_linea(
 ) -> dict[str, Any]:
     codigo = linea["codigo"]
     cantidad_pedida = float(linea["cantidad_pedida"] or 0)
+    monto_pedido = _to_float(linea.get("monto_pedido"))
     descripcion = linea.get("descripcion") or (pp or {}).get("descripcion") or ""
     frescura_eval = _evaluar_lotes_frescura(fr, umbral_frescura_dias)
     lote_seleccionado = frescura_eval.get("lote_seleccionado")
@@ -820,9 +996,12 @@ def _analizar_linea(
             "codigo_equivalente_usado": bool(linea.get("codigo_equivalente_usado")),
             "descripcion": descripcion,
             "cliente": linea.get("cliente") or "",
+            "cliente_codigo": linea.get("cliente_codigo") or resolver_cliente_smk(linea.get("cliente")),
             "solicitud": linea.get("solicitud") or "",
             "entrega": linea.get("entrega") or "",
             "cantidad_pedida": cantidad_pedida,
+            "monto_pedido": monto_pedido,
+            "monto_a_enviar": 0.0,
             "stock": None,
             "venta_diaria": None,
             "dias_stock_actual": None,
@@ -916,6 +1095,11 @@ def _analizar_linea(
 
     stock_post = stock - cantidad_a_enviar
     dias_stock_post = (stock_post / venta_diaria) if venta_diaria > 0 else None
+    monto_a_enviar = (
+        round(monto_pedido * (cantidad_a_enviar / cantidad_pedida), 2)
+        if monto_pedido and cantidad_pedida > 0
+        else 0.0
+    )
 
     return {
         "codigo": codigo,
@@ -923,9 +1107,12 @@ def _analizar_linea(
         "codigo_equivalente_usado": bool(linea.get("codigo_equivalente_usado")),
         "descripcion": descripcion,
         "cliente": linea.get("cliente") or "",
+        "cliente_codigo": linea.get("cliente_codigo") or resolver_cliente_smk(linea.get("cliente")),
         "solicitud": linea.get("solicitud") or "",
         "entrega": linea.get("entrega") or "",
         "cantidad_pedida": cantidad_pedida,
+        "monto_pedido": monto_pedido,
+        "monto_a_enviar": monto_a_enviar,
         "stock": stock,
         "venta_diaria": round(venta_diaria, 2),
         "dias_stock_actual": None if dias_stock_actual is None else round(dias_stock_actual, 1),
@@ -955,6 +1142,7 @@ def analizar(
     Ejecuta el análisis completo y devuelve resultados + resumen.
     """
     pedido = parse_pedido(pedido_bytes)
+    cliente_datos = cargar_datos_clientes_maestro(pedido["clientes"], sucursal_id)
     pp_index = parse_punto_pedido(punto_pedido_bytes)
 
     equivalencias = cargar_equivalencias_articulos([ln["codigo"] for ln in pedido["lineas"]])
@@ -977,6 +1165,8 @@ def analizar(
     # Orden: primero lo que requiere atención.
     orden = {NO_ENVIAR: 0, ENVIAR_PARCIAL: 1, REVISAR: 2, ENVIAR: 3}
     resultados.sort(key=lambda r: (orden.get(r["estado"], 9), -(r["cantidad_pedida"] or 0)))
+    cliente_datos_lista = list({v.get("cliente"): v for v in cliente_datos.values()}.values())
+    resumen_clientes = resumir_resultados_por_cliente(resultados, cliente_datos)
 
     resumen = {
         "total_skus": len(resultados),
@@ -986,6 +1176,8 @@ def analizar(
         "revisar": sum(1 for r in resultados if r["estado"] == REVISAR),
         "bultos_pedidos": round(sum(r["cantidad_pedida"] or 0 for r in resultados), 2),
         "bultos_a_enviar": round(sum(r["cantidad_a_enviar"] or 0 for r in resultados), 2),
+        "monto_pedido": round(sum(_to_float(r.get("monto_pedido")) for r in resultados), 2),
+        "monto_a_enviar": round(sum(_to_float(r.get("monto_a_enviar")) for r in resultados), 2),
         "frescura_aplicada": bool(frescura_index),
         "equivalencias_usadas": sum(1 for r in resultados if r.get("codigo_equivalente_usado")),
     }
@@ -1004,6 +1196,8 @@ def analizar(
         "ok": True,
         "veredicto": veredicto,
         "cliente": ", ".join(pedido["clientes"]) if pedido["clientes"] else "",
+        "cliente_datos": cliente_datos_lista,
+        "resumen_clientes": resumen_clientes,
         "solicitudes": pedido["solicitudes"],
         "entregas": pedido["entregas"],
         "parametros": {
@@ -1026,7 +1220,7 @@ def exportar_xlsx(analisis: dict[str, Any]) -> bytes:
 
     wb = Workbook()
     ws = wb.active
-    ws.title = "Análisis pedido"
+    ws.title = "Analisis pedido"
 
     colores = {
         ENVIAR: "C6EFCE",
@@ -1035,23 +1229,26 @@ def exportar_xlsx(analisis: dict[str, Any]) -> bytes:
         REVISAR: "D9D9D9",
     }
 
-    # Encabezado de contexto
-    ws["A1"] = "Análisis de pedido a supermercado"
+    analisis = _recalcular_resumen_resultados(dict(analisis))
+    clientes_maestro = {str(c.get("cliente")): c for c in (analisis.get("cliente_datos") or []) if c.get("cliente")}
+
+    ws["A1"] = "Analisis de pedido a supermercado"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = f"Cliente: {analisis.get('cliente', '')}"
     ws["A3"] = f"Solicitud(es): {', '.join(analisis.get('solicitudes', []))}"
     ws["A4"] = f"Veredicto: {analisis.get('veredicto', '')}"
     p = analisis.get("parametros", {})
     ws["A5"] = (
-        f"Días mín. minoristas: {p.get('dias_min_retail')} · "
-        f"Frescura mín.: {p.get('umbral_frescura_dias')} días · "
-        f"Frescura aplicada: {'sí' if analisis.get('resumen', {}).get('frescura_aplicada') else 'no'}"
+        f"Dias min. minoristas: {p.get('dias_min_retail')} | "
+        f"Frescura min.: {p.get('umbral_frescura_dias')} dias | "
+        f"Frescura aplicada: {'si' if analisis.get('resumen', {}).get('frescura_aplicada') else 'no'}"
     )
 
     headers = [
-        "Código", "Descripción", "Cant. pedida", "Stock", "Venta diaria",
-        "Días stock actual", "Días stock post", "Frescura (días)",
-        "Cant. a enviar", "Estado", "Motivos",
+        "Cliente", "Sucursal", "Codigo", "Descripcion", "Cant. pedida",
+        "Monto pedido", "Stock", "Venta diaria", "Dias stock actual",
+        "Dias stock post", "Frescura (dias)", "Cant. a enviar",
+        "Monto a enviar", "Estado", "Motivos",
     ]
     header_row = 7
     for col, h in enumerate(headers, start=1):
@@ -1061,24 +1258,61 @@ def exportar_xlsx(analisis: dict[str, Any]) -> bytes:
         c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     for i, r in enumerate(analisis.get("resultados", []), start=header_row + 1):
-        ws.cell(row=i, column=1, value=r["codigo"])
-        ws.cell(row=i, column=2, value=r["descripcion"])
-        ws.cell(row=i, column=3, value=r["cantidad_pedida"])
-        ws.cell(row=i, column=4, value=r["stock"])
-        ws.cell(row=i, column=5, value=r["venta_diaria"])
-        ws.cell(row=i, column=6, value=r["dias_stock_actual"])
-        ws.cell(row=i, column=7, value=r["dias_stock_post"])
-        ws.cell(row=i, column=8, value=r["dias_frescura"])
-        ws.cell(row=i, column=9, value=r["cantidad_a_enviar"])
-        estado_cell = ws.cell(row=i, column=10, value=r["estado"])
-        estado_cell.fill = PatternFill("solid", fgColor=colores.get(r["estado"], "FFFFFF"))
+        cliente_codigo = r.get("cliente_codigo") or resolver_cliente_smk(r.get("cliente"))
+        cliente_maestro = clientes_maestro.get(str(cliente_codigo), {})
+        values = [
+            cliente_codigo or r.get("cliente") or "",
+            cliente_maestro.get("sucursal") or "",
+            r.get("codigo"),
+            r.get("descripcion"),
+            r.get("cantidad_pedida"),
+            _to_float(r.get("monto_pedido")) or None,
+            r.get("stock"),
+            r.get("venta_diaria"),
+            r.get("dias_stock_actual"),
+            r.get("dias_stock_post"),
+            r.get("dias_frescura"),
+            r.get("cantidad_a_enviar"),
+            _to_float(r.get("monto_a_enviar")) or None,
+            r.get("estado"),
+            " ".join(r.get("motivos") or []),
+        ]
+        for col, value in enumerate(values, start=1):
+            ws.cell(row=i, column=col, value=value)
+        estado_cell = ws.cell(row=i, column=14)
+        estado_cell.fill = PatternFill("solid", fgColor=colores.get(r.get("estado"), "FFFFFF"))
         estado_cell.font = Font(bold=True)
-        ws.cell(row=i, column=11, value=" ".join(r["motivos"]))
 
-    anchos = [12, 34, 12, 10, 12, 14, 14, 13, 13, 16, 60]
-    for col, w in enumerate(anchos, start=1):
+    for col, w in enumerate([14, 10, 12, 34, 12, 14, 10, 12, 14, 14, 13, 13, 14, 16, 60], start=1):
         ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = w
     ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+
+    ws_cli = wb.create_sheet("Clientes")
+    cliente_headers = [
+        "Cliente", "Cliente original", "Sucursal", "Razon social", "Fantasia",
+        "Localidad", "Provincia", "Activo", "Dias visita", "SKUs",
+        "Bultos pedidos", "Bultos a enviar", "Monto pedido",
+        "Monto a enviar", "Cumplimiento %",
+    ]
+    for col, h in enumerate(cliente_headers, start=1):
+        c = ws_cli.cell(row=1, column=col, value=h)
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="305496")
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    for i, row in enumerate(analisis.get("resumen_clientes") or [], start=2):
+        values = [
+            row.get("cliente"), row.get("cliente_original"), row.get("sucursal"),
+            row.get("razon_social"), row.get("nombre_fantasia"), row.get("localidad"),
+            row.get("provincia"), row.get("activo_maestro"), row.get("dias_visita"),
+            row.get("skus"), row.get("bultos_pedidos"), row.get("bultos_a_enviar"),
+            row.get("monto_pedido") or None, row.get("monto_a_enviar") or None,
+            row.get("cumplimiento_pct"),
+        ]
+        for col, value in enumerate(values, start=1):
+            ws_cli.cell(row=i, column=col, value=value)
+    for col, width in enumerate([14, 26, 10, 28, 24, 18, 18, 10, 14, 10, 15, 15, 15, 15, 15], start=1):
+        ws_cli.column_dimensions[openpyxl.utils.get_column_letter(col)].width = width
+    ws_cli.freeze_panes = "A2"
 
     out = BytesIO()
     wb.save(out)

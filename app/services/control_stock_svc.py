@@ -19,6 +19,7 @@ _DISPERSION_MIN_BULTOS = 5.0
 _DISPERSION_PCT = 0.20
 _PENDIENTES_DESDE = date(2026, 8, 10)
 _EXCLUDED_ARTICLE_IDS = {935}
+_SATURDAY_FIXED_ARTICLE_IDS = {2776, 2731, 2777}
 
 
 def ensure_control_stock_tables() -> None:
@@ -102,6 +103,37 @@ def ensure_control_stock_tables() -> None:
                         editado_por VARCHAR(120),
                         created_at TIMESTAMP NOT NULL DEFAULT NOW()
                     );
+                    CREATE TABLE IF NOT EXISTS control_frescura_conteos (
+                        id BIGSERIAL PRIMARY KEY,
+                        sucursal VARCHAR(20) NOT NULL,
+                        fecha DATE NOT NULL,
+                        responsable VARCHAR(120) NOT NULL,
+                        observaciones TEXT,
+                        estado VARCHAR(20) NOT NULL DEFAULT 'guardado',
+                        created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        UNIQUE (sucursal, fecha, responsable)
+                    );
+                    CREATE TABLE IF NOT EXISTS control_frescura_conteo_items (
+                        conteo_id BIGINT NOT NULL REFERENCES control_frescura_conteos(id) ON DELETE CASCADE,
+                        codigo_articulo VARCHAR(50) NOT NULL,
+                        descripcion_articulo VARCHAR(255),
+                        lote VARCHAR(100) NOT NULL DEFAULT '',
+                        fecha_vencimiento DATE,
+                        fecha_vencimiento_sistema DATE,
+                        fecha_vencimiento_controlada DATE,
+                        dias_frescura_restantes INTEGER,
+                        estado_frescura VARCHAR(20),
+                        stock_sistema_bultos NUMERIC,
+                        stock_sistema_unidades NUMERIC,
+                        stock_contado_bultos NUMERIC,
+                        stock_contado_unidades NUMERIC,
+                        diferencia BOOLEAN NOT NULL DEFAULT FALSE,
+                        diferencia_fecha BOOLEAN NOT NULL DEFAULT FALSE,
+                        observacion TEXT,
+                        updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                        PRIMARY KEY (conteo_id, codigo_articulo, lote)
+                    );
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_1 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_2 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_3 NUMERIC;
@@ -109,6 +141,9 @@ def ensure_control_stock_tables() -> None:
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_5 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_6 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS unidades_sueltas NUMERIC;
+                    ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS fecha_vencimiento_sistema DATE;
+                    ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS fecha_vencimiento_controlada DATE;
+                    ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS diferencia_fecha BOOLEAN NOT NULL DEFAULT FALSE;
                     ALTER TABLE control_stock_conteos ADD COLUMN IF NOT EXISTS tipo_conteo VARCHAR(20) NOT NULL DEFAULT 'mensual';
                     CREATE INDEX IF NOT EXISTS idx_control_stock_conteos_mes
                         ON control_stock_conteos(mes_abc, sucursal, fecha);
@@ -116,6 +151,8 @@ def ensure_control_stock_tables() -> None:
                         ON control_stock_responsables(sucursal, activo, nombre);
                     CREATE INDEX IF NOT EXISTS idx_control_stock_item_audit_item
                         ON control_stock_conteo_item_audit(conteo_id, id_articulo, created_at);
+                    CREATE INDEX IF NOT EXISTS idx_control_frescura_conteos_fecha
+                        ON control_frescura_conteos(sucursal, fecha);
                 """)
         _CONTROL_STOCK_READY = True
 
@@ -164,7 +201,7 @@ def _latest_frescura_sync_row() -> dict | None:
     try:
         with pg_cursor() as cur:
             cur.execute(
-                """SELECT id, started_at, finished_at, estado, total_items, saved_rows
+                """SELECT id, started_at, finished_at, estado, total_items, saved_rows, payload_json
                    FROM frescura_sync_log
                    ORDER BY started_at DESC, id DESC
                    LIMIT 1"""
@@ -186,6 +223,14 @@ def _format_frescura_status(row: dict | None, control_date: date, auto_sync: dic
             "mensaje": "Sin datos de actualizacion de Frescura",
             "auto_sync": auto_sync,
         }
+    payload = row.get("payload_json") or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    stock_date_text = str(payload.get("fecha_stock") or "").strip()
+    try:
+        stock_date = date.fromisoformat(stock_date_text[:10]) if stock_date_text else None
+    except ValueError:
+        stock_date = None
     finished = row.get("finished_at") or row.get("started_at")
     if isinstance(finished, datetime):
         sync_date = finished.date()
@@ -196,11 +241,13 @@ def _format_frescura_status(row: dict | None, control_date: date, auto_sync: dic
     else:
         sync_date = None
         finished_text = str(finished or "")
-    diff = abs((control_date - sync_date).days) if sync_date else None
+    data_date = stock_date or sync_date
+    diff = abs((control_date - data_date).days) if data_date else None
     stale = diff is None or diff > 1
     return {
         "ok": True,
         "fecha_control": control_date.isoformat(),
+        "fecha_stock": data_date.isoformat() if data_date else None,
         "last_sync": {
             "id": int(row.get("id") or 0),
             "finished_at": finished_text,
@@ -229,13 +276,14 @@ def get_frescura_status(fecha_control: str | None = None, auto_sync: bool = True
     if not auto_sync or not should_sync:
         return status
     try:
-        sync_result = frescura_svc.sync_frescura_from_api()
+        sync_result = frescura_svc.sync_frescura_from_api(fecha_stock=control_date)
         refreshed = _latest_frescura_sync_row()
         return _format_frescura_status(refreshed, control_date, auto_sync={
             "ok": True,
             "triggered": True,
             "saved_rows": int(sync_result.get("saved_rows") or 0),
             "total_items": int(sync_result.get("total_items") or 0),
+            "fecha_stock": str(sync_result.get("fecha_stock") or control_date.isoformat()),
         })
     except Exception as exc:
         status["auto_sync"] = {"ok": False, "triggered": True, "error": str(exc)}
@@ -437,6 +485,8 @@ def _apply_excel_schedule(rows: list[dict]) -> None:
 def _row_matches_day(row: dict, semana_key: str, dia_key: str) -> bool:
     if dia_key == "todos":
         return True
+    if dia_key == "sabado":
+        return int(row.get("id_articulo") or 0) in _SATURDAY_FIXED_ARTICLE_IDS
     dia = row.get(f"dia_{semana_key}") or ""
     return dia.lower() == dia_key
 
@@ -454,6 +504,83 @@ def _prepare_planilla_row(row: dict, semana_key: str) -> dict:
     item["control_semana"] = row.get(selected) or selected.upper()
     item["control_dia"] = row.get(f"dia_{selected}") or ""
     return item
+
+
+def _prepare_saturday_planilla_row(row: dict, semana_key: str) -> dict:
+    selected = semana_key if semana_key != "todas" else _first_week_for_row(row) or "semana1"
+    item = dict(row)
+    item["control_semana"] = selected.upper()
+    item["control_dia"] = "Sabado"
+    return item
+
+
+def _get_saturday_fixed_rows(sucursal: str | None = "1") -> list[dict]:
+    ensure_articulos_table()
+    suc = _sucursal_id(sucursal)
+    active_col = "activo_dolores" if suc == "2" else "activo_cc"
+    with pg_cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT
+                a.id_articulo,
+                COALESCE(NULLIF(TRIM(a.descripcion), ''), '') AS descripcion,
+                COALESCE(NULLIF(TRIM(a.unidad_negocio), ''), '') AS negocio,
+                COALESCE(NULLIF(TRIM(a.tipo_producto), ''), '') AS tipo_producto,
+                COALESCE(NULLIF(TRIM(a.{active_col}), ''), NULLIF(TRIM(a.activo), ''), '') AS stock_si,
+                COALESCE(NULLIF(TRIM(a.movil), ''), 'SI') AS movil,
+                COALESCE(NULLIF(TRIM(a.anulado), ''), 'NO') AS anulado,
+                COALESCE(a.bultos_por_pallet, 0) AS bultos_por_pallet,
+                COALESCE(a.bultos_por_piso, 0) AS bultos_por_piso,
+                COALESCE(a.pisos, 0) AS pisos,
+                COALESCE(a.apilabilidad, 0) AS apilabilidad,
+                COALESCE(a.unidades_por_bulto, 0) AS unidades_por_bulto
+            FROM articulos a
+            WHERE a.id_articulo = ANY(%(ids)s)
+              AND UPPER(TRIM(COALESCE(a.activo, ''))) IN ('SI', 'S', '1', 'TRUE', 'ACTIVO')
+              AND UPPER(TRIM(COALESCE(NULLIF(a.anulado, ''), 'NO'))) IN ('NO', 'N', '0', 'FALSE')
+              AND COALESCE(NULLIF(TRIM(a.{active_col}), ''), NULLIF(TRIM(a.activo), ''), '') <> ''
+            ORDER BY a.id_articulo
+            """,
+            {"ids": sorted(_SATURDAY_FIXED_ARTICLE_IDS)},
+        )
+        raw_rows = [dict(r) for r in (cur.fetchall() or [])]
+
+    rows = []
+    for idx, row in enumerate(raw_rows, start=1):
+        item = {
+            "rank": idx,
+            "id_articulo": row.get("id_articulo"),
+            "descripcion": row.get("descripcion") or "",
+            "negocio": row.get("negocio") or "",
+            "tipo_producto": row.get("tipo_producto") or "",
+            "stock_si": "SI" if str(row.get("stock_si") or "").strip() else "",
+            "activo": "SI",
+            "movil": row.get("movil") or "SI",
+            "anulado": row.get("anulado") or "NO",
+            "bultos_por_pallet": row.get("bultos_por_pallet"),
+            "bultos_por_piso": row.get("bultos_por_piso"),
+            "pisos": row.get("pisos"),
+            "apilabilidad": round(float(row.get("apilabilidad") or 0), 2),
+            "unidades_por_bulto": round(float(row.get("unidades_por_bulto") or 0), 2),
+            "bultos": 0,
+            "peso_pct": 0,
+            "acumulado_pct": 0,
+            "abc": "ACT",
+            "abc_maestro": "",
+            "participa": "SI",
+            "status": "OK",
+            "semana1": "SEMANA1",
+            "semana2": "SEMANA2",
+            "semana3": "SEMANA3",
+            "semana4": "SEMANA4",
+            "dia_semana1": "Sabado",
+            "dia_semana2": "Sabado",
+            "dia_semana3": "Sabado",
+            "dia_semana4": "Sabado",
+        }
+        _complete_logistics(item)
+        rows.append(item)
+    return rows
 
 
 def _logistic_number(value) -> float:
@@ -646,8 +773,10 @@ def get_planilla(
     }
 
     rows = []
+    seen_ids = set()
     for row in data["rows"]:
-        if semana_key != "todas" and not row.get(semana_key):
+        is_saturday_fixed = dia_key == "sabado" and int(row.get("id_articulo") or 0) in _SATURDAY_FIXED_ARTICLE_IDS
+        if semana_key != "todas" and not row.get(semana_key) and not is_saturday_fixed:
             continue
         if dia_key != "todos":
             if semana_key == "todas":
@@ -662,7 +791,18 @@ def get_planilla(
                 continue
         if abc_key != "TODOS" and row.get("abc") != abc_key:
             continue
-        rows.append(_prepare_planilla_row(row, semana_key))
+        if is_saturday_fixed:
+            rows.append(_prepare_saturday_planilla_row(row, semana_key))
+        else:
+            rows.append(_prepare_planilla_row(row, semana_key))
+        seen_ids.add(int(row.get("id_articulo") or 0))
+    if dia_key == "sabado" and abc_key in {"TODOS", "ACT"}:
+        for row in _get_saturday_fixed_rows(data["sucursal"]):
+            article_id = int(row.get("id_articulo") or 0)
+            if article_id in seen_ids:
+                continue
+            rows.append(_prepare_saturday_planilla_row(row, semana_key))
+            seen_ids.add(article_id)
     data["rows"] = rows
     data["total_filtrado"] = len(rows)
     incompletos = sum(1 for row in rows if row.get("logistica_incompleta"))
@@ -714,7 +854,7 @@ def generar_control_externo(mes: str | None = None, sucursal: str | None = "1", 
 def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dict:
     data = get_abc_articulos(mes, sucursal=sucursal)
     semanas = ("semana1", "semana2", "semana3", "semana4")
-    dias = ("Lunes", "Martes", "Miercoles", "Jueves", "Viernes")
+    dias = ("Lunes", "Martes", "Miercoles", "Jueves", "Viernes", "Sabado")
 
     abc_counts = {"A": 0, "B": 0, "C": 0}
     control_events = {"A": 0, "B": 0, "C": 0}
@@ -723,6 +863,8 @@ def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dic
         for semana in semanas
     }
     mix_semana = {}
+    saturday_fixed_count = len(_get_saturday_fixed_rows(data["sucursal"]))
+    fixed_extra_events = 0
 
     for semana in semanas:
         abc_set = set()
@@ -733,6 +875,17 @@ def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dic
                 if day in por_semana_dia[semana.upper()]:
                     por_semana_dia[semana.upper()][day] += 1
                 control_events[row["abc"]] += 1
+            if int(row.get("id_articulo") or 0) in _SATURDAY_FIXED_ARTICLE_IDS:
+                por_semana_dia[semana.upper()]["Sabado"] += 1
+                control_events[row["abc"]] += 1
+        already_counted_fixed = sum(
+            1
+            for row in data["rows"]
+            if int(row.get("id_articulo") or 0) in _SATURDAY_FIXED_ARTICLE_IDS
+        )
+        extra_fixed = max(0, saturday_fixed_count - already_counted_fixed)
+        por_semana_dia[semana.upper()]["Sabado"] += extra_fixed
+        fixed_extra_events += extra_fixed
         mix_semana[semana.upper()] = "-".join(x for x in ("A", "B", "C") if x in abc_set)
 
     for row in data["rows"]:
@@ -740,7 +893,7 @@ def get_planificacion(mes: str | None = None, sucursal: str | None = "1") -> dic
             abc_counts[row["abc"]] += 1
 
     total_articulos = len(data["rows"])
-    total_controles = sum(control_events.values())
+    total_controles = sum(control_events.values()) + fixed_extra_events
     return {
         "ok": True,
         "mes": data["mes"],
@@ -806,7 +959,7 @@ def get_pendientes_dias(mes: str | None = None, hasta: str | None = None) -> dic
     cursor = inicio_control
     fechas: list[date] = []
     while cursor <= fin_control:
-        if cursor.weekday() < 5:
+        if cursor.weekday() < 6:
             fechas.append(cursor)
         cursor += timedelta(days=1)
 
@@ -968,6 +1121,318 @@ def validar_dispersion_conteo(payload: dict) -> dict:
         "total_items": len(rows),
         "total_alertas_dispersion": len(alertas),
         "alertas_dispersion": alertas,
+    }
+
+
+def _float_or_none(value):
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: str | None = "1") -> dict:
+    ensure_control_stock_tables()
+    frescura_svc._ensure_tables()
+    suc = _sucursal_id(sucursal)
+    try:
+        control_date = date.fromisoformat(str(fecha_control or date.today().isoformat())[:10])
+    except ValueError as exc:
+        raise ValueError("fecha debe tener formato YYYY-MM-DD") from exc
+
+    status = get_frescura_status(control_date.isoformat())
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT
+                fa.codigo_articulo,
+                COALESCE(NULLIF(TRIM(fa.descripcion_articulo), ''), MAX(a.descripcion), '') AS descripcion_articulo,
+                fa.lote,
+                fa.fecha_vencimiento,
+                fa.dias_frescura_restantes,
+                COALESCE(fa.estado_frescura, 'SIN_FECHA') AS estado_frescura,
+                COALESCE(fa.stock_bultos, fa.stock_actual, 0) AS stock_sistema_bultos,
+                COALESCE(fa.stock_unidades, 0) AS stock_sistema_unidades,
+                fa.fecha_actualizacion
+            FROM frescura_articulos fa
+            JOIN articulos a
+              ON a.id_articulo::text = fa.codigo_articulo
+            WHERE fa.sucursal_id = %(sucursal)s
+              AND (
+                    COALESCE(fa.stock_bultos, 0) <> 0
+                 OR COALESCE(fa.stock_unidades, 0) <> 0
+                 OR COALESCE(fa.stock_actual, 0) <> 0
+              )
+              AND UPPER(TRIM(COALESCE(a.tipo_producto, ''))) = 'MERCADERIA'
+            GROUP BY fa.codigo_articulo, fa.descripcion_articulo, fa.lote, fa.fecha_vencimiento,
+                     fa.dias_frescura_restantes, fa.estado_frescura, fa.stock_bultos,
+                     fa.stock_unidades, fa.stock_actual, fa.fecha_actualizacion
+            ORDER BY CASE WHEN fa.codigo_articulo ~ '^[0-9]+$' THEN fa.codigo_articulo::int END NULLS LAST,
+                     fa.codigo_articulo, fa.fecha_vencimiento NULLS LAST, fa.lote
+            """,
+            {"sucursal": suc},
+        )
+        raw_rows = [dict(r) for r in (cur.fetchall() or [])]
+
+    rows = []
+    for row in raw_rows:
+        bultos = _float_or_none(row.get("stock_sistema_bultos")) or 0.0
+        unidades = _float_or_none(row.get("stock_sistema_unidades")) or 0.0
+        rows.append({
+            "codigo_articulo": str(row.get("codigo_articulo") or ""),
+            "descripcion_articulo": row.get("descripcion_articulo") or "",
+            "lote": row.get("lote") or "",
+            "fecha_vencimiento": row.get("fecha_vencimiento").isoformat() if row.get("fecha_vencimiento") else "",
+            "fecha_vencimiento_sistema": row.get("fecha_vencimiento").isoformat() if row.get("fecha_vencimiento") else "",
+            "dias_frescura_restantes": int(row.get("dias_frescura_restantes") or 0) if row.get("dias_frescura_restantes") is not None else None,
+            "estado_frescura": row.get("estado_frescura") or "SIN_FECHA",
+            "stock_sistema_bultos": round(bultos, 2),
+            "stock_sistema_unidades": round(unidades, 2),
+            "fecha_actualizacion": row.get("fecha_actualizacion").isoformat() if row.get("fecha_actualizacion") else "",
+        })
+
+    return {
+        "ok": True,
+        "fecha": control_date.isoformat(),
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "dia": _dia_desde_fecha(control_date),
+        "es_miercoles": control_date.weekday() == 2,
+        "total_lotes": len(rows),
+        "total_articulos": len({row["codigo_articulo"] for row in rows}),
+        "total_bultos": round(sum(row["stock_sistema_bultos"] for row in rows), 2),
+        "total_unidades": round(sum(row["stock_sistema_unidades"] for row in rows), 2),
+        "frescura_status": status,
+        "rows": rows,
+    }
+
+
+def guardar_control_frescura(payload: dict, responsable_default: str = "") -> dict:
+    ensure_control_stock_tables()
+    suc = _sucursal_id(payload.get("sucursal"))
+    fecha = str(payload.get("fecha") or date.today().isoformat())[:10]
+    responsable = str(payload.get("responsable") or responsable_default or "").strip()
+    if not responsable:
+        raise ValueError("responsable es obligatorio")
+    items = payload.get("items") or []
+    if not isinstance(items, list):
+        raise ValueError("items debe ser una lista")
+    try:
+        control_date = date.fromisoformat(fecha)
+    except ValueError as exc:
+        raise ValueError("fecha debe tener formato YYYY-MM-DD") from exc
+    if control_date.weekday() != 2:
+        raise ValueError("El control de frescura se realiza los miercoles")
+
+    rows = []
+    for item in items:
+        codigo = str(item.get("codigo_articulo") or "").strip()
+        lote = str(item.get("lote") or "").strip()
+        if not codigo or not lote:
+            continue
+        sistema_bultos = _float_or_none(item.get("stock_sistema_bultos")) or 0.0
+        sistema_unidades = _float_or_none(item.get("stock_sistema_unidades")) or 0.0
+        contado_bultos = _float_or_none(item.get("stock_contado_bultos"))
+        contado_unidades = _float_or_none(item.get("stock_contado_unidades"))
+        if contado_bultos is None and contado_unidades is None:
+            continue
+        contado_bultos = contado_bultos or 0.0
+        contado_unidades = contado_unidades or 0.0
+        diferencia = abs(contado_bultos - sistema_bultos) > 0.001 or abs(contado_unidades - sistema_unidades) > 0.001
+        fecha_vencimiento = item.get("fecha_vencimiento") or None
+        fecha_vencimiento_sistema = item.get("fecha_vencimiento_sistema") or None
+        if not fecha_vencimiento:
+            raise ValueError(f"Cargar fecha de vencimiento para articulo {codigo}, lote {lote}")
+        parsed_vto = None
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+            try:
+                parsed_vto = datetime.strptime(str(fecha_vencimiento)[:10], fmt).date()
+                break
+            except ValueError:
+                pass
+        if parsed_vto is None:
+            raise ValueError(f"Fecha de vencimiento invalida para articulo {codigo}, lote {lote}")
+        fecha_vencimiento = parsed_vto.isoformat()
+        parsed_vto_sistema = None
+        if fecha_vencimiento_sistema:
+            for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y"):
+                try:
+                    parsed_vto_sistema = datetime.strptime(str(fecha_vencimiento_sistema)[:10], fmt).date()
+                    break
+                except ValueError:
+                    pass
+        diferencia_fecha = parsed_vto_sistema is None or parsed_vto_sistema != parsed_vto
+        dias_frescura = (parsed_vto - control_date).days
+        estado_frescura = (
+            "CRITICO" if dias_frescura < 30
+            else "ALERTA" if dias_frescura <= 60
+            else "OK"
+        )
+        rows.append((
+            codigo,
+            str(item.get("descripcion_articulo") or ""),
+            lote,
+            fecha_vencimiento,
+            parsed_vto_sistema.isoformat() if parsed_vto_sistema else None,
+            fecha_vencimiento,
+            dias_frescura,
+            estado_frescura,
+            sistema_bultos,
+            sistema_unidades,
+            contado_bultos,
+            contado_unidades,
+            diferencia,
+            diferencia_fecha,
+            str(item.get("observacion") or ""),
+        ))
+    if not rows:
+        raise ValueError("No hay lotes cargados para guardar")
+
+    with pg_conn() as conn:
+        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            cur.execute(
+                """SELECT id
+                   FROM control_frescura_conteos
+                   WHERE sucursal = %(sucursal)s
+                     AND fecha = %(fecha)s
+                     AND responsable = %(responsable)s
+                   LIMIT 1""",
+                {"sucursal": suc, "fecha": fecha, "responsable": responsable},
+            )
+            if cur.fetchone():
+                raise ValueError("Ya existe un control de frescura para esta sucursal, fecha y responsable")
+            cur.execute(
+                """INSERT INTO control_frescura_conteos(sucursal, fecha, responsable, observaciones)
+                   VALUES (%(sucursal)s, %(fecha)s, %(responsable)s, %(observaciones)s)
+                   RETURNING id, sucursal, fecha, responsable, observaciones, estado, created_at""",
+                {
+                    "sucursal": suc,
+                    "fecha": fecha,
+                    "responsable": responsable,
+                    "observaciones": str(payload.get("observaciones") or ""),
+                },
+            )
+            saved = dict(cur.fetchone() or {})
+            psycopg2.extras.execute_values(
+                cur,
+                """INSERT INTO control_frescura_conteo_items(
+                       conteo_id, codigo_articulo, descripcion_articulo, lote, fecha_vencimiento,
+                       fecha_vencimiento_sistema, fecha_vencimiento_controlada,
+                       dias_frescura_restantes, estado_frescura, stock_sistema_bultos,
+                       stock_sistema_unidades, stock_contado_bultos, stock_contado_unidades,
+                       diferencia, diferencia_fecha, observacion
+                   ) VALUES %s""",
+                [(saved["id"], *row) for row in rows],
+            )
+
+    saved["items_guardados"] = len(rows)
+    saved["lotes_con_diferencia"] = sum(1 for row in rows if row[12] or row[13])
+    saved["lotes_con_diferencia_stock"] = sum(1 for row in rows if row[12])
+    saved["lotes_con_diferencia_fecha"] = sum(1 for row in rows if row[13])
+    return saved
+
+
+def get_control_frescura_diferencias(
+    sucursal: str | None = "1",
+    desde: str | None = None,
+    hasta: str | None = None,
+    responsable: str | None = "",
+) -> dict:
+    ensure_control_stock_tables()
+    suc = _sucursal_id(sucursal)
+    today_value = date.today()
+    desde_value = desde or today_value.replace(day=1).isoformat()
+    hasta_value = hasta or today_value.isoformat()
+    try:
+        date.fromisoformat(str(desde_value)[:10])
+        date.fromisoformat(str(hasta_value)[:10])
+    except ValueError as exc:
+        raise ValueError("desde y hasta deben tener formato YYYY-MM-DD") from exc
+
+    params = {
+        "sucursal": suc,
+        "desde": str(desde_value)[:10],
+        "hasta": str(hasta_value)[:10],
+        "responsable": str(responsable or "").strip(),
+    }
+    responsable_filter = ""
+    if params["responsable"]:
+        responsable_filter = "AND c.responsable = %(responsable)s"
+
+    with pg_cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT
+                c.id AS conteo_id,
+                c.sucursal,
+                c.fecha,
+                c.responsable,
+                c.observaciones AS observaciones_control,
+                i.codigo_articulo,
+                i.descripcion_articulo,
+                i.lote,
+                i.fecha_vencimiento_sistema,
+                COALESCE(i.fecha_vencimiento_controlada, i.fecha_vencimiento) AS fecha_vencimiento_controlada,
+                i.dias_frescura_restantes,
+                i.estado_frescura,
+                COALESCE(i.stock_sistema_bultos, 0) AS stock_sistema_bultos,
+                COALESCE(i.stock_sistema_unidades, 0) AS stock_sistema_unidades,
+                COALESCE(i.stock_contado_bultos, 0) AS stock_contado_bultos,
+                COALESCE(i.stock_contado_unidades, 0) AS stock_contado_unidades,
+                COALESCE(i.diferencia, FALSE) AS diferencia_stock,
+                COALESCE(i.diferencia_fecha, FALSE) AS diferencia_fecha,
+                i.observacion
+            FROM control_frescura_conteos c
+            JOIN control_frescura_conteo_items i ON i.conteo_id = c.id
+            WHERE c.sucursal = %(sucursal)s
+              AND c.fecha BETWEEN %(desde)s AND %(hasta)s
+              {responsable_filter}
+              AND (COALESCE(i.diferencia, FALSE) OR COALESCE(i.diferencia_fecha, FALSE))
+            ORDER BY c.fecha DESC, c.id DESC,
+                     CASE WHEN i.codigo_articulo ~ '^[0-9]+$' THEN i.codigo_articulo::int END NULLS LAST,
+                     i.codigo_articulo, i.lote
+            """,
+            params,
+        )
+        raw_rows = [dict(r) for r in (cur.fetchall() or [])]
+
+    rows = []
+    for row in raw_rows:
+        rows.append({
+            "conteo_id": int(row.get("conteo_id") or 0),
+            "sucursal": str(row.get("sucursal") or ""),
+            "sucursal_nombre": _sucursal_nombre(str(row.get("sucursal") or "")),
+            "fecha": row.get("fecha").isoformat() if row.get("fecha") else "",
+            "responsable": row.get("responsable") or "",
+            "codigo_articulo": row.get("codigo_articulo") or "",
+            "descripcion_articulo": row.get("descripcion_articulo") or "",
+            "lote": row.get("lote") or "",
+            "fecha_vencimiento_sistema": row.get("fecha_vencimiento_sistema").isoformat() if row.get("fecha_vencimiento_sistema") else "",
+            "fecha_vencimiento_controlada": row.get("fecha_vencimiento_controlada").isoformat() if row.get("fecha_vencimiento_controlada") else "",
+            "dias_frescura_restantes": int(row.get("dias_frescura_restantes") or 0) if row.get("dias_frescura_restantes") is not None else None,
+            "estado_frescura": row.get("estado_frescura") or "",
+            "stock_sistema_bultos": round(float(row.get("stock_sistema_bultos") or 0), 2),
+            "stock_sistema_unidades": round(float(row.get("stock_sistema_unidades") or 0), 2),
+            "stock_contado_bultos": round(float(row.get("stock_contado_bultos") or 0), 2),
+            "stock_contado_unidades": round(float(row.get("stock_contado_unidades") or 0), 2),
+            "diferencia_stock": bool(row.get("diferencia_stock")),
+            "diferencia_fecha": bool(row.get("diferencia_fecha")),
+            "observacion": row.get("observacion") or "",
+            "observaciones_control": row.get("observaciones_control") or "",
+        })
+
+    return {
+        "ok": True,
+        "sucursal": suc,
+        "sucursal_nombre": _sucursal_nombre(suc),
+        "desde": params["desde"],
+        "hasta": params["hasta"],
+        "total_diferencias": len(rows),
+        "diferencias_stock": sum(1 for row in rows if row["diferencia_stock"]),
+        "diferencias_fecha": sum(1 for row in rows if row["diferencia_fecha"]),
+        "rows": rows,
     }
 
 
