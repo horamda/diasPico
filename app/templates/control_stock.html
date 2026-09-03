@@ -1131,6 +1131,36 @@
       .theme-toggle{width:44px!important;min-width:44px!important;padding:0!important}
       .theme-toggle span:last-child{display:none!important}
     }
+    #frescuraControlCards{display:none}
+    .frescura-mobile-card{display:none}
+    .frescura-mobile-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+    .frescura-mobile-code{font-size:18px;font-weight:900;color:var(--cs-text)}
+    .frescura-mobile-lote{font-size:12px;font-weight:850;color:var(--cs-muted);background:var(--cs-elev);border-radius:999px;padding:5px 9px;white-space:nowrap}
+    .frescura-mobile-desc{margin:9px 0 10px;font-size:15px;font-weight:650;line-height:1.3;color:var(--cs-text)}
+    .frescura-mobile-system{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--cs-line-soft);border-radius:6px;overflow:hidden;margin-bottom:12px}
+    .frescura-mobile-system span{min-width:0;padding:8px;border-right:1px solid var(--cs-line-soft);background:var(--cs-elev);font-size:11px;color:var(--cs-muted)}
+    .frescura-mobile-system span:last-child{border-right:0}
+    .frescura-mobile-system strong{display:block;margin-top:3px;font-size:15px;color:var(--cs-text)}
+    .frescura-mobile-inputs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+    .frescura-mobile-inputs .field{border:0!important;padding:0!important}
+    .frescura-mobile-inputs .field.full{grid-column:1/-1}
+    .frescura-mobile-inputs .stock-input,.frescura-mobile-inputs .obs-input{width:100%!important;height:48px!important;text-align:left}
+    .frescura-mobile-inputs input[type=number]{text-align:center!important;font-size:18px!important;font-weight:800}
+    .frescura-mobile-diff{margin-top:10px;justify-content:center}
+    @media(max-width:1280px){
+      #viewFrescura>.table-wrap{display:none!important}
+      #viewFrescura>.table-wrap:last-of-type{display:block!important;max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
+      #frescuraControlCards{display:block;padding-bottom:8px}
+      #frescuraControlCards .frescura-mobile-card{display:block;margin:0 0 12px;padding:16px;border:1px solid var(--cs-line);border-radius:8px;background:var(--cs-surface);box-shadow:var(--cs-shadow-soft)}
+      #viewFrescura .save-footer{position:static!important;display:flex!important;flex-direction:row!important;align-items:center;margin:12px 0 20px!important;padding:12px!important;border-radius:8px!important}
+    }
+    @media(max-width:700px){
+      .frescura-mobile-system{grid-template-columns:repeat(2,minmax(0,1fr))}
+      .frescura-mobile-system span:nth-child(2){border-right:0}
+      .frescura-mobile-system span:nth-child(-n+2){border-bottom:1px solid var(--cs-line-soft)}
+      .frescura-mobile-inputs{grid-template-columns:1fr}
+      #viewFrescura .save-footer{flex-direction:column!important;align-items:stretch!important}
+    }
 </style>
 </head>
 <body>
@@ -1331,6 +1361,7 @@
         <tbody id="frescuraControlBody"></tbody>
       </table>
     </section>
+    <section id="frescuraControlCards"></section>
     <section class="save-footer ready">
       <div>
         <div class="save-title">Finalizar control de frescura</div>
@@ -2311,11 +2342,17 @@ function renderAbcMensual(){
   </article>`).join('');
   abcMensualStatus.textContent=`Mostrando ${rows.length} de ${abcMensualRows.length} artículos.`;
 }
+function frescuraInput(selector){
+  const scoped=isMobileConteo()
+    ? document.querySelector(`#frescuraControlCards ${selector}`)
+    : document.querySelector(`#frescuraControlBody ${selector}`);
+  return scoped || document.querySelector(selector);
+}
 function actualizarTotalesFrescura(){
   let cargados=0,diferencias=0,totalBultos=0,totalUnidades=0;
   frescuraRows.forEach((r,idx)=>{
-    const b=document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '';
-    const u=document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '';
+    const b=frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '';
+    const u=frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '';
     const cb=b===''?null:Number(b);
     const cu=u===''?null:Number(u);
     if(cb!==null||cu!==null) cargados+=1;
@@ -2323,8 +2360,9 @@ function actualizarTotalesFrescura(){
     totalBultos+=realB; totalUnidades+=realU;
     const diff=(cb!==null&&Math.abs(realB-Number(r.stock_sistema_bultos||0))>0.001)||(cu!==null&&Math.abs(realU-Number(r.stock_sistema_unidades||0))>0.001);
     if(diff) diferencias+=1;
-    const cell=document.querySelector(`[data-fr-diff="${idx}"]`);
-    if(cell) cell.innerHTML=diff?'<span class="status-chip pending">Diferencia</span>':'<span class="status-chip ok">OK</span>';
+    document.querySelectorAll(`[data-fr-diff="${idx}"]`).forEach(cell=>{
+      cell.innerHTML=diff?'<span class="status-chip pending">Diferencia</span>':'<span class="status-chip ok">OK</span>';
+    });
   });
   frescuraFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(frescuraRows.length)} lotes cargados · ${fmt.format(diferencias)} con diferencia · ${fmt.format(totalBultos)} bultos con ${fmt.format(totalUnidades)} unidades`;
   frescuraFooterSummary.dataset.loaded=String(cargados);
@@ -2336,24 +2374,47 @@ function estadoFrescuraDesdeDias(dias){
   return 'OK';
 }
 function fechaFrescuraLoteChanged(idx){
-  const input=document.querySelector(`[data-fr-vto="${idx}"]`);
-  const diasCell=document.querySelector(`[data-fr-dias="${idx}"]`);
-  const estadoCell=document.querySelector(`[data-fr-estado="${idx}"]`);
+  const input=frescuraInput(`[data-fr-vto="${idx}"]`);
+  const diasCells=document.querySelectorAll(`[data-fr-dias="${idx}"]`);
+  const estadoCells=document.querySelectorAll(`[data-fr-estado="${idx}"]`);
   const value=input?.value||'';
   frescuraRows[idx].fecha_vencimiento=value;
   if(!value){
     frescuraRows[idx].dias_frescura_restantes=null;
     frescuraRows[idx].estado_frescura='SIN_FECHA';
-    if(diasCell) diasCell.textContent='-';
-    if(estadoCell) estadoCell.textContent='SIN_FECHA';
+    diasCells.forEach(cell=>cell.textContent='-');
+    estadoCells.forEach(cell=>cell.textContent='SIN_FECHA');
     return;
   }
   const dias=Math.round((parseLocalDate(value)-parseLocalDate(fechaFrescura.value||today()))/86400000);
   const estado=estadoFrescuraDesdeDias(dias);
   frescuraRows[idx].dias_frescura_restantes=dias;
   frescuraRows[idx].estado_frescura=estado;
-  if(diasCell) diasCell.textContent=String(dias);
-  if(estadoCell) estadoCell.textContent=estado;
+  diasCells.forEach(cell=>cell.textContent=String(dias));
+  estadoCells.forEach(cell=>cell.textContent=estado);
+}
+function renderFrescuraMobileCards(){
+  if(!frescuraRows.length){frescuraControlCards.innerHTML='';return}
+  frescuraControlCards.innerHTML=frescuraRows.map((r,idx)=>`<article class="frescura-mobile-card">
+    <div class="frescura-mobile-head">
+      <span class="frescura-mobile-code">${esc(r.codigo_articulo)}</span>
+      <span class="frescura-mobile-lote">Lote ${esc(r.lote||'-')}</span>
+    </div>
+    <div class="frescura-mobile-desc">${esc(r.descripcion_articulo)}</div>
+    <div class="frescura-mobile-system">
+      <span>Dias<strong data-fr-dias="${idx}">${r.dias_frescura_restantes ?? '-'}</strong></span>
+      <span>Estado<strong data-fr-estado="${idx}">${esc(r.estado_frescura)}</strong></span>
+      <span>Sist. bultos<strong>${fmt.format(r.stock_sistema_bultos||0)}</strong></span>
+      <span>Sist. unidades<strong>${fmt.format(r.stock_sistema_unidades||0)}</strong></span>
+    </div>
+    <div class="frescura-mobile-inputs">
+      <div class="field"><label>Vencimiento</label><input class="stock-input ${r.fecha_vencimiento?'':'logistic-missing'}" type="date" value="${esc(r.fecha_vencimiento||'')}" data-fr-vto="${idx}" onchange="fechaFrescuraLoteChanged(${idx})"></div>
+      <div class="field"><label>Bultos</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></div>
+      <div class="field"><label>Unidades</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></div>
+      <div class="field full"><label>Observacion</label><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional"></div>
+    </div>
+    <div class="frescura-mobile-diff" data-fr-diff="${idx}">-</div>
+  </article>`).join('');
 }
 async function loadControlFrescura(){
   frescuraControlStatus.textContent='Consultando Frescura y cargando lotes...';
@@ -2384,6 +2445,7 @@ async function loadControlFrescura(){
     <td data-fr-diff="${idx}">-</td>
     <td><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional"></td>
   </tr>`).join('');
+  renderFrescuraMobileCards();
   frescuraLoaded=true;
   actualizarTotalesFrescura();
   loadDiferenciasFrescura();
@@ -2430,9 +2492,9 @@ async function guardarControlFrescura(){
   const loaded=Number(frescuraFooterSummary?.dataset?.loaded||0);
   if(!loaded){await modalAlert('Carga al menos un lote antes de guardar.');return}
   const sinFecha=frescuraRows.filter((r,idx)=>{
-    const b=document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '';
-    const u=document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '';
-    const vto=document.querySelector(`[data-fr-vto="${idx}"]`)?.value ?? '';
+    const b=frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '';
+    const u=frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '';
+    const vto=frescuraInput(`[data-fr-vto="${idx}"]`)?.value ?? '';
     return (b!==''||u!=='')&&!vto;
   });
   if(sinFecha.length){
@@ -2445,10 +2507,10 @@ async function guardarControlFrescura(){
   const items=frescuraRows.map((r,idx)=>({
     ...r,
     fecha_vencimiento_sistema:r.fecha_vencimiento_sistema||'',
-    fecha_vencimiento:document.querySelector(`[data-fr-vto="${idx}"]`)?.value ?? r.fecha_vencimiento,
-    stock_contado_bultos:document.querySelector(`[data-fr-b="${idx}"]`)?.value ?? '',
-    stock_contado_unidades:document.querySelector(`[data-fr-u="${idx}"]`)?.value ?? '',
-    observacion:document.querySelector(`[data-fr-obs="${idx}"]`)?.value ?? '',
+    fecha_vencimiento:frescuraInput(`[data-fr-vto="${idx}"]`)?.value ?? r.fecha_vencimiento,
+    stock_contado_bultos:frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '',
+    stock_contado_unidades:frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '',
+    observacion:frescuraInput(`[data-fr-obs="${idx}"]`)?.value ?? '',
   }));
   try{
     const res=await fetch('/api/control-stock/frescura-conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
@@ -2600,6 +2662,7 @@ function isMobileConteo(){return conteoCompactQuery.matches}
 function refreshResponsiveStockViews(){
   if(currentRows.length) renderMobileCards();
   if(externalRows.length) renderControlExterno();
+  if(frescuraRows.length) renderFrescuraMobileCards();
   if(resumenArticuloRows.length) renderResumenArticuloCards();
 }
 if(conteoCompactQuery.addEventListener) conteoCompactQuery.addEventListener('change',refreshResponsiveStockViews);
