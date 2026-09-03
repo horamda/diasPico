@@ -1133,6 +1133,16 @@ def _float_or_none(value):
         return None
 
 
+def _calibre_label(ml: int | None) -> str:
+    if not ml or ml <= 0:
+        return "Sin calibre"
+    if ml < 1000:
+        return f"{ml} ml"
+    if ml % 1000 == 0:
+        return f"{ml // 1000} L"
+    return f"{ml / 1000:.3g} L"
+
+
 def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: str | None = "1") -> dict:
     ensure_control_stock_tables()
     frescura_svc._ensure_tables()
@@ -1155,6 +1165,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
                 COALESCE(fa.estado_frescura, 'SIN_FECHA') AS estado_frescura,
                 COALESCE(fa.stock_bultos, fa.stock_actual, 0) AS stock_sistema_bultos,
                 COALESCE(fa.stock_unidades, 0) AS stock_sistema_unidades,
+                ROUND(MAX(a.valor_unidad_medida) * 100000 / NULLIF(MAX(a.unidades_por_bulto), 0)) AS calibre_ml,
                 fa.fecha_actualizacion
             FROM frescura_articulos fa
             JOIN articulos a
@@ -1169,7 +1180,9 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
             GROUP BY fa.codigo_articulo, fa.descripcion_articulo, fa.lote, fa.fecha_vencimiento,
                      fa.dias_frescura_restantes, fa.estado_frescura, fa.stock_bultos,
                      fa.stock_unidades, fa.stock_actual, fa.fecha_actualizacion
-            ORDER BY CASE WHEN fa.codigo_articulo ~ '^[0-9]+$' THEN fa.codigo_articulo::int END NULLS LAST,
+            ORDER BY calibre_ml NULLS LAST,
+                     COALESCE(NULLIF(TRIM(fa.descripcion_articulo), ''), MAX(a.descripcion), ''),
+                     CASE WHEN fa.codigo_articulo ~ '^[0-9]+$' THEN fa.codigo_articulo::int END NULLS LAST,
                      fa.codigo_articulo, fa.fecha_vencimiento NULLS LAST, fa.lote
             """,
             {"sucursal": suc},
@@ -1180,9 +1193,12 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
     for row in raw_rows:
         bultos = _float_or_none(row.get("stock_sistema_bultos")) or 0.0
         unidades = _float_or_none(row.get("stock_sistema_unidades")) or 0.0
+        calibre_ml = int(row.get("calibre_ml") or 0)
         rows.append({
             "codigo_articulo": str(row.get("codigo_articulo") or ""),
             "descripcion_articulo": row.get("descripcion_articulo") or "",
+            "calibre_ml": calibre_ml,
+            "calibre_label": _calibre_label(calibre_ml),
             "lote": row.get("lote") or "",
             "fecha_vencimiento": row.get("fecha_vencimiento").isoformat() if row.get("fecha_vencimiento") else "",
             "fecha_vencimiento_sistema": row.get("fecha_vencimiento").isoformat() if row.get("fecha_vencimiento") else "",

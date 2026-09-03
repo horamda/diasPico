@@ -22,3 +22,10 @@ def test_control_frescura_mobile_usa_inputs_visibles_para_guardar():
     assert 'document.querySelector(`#frescuraControlBody ${selector}`)' in html
     assert "const b=frescuraInput(`[data-fr-b=\"${idx}\"]`)?.value ?? '';" in html
     assert "stock_contado_bultos:frescuraInput(`[data-fr-b=\"${idx}\"]`)?.value ?? ''," in html
+
+
+def test_control_frescura_muestra_calibre_en_tabla_y_mobile():
+    html = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "<th>Calibre</th><th>Articulo</th>" in html
+    assert "${esc(r.calibre_label||'Sin calibre')} · ${esc(r.codigo_articulo)}" in html

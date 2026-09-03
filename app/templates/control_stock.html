@@ -1357,7 +1357,7 @@
     <div class="status" id="frescuraControlStatus" role="status" aria-live="polite">Actualizá los lotes para comenzar.</div>
     <section class="table-wrap" style="max-height:none">
       <table>
-        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Lote</th><th>Vencimiento</th><th>Dias</th><th>Estado</th><th>Sist. bultos</th><th>Sist. unidades</th><th>Cont. bultos</th><th>Cont. unidades</th><th>Diferencia</th><th>Observacion</th></tr></thead>
+        <thead><tr><th>Calibre</th><th>Articulo</th><th>Descripcion</th><th>Lote</th><th>Vencimiento</th><th>Dias</th><th>Estado</th><th>Sist. bultos</th><th>Sist. unidades</th><th>Cont. bultos</th><th>Cont. unidades</th><th>Diferencia</th><th>Observacion</th></tr></thead>
         <tbody id="frescuraControlBody"></tbody>
       </table>
     </section>
@@ -2397,7 +2397,7 @@ function renderFrescuraMobileCards(){
   if(!frescuraRows.length){frescuraControlCards.innerHTML='';return}
   frescuraControlCards.innerHTML=frescuraRows.map((r,idx)=>`<article class="frescura-mobile-card">
     <div class="frescura-mobile-head">
-      <span class="frescura-mobile-code">${esc(r.codigo_articulo)}</span>
+      <span class="frescura-mobile-code">${esc(r.calibre_label||'Sin calibre')} · ${esc(r.codigo_articulo)}</span>
       <span class="frescura-mobile-lote">Lote ${esc(r.lote||'-')}</span>
     </div>
     <div class="frescura-mobile-desc">${esc(r.descripcion_articulo)}</div>
@@ -2432,6 +2432,7 @@ async function loadControlFrescura(){
     ? `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar.`
     : `La fecha seleccionada es ${data.dia}. El guardado del control de frescura solo se permite los miercoles.`;
   frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>`<tr>
+    <td>${esc(r.calibre_label||'Sin calibre')}</td>
     <td class="num">${esc(r.codigo_articulo)}</td>
     <td>${esc(r.descripcion_articulo)}</td>
     <td>${esc(r.lote)}</td>
