@@ -1147,14 +1147,25 @@
     .frescura-mobile-inputs .stock-input,.frescura-mobile-inputs .obs-input{width:100%!important;height:48px!important;text-align:left}
     .frescura-mobile-inputs input[type=number]{text-align:center!important;font-size:18px!important;font-weight:800}
     .frescura-mobile-diff{margin-top:10px;justify-content:center}
+    .frescura-mobile-toolbar{display:none}
+    .frescura-calibre-title{display:none}
+    .frescura-calibre-row td{position:static!important;background:var(--cs-elev)!important;color:var(--cs-text)!important;font-weight:900;text-align:left;border-color:var(--cs-line)!important}
     @media(max-width:1280px){
       #viewFrescura>.table-wrap{display:none!important}
       #viewFrescura>.table-wrap:last-of-type{display:block!important;max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
-      #frescuraControlCards{display:block;padding-bottom:8px}
-      #frescuraControlCards .frescura-mobile-card{display:block;margin:0 0 12px;padding:16px;border:1px solid var(--cs-line);border-radius:8px;background:var(--cs-surface);box-shadow:var(--cs-shadow-soft)}
+      .frescura-mobile-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:66px;z-index:8;margin:10px 0;padding:10px 12px;border:1px solid var(--cs-line);border-radius:8px;background:var(--cs-surface);box-shadow:var(--cs-shadow-soft)}
+      .frescura-mobile-toolbar strong{display:block;font-size:14px;color:var(--cs-text)}
+      .frescura-mobile-toolbar span{display:block;margin-top:2px;font-size:12px;color:var(--cs-muted)}
+      .frescura-mobile-toolbar .pill{flex:0 0 auto;margin:0}
+      #frescuraControlCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding-bottom:8px}
+      #frescuraControlCards .frescura-calibre-title{display:flex;grid-column:1/-1;align-items:center;gap:10px;margin:8px 0 0;color:var(--cs-text);font-size:14px;font-weight:900}
+      #frescuraControlCards .frescura-calibre-title::after{content:"";height:1px;flex:1;background:var(--cs-line)}
+      #frescuraControlCards .frescura-mobile-card{display:block;min-width:0;margin:0;padding:16px;border:1px solid var(--cs-line);border-radius:8px;background:var(--cs-surface);box-shadow:var(--cs-shadow-soft)}
       #viewFrescura .save-footer{position:static!important;display:flex!important;flex-direction:row!important;align-items:center;margin:12px 0 20px!important;padding:12px!important;border-radius:8px!important}
     }
     @media(max-width:700px){
+      .frescura-mobile-toolbar{top:62px}
+      #frescuraControlCards{grid-template-columns:1fr}
       .frescura-mobile-system{grid-template-columns:repeat(2,minmax(0,1fr))}
       .frescura-mobile-system span:nth-child(2){border-right:0}
       .frescura-mobile-system span:nth-child(-n+2){border-bottom:1px solid var(--cs-line-soft)}
@@ -1355,9 +1366,13 @@
     </section>
     <div class="time-note">Control semanal de frescura: se realiza los miercoles. Se muestran todos los lotes de cada articulo con stock en Frescura.</div>
     <div class="status" id="frescuraControlStatus" role="status" aria-live="polite">Actualizá los lotes para comenzar.</div>
+    <section class="frescura-mobile-toolbar" aria-label="Progreso del control de frescura">
+      <div><strong>Artículos por calibre</strong><span>Revisá stock y vencimiento de cada lote</span></div>
+      <span class="pill" id="frescuraMobileProgress">0 de 0</span>
+    </section>
     <section class="table-wrap" style="max-height:none">
       <table>
-        <thead><tr><th>Calibre</th><th>Articulo</th><th>Descripcion</th><th>Lote</th><th>Vencimiento</th><th>Dias</th><th>Estado</th><th>Sist. bultos</th><th>Sist. unidades</th><th>Cont. bultos</th><th>Cont. unidades</th><th>Diferencia</th><th>Observacion</th></tr></thead>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>fecvtolote</th><th>Bultos</th><th>Unids</th><th>fecha OK / No OK</th><th>fecha real</th></tr></thead>
         <tbody id="frescuraControlBody"></tbody>
       </table>
     </section>
@@ -2348,6 +2363,22 @@ function frescuraInput(selector){
     : document.querySelector(`#frescuraControlBody ${selector}`);
   return scoped || document.querySelector(selector);
 }
+function frescuraFechaControlada(idx){
+  const row=frescuraRows[idx]||{};
+  const okValue=frescuraInput(`[data-fr-ok="${idx}"]`)?.value || 'OK';
+  const realValue=frescuraInput(`[data-fr-real="${idx}"]`)?.value || '';
+  if(okValue==='NO_OK') return realValue;
+  return row.fecha_vencimiento_sistema || row.fecha_vencimiento || '';
+}
+function actualizarCampoFrescura(idx,campo,valor,origen){
+  const row=frescuraRows[idx];
+  if(!row) return;
+  row[`_control_${campo}`]=valor;
+  document.querySelectorAll(`[data-fr-${campo}="${idx}"]`).forEach(el=>{
+    if(el!==origen) el.value=valor;
+  });
+  actualizarTotalesFrescura();
+}
 function actualizarTotalesFrescura(){
   let cargados=0,diferencias=0,totalBultos=0,totalUnidades=0;
   frescuraRows.forEach((r,idx)=>{
@@ -2366,6 +2397,8 @@ function actualizarTotalesFrescura(){
   });
   frescuraFooterSummary.textContent=`${fmt.format(cargados)} de ${fmt.format(frescuraRows.length)} lotes cargados · ${fmt.format(diferencias)} con diferencia · ${fmt.format(totalBultos)} bultos con ${fmt.format(totalUnidades)} unidades`;
   frescuraFooterSummary.dataset.loaded=String(cargados);
+  const mobileProgress=document.getElementById('frescuraMobileProgress');
+  if(mobileProgress) mobileProgress.textContent=`${fmt.format(cargados)} de ${fmt.format(frescuraRows.length)}`;
 }
 function estadoFrescuraDesdeDias(dias){
   if(dias===null||Number.isNaN(dias)) return 'SIN_FECHA';
@@ -2374,10 +2407,14 @@ function estadoFrescuraDesdeDias(dias){
   return 'OK';
 }
 function fechaFrescuraLoteChanged(idx){
-  const input=frescuraInput(`[data-fr-vto="${idx}"]`);
+  const okInput=frescuraInput(`[data-fr-ok="${idx}"]`);
+  const realInputs=document.querySelectorAll(`[data-fr-real="${idx}"]`);
   const diasCells=document.querySelectorAll(`[data-fr-dias="${idx}"]`);
   const estadoCells=document.querySelectorAll(`[data-fr-estado="${idx}"]`);
-  const value=input?.value||'';
+  const value=frescuraFechaControlada(idx);
+  const isDateOk=(okInput?.value||'OK')!=='NO_OK';
+  realInputs.forEach(el=>{el.disabled=isDateOk; if(isDateOk) el.value=''});
+  if(isDateOk) frescuraRows[idx]._control_real='';
   frescuraRows[idx].fecha_vencimiento=value;
   if(!value){
     frescuraRows[idx].dias_frescura_restantes=null;
@@ -2395,26 +2432,39 @@ function fechaFrescuraLoteChanged(idx){
 }
 function renderFrescuraMobileCards(){
   if(!frescuraRows.length){frescuraControlCards.innerHTML='';return}
-  frescuraControlCards.innerHTML=frescuraRows.map((r,idx)=>`<article class="frescura-mobile-card">
+  let lastCalibre='';
+  frescuraControlCards.innerHTML=frescuraRows.map((r,idx)=>{
+    const calibre=String(r.calibre_label||'Sin calibre');
+    const startsGroup=calibre!==lastCalibre;
+    lastCalibre=calibre;
+    const bultos=r._control_b ?? r.stock_sistema_bultos ?? 0;
+    const unidades=r._control_u ?? r.stock_sistema_unidades ?? 0;
+    const fechaOk=r._control_ok || 'OK';
+    const fechaReal=r._control_real || '';
+    const observacion=r._control_obs || '';
+    const groupTitle=startsGroup?`<div class="frescura-calibre-title"><span>${esc(calibre)}</span></div>`:'';
+    return `${groupTitle}<article class="frescura-mobile-card">
     <div class="frescura-mobile-head">
-      <span class="frescura-mobile-code">${esc(r.calibre_label||'Sin calibre')} · ${esc(r.codigo_articulo)}</span>
+      <span class="frescura-mobile-code">${esc(r.codigo_articulo)}</span>
       <span class="frescura-mobile-lote">Lote ${esc(r.lote||'-')}</span>
     </div>
     <div class="frescura-mobile-desc">${esc(r.descripcion_articulo)}</div>
     <div class="frescura-mobile-system">
-      <span>Dias<strong data-fr-dias="${idx}">${r.dias_frescura_restantes ?? '-'}</strong></span>
+      <span>fecvtolote<strong>${esc(r.fecha_vencimiento?fechaCorta(r.fecha_vencimiento):'-')}</strong></span>
+      <span>Bultos<strong>${fmt.format(r.stock_sistema_bultos||0)}</strong></span>
+      <span>Unids<strong>${fmt.format(r.stock_sistema_unidades||0)}</strong></span>
       <span>Estado<strong data-fr-estado="${idx}">${esc(r.estado_frescura)}</strong></span>
-      <span>Sist. bultos<strong>${fmt.format(r.stock_sistema_bultos||0)}</strong></span>
-      <span>Sist. unidades<strong>${fmt.format(r.stock_sistema_unidades||0)}</strong></span>
     </div>
     <div class="frescura-mobile-inputs">
-      <div class="field"><label>Vencimiento</label><input class="stock-input ${r.fecha_vencimiento?'':'logistic-missing'}" type="date" value="${esc(r.fecha_vencimiento||'')}" data-fr-vto="${idx}" onchange="fechaFrescuraLoteChanged(${idx})"></div>
-      <div class="field"><label>Bultos</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></div>
-      <div class="field"><label>Unidades</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></div>
-      <div class="field full"><label>Observacion</label><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional"></div>
+      <div class="field"><label>Bultos</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(bultos)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></div>
+      <div class="field"><label>Unids</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(unidades)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></div>
+      <div class="field"><label>Fecha OK / No OK</label><select data-fr-ok="${idx}" onchange="actualizarCampoFrescura(${idx},'ok',this.value,this);fechaFrescuraLoteChanged(${idx})"><option value="OK" ${fechaOk==='OK'?'selected':''}>OK</option><option value="NO_OK" ${fechaOk==='NO_OK'?'selected':''}>No OK</option></select></div>
+      <div class="field"><label>Fecha real</label><input class="stock-input" type="date" value="${esc(fechaReal)}" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" ${fechaOk==='OK'?'disabled':''}></div>
+      <div class="field full"><label>Observacion</label><input class="obs-input" value="${esc(observacion)}" data-fr-obs="${idx}" placeholder="Opcional" oninput="actualizarCampoFrescura(${idx},'obs',this.value,this)"></div>
     </div>
-    <div class="frescura-mobile-diff" data-fr-diff="${idx}">-</div>
-  </article>`).join('');
+    <div class="frescura-mobile-diff" data-fr-diff="${idx}" aria-live="polite">-</div>
+  </article>`;
+  }).join('');
 }
 async function loadControlFrescura(){
   frescuraControlStatus.textContent='Consultando Frescura y cargando lotes...';
@@ -2431,21 +2481,25 @@ async function loadControlFrescura(){
   frescuraControlStatus.textContent=data.es_miercoles
     ? `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar.`
     : `La fecha seleccionada es ${data.dia}. El guardado del control de frescura solo se permite los miercoles.`;
-  frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>`<tr>
-    <td>${esc(r.calibre_label||'Sin calibre')}</td>
+  let lastCalibre='';
+  frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>{
+    const calibre=String(r.calibre_label||'Sin calibre');
+    const groupRow=calibre!==lastCalibre?`<tr class="frescura-calibre-row"><td colspan="7">${esc(calibre)}</td></tr>`:'';
+    lastCalibre=calibre;
+    return groupRow+`<tr>
     <td class="num">${esc(r.codigo_articulo)}</td>
     <td>${esc(r.descripcion_articulo)}</td>
-    <td>${esc(r.lote)}</td>
-    <td><input class="stock-input ${r.fecha_vencimiento?'':'logistic-missing'}" style="width:132px;text-align:left" type="date" value="${esc(r.fecha_vencimiento||'')}" data-fr-vto="${idx}" onchange="fechaFrescuraLoteChanged(${idx})" title="${r.fecha_vencimiento?'Fecha de vencimiento':'Cargar vencimiento del lote'}"></td>
-    <td class="num" data-fr-dias="${idx}">${r.dias_frescura_restantes ?? '-'}</td>
-    <td data-fr-estado="${idx}">${esc(r.estado_frescura)}</td>
-    <td class="num">${fmt.format(r.stock_sistema_bultos||0)}</td>
-    <td class="num">${fmt.format(r.stock_sistema_unidades||0)}</td>
-    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></td>
-    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesFrescura()"></td>
-    <td data-fr-diff="${idx}">-</td>
-    <td><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional"></td>
-  </tr>`).join('');
+    <td>${esc(r.fecha_vencimiento?fechaCorta(r.fecha_vencimiento):'-')}</td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_bultos||0)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></td>
+    <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_unidades||0)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></td>
+    <td><select data-fr-ok="${idx}" onchange="actualizarCampoFrescura(${idx},'ok',this.value,this);fechaFrescuraLoteChanged(${idx})"><option value="OK">OK</option><option value="NO_OK">No OK</option></select></td>
+    <td><input class="stock-input" style="width:132px;text-align:left" type="date" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" disabled></td>
+    <td data-fr-diff="${idx}" style="display:none">-</td>
+    <td style="display:none"><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional" oninput="actualizarCampoFrescura(${idx},'obs',this.value,this)"></td>
+    <td data-fr-dias="${idx}" style="display:none">${r.dias_frescura_restantes ?? '-'}</td>
+    <td data-fr-estado="${idx}" style="display:none">${esc(r.estado_frescura)}</td>
+  </tr>`;
+  }).join('');
   renderFrescuraMobileCards();
   frescuraLoaded=true;
   actualizarTotalesFrescura();
@@ -2495,7 +2549,7 @@ async function guardarControlFrescura(){
   const sinFecha=frescuraRows.filter((r,idx)=>{
     const b=frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '';
     const u=frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '';
-    const vto=frescuraInput(`[data-fr-vto="${idx}"]`)?.value ?? '';
+    const vto=frescuraFechaControlada(idx);
     return (b!==''||u!=='')&&!vto;
   });
   if(sinFecha.length){
@@ -2508,7 +2562,7 @@ async function guardarControlFrescura(){
   const items=frescuraRows.map((r,idx)=>({
     ...r,
     fecha_vencimiento_sistema:r.fecha_vencimiento_sistema||'',
-    fecha_vencimiento:frescuraInput(`[data-fr-vto="${idx}"]`)?.value ?? r.fecha_vencimiento,
+    fecha_vencimiento:frescuraFechaControlada(idx),
     stock_contado_bultos:frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '',
     stock_contado_unidades:frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '',
     observacion:frescuraInput(`[data-fr-obs="${idx}"]`)?.value ?? '',
