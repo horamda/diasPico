@@ -1430,10 +1430,11 @@ def _normalize_api_row(
         or item.get('days_remaining')
         or item.get('dias')
     )
-    if dias is None and fecha_vencimiento is not None:
-        dias = (fecha_vencimiento - date.today()).days
+    if fecha_vencimiento is not None:
+        reference_date = _parse_date(fecha_stock) or date.today()
+        dias = (fecha_vencimiento - reference_date).days
     estado = _norm(item.get('estado_frescura') or item.get('estado') or '').upper()
-    if not estado:
+    if fecha_vencimiento is not None or not estado:
         estado = _estado_from_days(dias)
     elif estado not in {'CRITICO', 'ALERTA', 'OK', 'SIN_FECHA'}:
         estado = _estado_from_days(dias)
@@ -1550,6 +1551,16 @@ def get_last_sync() -> dict[str, Any] | None:
 
 
 def sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> dict[str, Any]:
+    # Transaction-scoped lock shared by every worker and synchronization entry point.
+    with pg_conn() as lock_conn:
+        with lock_conn.cursor() as cur:
+            cur.execute("SELECT pg_try_advisory_xact_lock(746281903)")
+            if not cur.fetchone()[0]:
+                raise FrescuraApiError('Hay una actualizacion de Frescura en curso. Reintenta cuando finalice.', 409)
+        return _sync_frescura_from_api(fecha_stock)
+
+
+def _sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> dict[str, Any]:
     _ensure_tables()
     settings = _frescura_api_settings()
     base_url = settings['base_url']
@@ -1637,7 +1648,7 @@ def sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> 
                     item,
                     sucursal_id=item.get('sucursal_id'),
                     deposito_id=_norm(item.get('idDeposito') or item.get('deposito') or ''),
-                    fecha_stock=_norm(item.get('fechaStock') or ''),
+                    fecha_stock=fecha_stock_date.isoformat(),
                     origen_dato=_norm(item.get('origen_dato') or ('erp_chess_stock' if mode == 'erp' else 'api')),
                 )
                 for item in items

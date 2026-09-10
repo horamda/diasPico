@@ -22,7 +22,7 @@ class _FakeResponse:
 class _FakeCursor:
     def __init__(self):
         self.calls: list[tuple[str, dict | None]] = []
-        self._fetchone_queue = [(11,)]
+        self._fetchone_queue = [(True,), (11,)]
 
     def __enter__(self):
         return self
@@ -140,7 +140,26 @@ def test_sync_frescura_login_and_stock_map_depositos(monkeypatch):
     assert captured['bulk_rows'][0][7] == 12.0
     assert captured['bulk_rows'][1][7] == 9.0
     assert captured['bulk_rows'][0][9].isoformat() == '2030-01-01'
+    assert captured['bulk_rows'][0][10] == (date(2030, 1, 1) - date(2026, 9, 5)).days
     assert captured['bulk_rows'][1][9].isoformat() == '2030-01-01'
 
     delete_calls = [sql for sql, _ in cursor.calls if sql.lstrip().upper().startswith('DELETE FROM FRESCURA_ARTICULOS')]
     assert delete_calls
+
+
+def test_sync_rejects_concurrent_update(monkeypatch):
+    import pytest
+    cursor = _FakeCursor()
+    cursor._fetchone_queue = [(False,)]
+    monkeypatch.setattr(frescura_svc, 'pg_conn', lambda: _fake_pg_conn(cursor))
+    monkeypatch.setattr(frescura_svc, '_sync_frescura_from_api', lambda *_: pytest.fail('Must not synchronize'))
+    with pytest.raises(frescura_svc.FrescuraApiError, match='en curso'):
+        frescura_svc.sync_frescura_from_api()
+
+
+def test_normalize_uses_requested_date_over_api_days():
+    row = frescura_svc._normalize_api_row(
+        {'codigo': '123', 'lote': 'A', 'fecha_vencimiento': '2026-10-01',
+         'dias': 999, 'estado': 'OK'}, fecha_stock='05-09-2026')
+    assert row['dias_frescura_restantes'] == 26
+    assert row['estado_frescura'] == 'CRITICO'

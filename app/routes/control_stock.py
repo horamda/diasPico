@@ -183,6 +183,7 @@ def frescura_planilla():
         return jsonify(control_stock_svc.get_control_frescura_planilla(
             fecha_control=request.args.get("fecha"),
             sucursal=request.args.get("sucursal", "1"),
+            force_sync=request.args.get("force_sync", "0") == "1",
         ))
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400

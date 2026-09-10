@@ -620,8 +620,10 @@ def _art_row(r: dict) -> tuple:
     bultos_pallet = to_dec(r.get('bultos_por_pallet'))
     pisos = to_dec(r.get('pisos'))
     bultos_piso = to_dec(r.get('bultos_por_piso'))
-    if bultos_piso is None and bultos_pallet is not None and pisos not in (None, 0):
+    if (bultos_piso or 0) <= 0 and (bultos_pallet or 0) > 0 and (pisos or 0) > 0:
         bultos_piso = bultos_pallet / pisos
+    if (pisos or 0) <= 0 and (bultos_pallet or 0) > 0 and (bultos_piso or 0) > 0:
+        pisos = bultos_pallet / bultos_piso
     anulado = str(r.get('anulado', '') or '').strip().upper()
     activo = str(r.get('activo', '') or '').strip()
     if not activo and anulado in {'NO', 'N', '0', 'FALSE'}:
@@ -656,9 +658,39 @@ def _art_row(r: dict) -> tuple:
     )
 
 
+_LOGISTICS_FIELDS = ('bultos_por_pallet', 'pisos', 'bultos_por_piso', 'unidades_por_bulto')
+
+
+def _preserve_article_logistics(row: tuple, previous: dict) -> tuple:
+    item = dict(zip(_ART_COLS, row))
+    for field in _LOGISTICS_FIELDS:
+        if not item.get(field) or item[field] <= 0:
+            old = previous.get(field)
+            if old is not None and old > 0:
+                item[field] = old
+    pallet, floors, layer = (item.get(k) or 0 for k in _LOGISTICS_FIELDS[:3])
+    if pallet > 0 and floors > 0 and layer <= 0:
+        item['bultos_por_piso'] = pallet / floors
+    elif pallet > 0 and layer > 0 and floors <= 0:
+        item['pisos'] = pallet / layer
+    return tuple(item.get(k) for k in _ART_COLS)
+
+
+def _article_logistics_diagnostics(rows: list[dict]) -> dict:
+    fields = ('pisos', 'bultos_por_piso')
+    present = {key for row in rows for key in row}
+    missing = [key for key in fields if key not in present]
+    usable = sum(1 for row in rows if any((to_dec(row.get(key)) or 0) > 0 for key in fields))
+    warnings = []
+    if rows and not usable:
+        warnings.append('El archivo no aporta pisos ni bultos por piso validos. Se necesita un reporte logistico del maestro; la API de stock no completa estos campos.')
+    return {'columnas_logisticas_no_detectadas': missing,
+            'filas_con_pisos_o_bultos_por_piso': usable, 'advertencias': warnings}
+
+
 def load_articulos(file_bytes: bytes) -> UploadResult:
     t0   = time.perf_counter()
-    rows = _parse_csv(file_bytes, ARTICULOS_MAP)
+    rows = _parse_articulos_excel(file_bytes) if _looks_like_xlsx(file_bytes) else _parse_csv(file_bytes, ARTICULOS_MAP)
 
     # Parse all rows into tuples first — no DB I/O during parsing
     typed: list[tuple] = []
@@ -674,6 +706,7 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
 
     result = UploadResult()
     result.errors = parse_errors
+    result.metadata.update(_article_logistics_diagnostics(rows))
 
     if not typed:
         raise ValueError('Sin filas validas: no se encontro una columna Articulo/id_articulo con datos')
@@ -681,6 +714,12 @@ def load_articulos(file_bytes: bytes) -> UploadResult:
     ensure_articulos_table()
     with pg_conn() as conn:
         with conn.cursor() as cur:
+            cur.execute("SELECT id_articulo, bultos_por_pallet, pisos, bultos_por_piso, unidades_por_bulto FROM articulos")
+            previous = {r[0]: dict(zip(_LOGISTICS_FIELDS, r[1:])) for r in cur.fetchall()}
+            typed = [_preserve_article_logistics(r, previous.get(r[0], {})) for r in typed]
+            result.metadata['logistica_incompleta'] = sum(
+                1 for r in typed if not r[_ART_COLS.index('pisos')] or not r[_ART_COLS.index('bultos_por_piso')]
+            )
             cur.execute("DELETE FROM articulos")
             ins, err = _bulk_insert(cur, 'articulos', _ART_COLS, typed, _ART_CONFLICT)
             if ins == 0:
@@ -703,8 +742,10 @@ def _art_faltantes_row(r: dict) -> tuple:
     bultos_pallet = to_dec(r.get('bultos_por_pallet'))
     pisos = to_dec(r.get('pisos'))
     bultos_piso = to_dec(r.get('bultos_por_piso'))
-    if bultos_piso is None and bultos_pallet is not None and pisos not in (None, 0):
+    if (bultos_piso or 0) <= 0 and (bultos_pallet or 0) > 0 and (pisos or 0) > 0:
         bultos_piso = bultos_pallet / pisos
+    if (pisos or 0) <= 0 and (bultos_pallet or 0) > 0 and (bultos_piso or 0) > 0:
+        pisos = bultos_pallet / bultos_piso
     return (
         to_int(r.get('id_articulo')),
         bultos_pallet,
@@ -764,6 +805,7 @@ def load_articulos_faltantes(file_bytes: bytes) -> UploadResult:
             result.inserted = cur.rowcount if cur.rowcount is not None else 0
 
     result.metadata = {
+        **_article_logistics_diagnostics(rows),
         'modo': 'completar_faltantes',
         'campos': ['bultos_por_pallet', 'pisos', 'bultos_por_piso', 'unidades_por_bulto', 'movil', 'anulado', 'unidad_negocio', 'tipo_producto'],
         'filas_leidas': len(typed),

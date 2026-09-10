@@ -203,6 +203,7 @@ def _latest_frescura_sync_row() -> dict | None:
             cur.execute(
                 """SELECT id, started_at, finished_at, estado, total_items, saved_rows, payload_json
                    FROM frescura_sync_log
+                   WHERE estado = 'ok'
                    ORDER BY started_at DESC, id DESC
                    LIMIT 1"""
             )
@@ -243,7 +244,7 @@ def _format_frescura_status(row: dict | None, control_date: date, auto_sync: dic
         finished_text = str(finished or "")
     data_date = stock_date or sync_date
     diff = abs((control_date - data_date).days) if data_date else None
-    stale = diff is None or diff > 1
+    stale = diff != 0 or row.get("estado") != "ok"
     return {
         "ok": True,
         "fecha_control": control_date.isoformat(),
@@ -262,7 +263,7 @@ def _format_frescura_status(row: dict | None, control_date: date, auto_sync: dic
     }
 
 
-def get_frescura_status(fecha_control: str | None = None, auto_sync: bool = True) -> dict:
+def get_frescura_status(fecha_control: str | None = None, auto_sync: bool = True, force_sync: bool = False) -> dict:
     ensure_control_stock_tables()
     control_date = date.today()
     if fecha_control:
@@ -273,7 +274,7 @@ def get_frescura_status(fecha_control: str | None = None, auto_sync: bool = True
     row = _latest_frescura_sync_row()
     status = _format_frescura_status(row, control_date)
     should_sync = status["estado_alerta"] in {"sin_datos", "desactualizado"}
-    if not auto_sync or not should_sync:
+    if not force_sync and (not auto_sync or not should_sync):
         return status
     try:
         sync_result = frescura_svc.sync_frescura_from_api(fecha_stock=control_date)
@@ -596,6 +597,8 @@ def _complete_logistics(item: dict) -> dict:
     bultos_por_piso = _logistic_number(item.get("bultos_por_piso"))
     if bultos_por_piso <= 0 and bultos_por_pallet > 0 and pisos > 0:
         bultos_por_piso = bultos_por_pallet / pisos
+    if pisos <= 0 and bultos_por_pallet > 0 and bultos_por_piso > 0:
+        pisos = bultos_por_pallet / bultos_por_piso
 
     item["bultos_por_pallet"] = round(bultos_por_pallet, 2)
     item["pisos"] = round(pisos, 2)
@@ -1143,7 +1146,7 @@ def _calibre_label(ml: int | None) -> str:
     return f"{ml / 1000:.3g} L"
 
 
-def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: str | None = "1") -> dict:
+def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: str | None = "1", force_sync: bool = False) -> dict:
     ensure_control_stock_tables()
     frescura_svc._ensure_tables()
     suc = _sucursal_id(sucursal)
@@ -1152,7 +1155,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
     except ValueError as exc:
         raise ValueError("fecha debe tener formato YYYY-MM-DD") from exc
 
-    status = get_frescura_status(control_date.isoformat())
+    status = get_frescura_status(control_date.isoformat(), force_sync=force_sync)
     with pg_cursor() as cur:
         cur.execute(
             """
@@ -1161,8 +1164,11 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
                 COALESCE(NULLIF(TRIM(fa.descripcion_articulo), ''), MAX(a.descripcion), '') AS descripcion_articulo,
                 fa.lote,
                 fa.fecha_vencimiento,
-                fa.dias_frescura_restantes,
-                COALESCE(fa.estado_frescura, 'SIN_FECHA') AS estado_frescura,
+                (fa.fecha_vencimiento - %(fecha_control)s::date) AS dias_frescura_restantes,
+                CASE WHEN fa.fecha_vencimiento IS NULL THEN 'SIN_FECHA'
+                     WHEN fa.fecha_vencimiento - %(fecha_control)s::date < 30 THEN 'CRITICO'
+                     WHEN fa.fecha_vencimiento - %(fecha_control)s::date <= 60 THEN 'ALERTA'
+                     ELSE 'OK' END AS estado_frescura,
                 COALESCE(fa.stock_bultos, fa.stock_actual, 0) AS stock_sistema_bultos,
                 COALESCE(fa.stock_unidades, 0) AS stock_sistema_unidades,
                 ROUND(MAX(a.valor_unidad_medida) * 100000 / NULLIF(MAX(a.unidades_por_bulto), 0)) AS calibre_ml,
@@ -1185,7 +1191,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
                      CASE WHEN fa.codigo_articulo ~ '^[0-9]+$' THEN fa.codigo_articulo::int END NULLS LAST,
                      fa.codigo_articulo, fa.fecha_vencimiento NULLS LAST, fa.lote
             """,
-            {"sucursal": suc},
+            {"sucursal": suc, "fecha_control": control_date.isoformat()},
         )
         raw_rows = [dict(r) for r in (cur.fetchall() or [])]
 

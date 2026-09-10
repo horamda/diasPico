@@ -1292,6 +1292,7 @@
     </div>
   </section>
 
+  <div id="logisticaConteoAviso" class="time-note" role="status" hidden></div>
   <div class="time-note">El horario de inicio se registra con la primera cantidad cargada. El horario final se registra al tocar “Guardar control y finalizar”.</div>
   <div class="pending-days" id="pendingDays" role="status" aria-live="polite"></div>
   <div class="status" id="status" role="status" aria-live="polite">Cargando...</div>
@@ -1353,8 +1354,8 @@
         <div class="field"><label>Sucursal</label><select id="sucursalFrescura" onchange="syncSucursal('frescura')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
         <div class="field"><label>Fecha</label><input id="fechaFrescura" type="date" onchange="loadControlFrescura()"></div>
         <div class="field"><label>Responsable</label><select id="responsableFrescura"></select></div>
-        <div class="field"><label>Accion</label><button class="btn primary" onclick="loadControlFrescura()">Actualizar lotes</button></div>
-        <div class="field w2"><label>Observaciones</label><input id="observacionesFrescura" placeholder="Opcional"></div>
+        <div class="field"><label>Accion</label><button class="btn primary" id="actualizarFrescuraBtn" onclick="loadControlFrescura(true)">Actualizar lotes</button></div>
+        <div class="field w2"><label>Observaciones</label><input id="observacionesFrescura" oninput="frescuraDirty=true" placeholder="Opcional"></div>
       </div>
       <div class="stats">
         <span class="pill" id="frFecha">Fecha: -</span>
@@ -1566,6 +1567,29 @@ let externalReviewKey = '';
 let externalDraft = {values:{}, unidades:{}};
 let frescuraRows = [];
 let frescuraLoaded = false;
+let frescuraDirty = false;
+let frescuraLoading = false;
+let frescuraDiscardApproved = false;
+let frescuraContext = null;
+window.addEventListener('beforeunload',event=>{
+  if(frescuraDirty){event.preventDefault();event.returnValue='';}
+});
+async function confirmarRecargaFrescura(){
+  return !frescuraDirty || await modalConfirm('Hay cambios de frescura sin guardar. Si continuas, se descartaran.',{okText:'Descartar y continuar'});
+}
+function mostrarEstadoFrescura(data,targetId){
+  const el=document.getElementById(targetId);
+  if(!el) return;
+  const failed=data.auto_sync?.ok===false;
+  const isOk=data.estado_alerta==='ok'&&!failed;
+  el.classList.toggle('ok',isOk);
+  el.classList.toggle('alert',!isOk);
+  const stockDate=data.fecha_stock;
+  el.textContent=failed
+    ? `No se pudo actualizar. ${stockDate?'Mostrando stock del '+fechaCorta(stockDate):'Sin stock sincronizado'}`
+    : `Frescura: ${stockDate?fechaCorta(stockDate):'sin datos'}${isOk?' ? actualizada':' ? desactualizada'}`;
+  el.title=failed?data.auto_sync.error:`Ultima sincronizacion exitosa: ${data.last_sync?.finished_at||'-'}. Fecha de control: ${data.fecha_control}`;
+}
 let sucursalesDisponibles = [{value:'1',label:'Casa Central'},{value:'2',label:'Dolores'}];
 const STOCK_TABS=[
   {name:'abc',label:'Analisis ABC',hint:'Clasificacion mensual'},
@@ -1726,19 +1750,7 @@ async function actualizarEstadoFrescura(fechaValue,targetId){
     const res=await fetch('/api/control-stock/frescura-status?fecha='+encodeURIComponent(fechaValue||today()));
     const data=await res.json();
     if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo consultar Frescura');
-    const last=data.last_sync;
-    const diff=data.dias_diferencia;
-    const stockDate=data.fecha_stock;
-    const isOk=data.estado_alerta==='ok';
-    el.classList.toggle('ok',isOk);
-    el.classList.toggle('alert',!isOk);
-    if(last&&last.finished_at){
-      el.textContent=`Frescura: ${stockDate ? fechaCorta(stockDate) : formatDateTime(last.finished_at)} · ${diff ?? '-'} dia(s)`;
-      el.title=`Ultima actualizacion de Frescura: ${formatDateTime(last.finished_at)}. Fecha de stock: ${stockDate || '-'}. Fecha de control: ${data.fecha_control}. Diferencia: ${diff ?? '-'} dia(s).`;
-    }else{
-      el.textContent='Frescura: sin datos';
-      el.title='Sin datos de actualizacion de Frescura.';
-    }
+    mostrarEstadoFrescura(data,targetId);
   }catch(error){
     el.classList.add('alert');
     el.textContent='Frescura: error';
@@ -1777,7 +1789,8 @@ function filtrosEfectivos(){
 function logVal(value,row=null,field=''){
   const n=Number(value||0);
   if(n>0) return fmt.format(n);
-  if(row&&row.id_articulo) return `<button type="button" class="logistic-missing" title="Cargar pisos y bultos por piso" onclick="abrirModalLogistica(${Number(row.id_articulo)})">Sin dato</button>`;
+  const labels={pisos:'pisos',bultos_por_piso:'bultos por piso',bultos_por_pallet:'bultos por pallet',unidades_por_bulto:'unidades por bulto'};
+  if(row&&row.id_articulo) return `<button type="button" class="logistic-missing" title="Falta ${labels[field]||'logistica'} en el maestro de articulos. Clic para completar." onclick="abrirModalLogistica(${Number(row.id_articulo)})">Sin dato</button>`;
   return '<span class="logistic-missing">Sin dato</span>';
 }
 function logText(value){
@@ -1887,7 +1900,13 @@ async function loadPendientesDias(){
     }
   }
 }
-function syncSucursal(origin){
+async function syncSucursal(origin){
+  const source=document.getElementById('sucursal'+origin[0].toUpperCase()+origin.slice(1));
+  if(frescuraLoading || !await confirmarRecargaFrescura()){
+    if(source&&frescuraContext) source.value=frescuraContext.sucursal;
+    return;
+  }
+  frescuraDiscardApproved=frescuraDirty;
   if(origin==='abc') sucursalConteo.value=sucursalAbc.value;
   if(origin==='abc') sucursalPlan.value=sucursalAbc.value;
   if(origin==='abc') sucursalResumen.value=sucursalAbc.value;
@@ -2373,6 +2392,7 @@ function frescuraFechaControlada(idx){
 function actualizarCampoFrescura(idx,campo,valor,origen){
   const row=frescuraRows[idx];
   if(!row) return;
+  frescuraDirty=true;
   row[`_control_${campo}`]=valor;
   document.querySelectorAll(`[data-fr-${campo}="${idx}"]`).forEach(el=>{
     if(el!==origen) el.value=valor;
@@ -2466,13 +2486,30 @@ function renderFrescuraMobileCards(){
   </article>`;
   }).join('');
 }
-async function loadControlFrescura(){
+async function loadControlFrescura(forceSync=false){
+  if(frescuraLoading) return;
+  frescuraLoading=true;
+  const discardApproved=frescuraDiscardApproved;
+  frescuraDiscardApproved=false;
+  if(!discardApproved&&!await confirmarRecargaFrescura()){
+    if(frescuraContext){fechaFrescura.value=frescuraContext.fecha;sucursalFrescura.value=frescuraContext.sucursal;}
+    frescuraLoading=false;
+    return;
+  }
+  const controls=[...document.querySelectorAll('#viewFrescura input,#viewFrescura select,#viewFrescura button')].map(el=>[el,el.disabled]);
+  controls.forEach(([el])=>el.disabled=true);
+  try{
   frescuraControlStatus.textContent='Consultando Frescura y cargando lotes...';
-  actualizarEstadoFrescura(fechaFrescura.value,'frSync');
   const params=new URLSearchParams({fecha:fechaFrescura.value||today(),sucursal:sucursalFrescura.value});
+  if(forceSync) params.set('force_sync','1');
   const res=await fetch('/api/control-stock/frescura-planilla?'+params);
   const data=await res.json();
-  if(!res.ok||data.ok===false){frescuraControlStatus.textContent='Error: '+(data.error||'No se pudo cargar Frescura');return}
+  if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo cargar Frescura');
+  mostrarEstadoFrescura(data.frescura_status,'frSync');
+  if(data.frescura_status?.auto_sync?.ok===false&&frescuraDirty) throw new Error(data.frescura_status.auto_sync.error);
+  frescuraDirty=false;
+  frescuraContext={fecha:data.fecha,sucursal:String(data.sucursal)};
+  observacionesFrescura.value='';
   frescuraRows=data.rows||[];
   frFecha.textContent=`Fecha: ${fechaCorta(data.fecha)} | ${data.dia}`;
   frArticulos.textContent=`Articulos: ${fmt.format(data.total_articulos||0)}`;
@@ -2504,6 +2541,13 @@ async function loadControlFrescura(){
   frescuraLoaded=true;
   actualizarTotalesFrescura();
   loadDiferenciasFrescura();
+  }catch(error){
+    frescuraControlStatus.textContent='No se pudo cargar Frescura: '+error.message;
+    if(frescuraContext){fechaFrescura.value=frescuraContext.fecha;sucursalFrescura.value=frescuraContext.sucursal;}
+  }finally{
+    controls.forEach(([el,disabled])=>el.disabled=disabled);
+    frescuraLoading=false;
+  }
 }
 async function loadDiferenciasFrescura(){
   const desde=(fechaFrescura.value||today()).slice(0,8)+'01';
@@ -2543,6 +2587,8 @@ async function loadDiferenciasFrescura(){
   }
 }
 async function guardarControlFrescura(){
+  if(frescuraLoading) return;
+  if(!frescuraContext||fechaFrescura.value!==frescuraContext.fecha||sucursalFrescura.value!==frescuraContext.sucursal){await modalAlert('Actualiza los lotes para la fecha y sucursal seleccionadas antes de guardar.');return}
   if(!responsableFrescura.value){await modalAlert('Selecciona un responsable para guardar el control de frescura.');return}
   const loaded=Number(frescuraFooterSummary?.dataset?.loaded||0);
   if(!loaded){await modalAlert('Carga al menos un lote antes de guardar.');return}
@@ -2577,6 +2623,7 @@ async function guardarControlFrescura(){
     })});
     const data=await res.json();
     if(!res.ok||data.ok===false) throw new Error(data.error||'No se pudo guardar');
+    frescuraDirty=false;
     frescuraControlStatus.textContent=`Control de frescura #${data.data.id} guardado: ${fmt.format(data.data.items_guardados)} lote(s), ${fmt.format(data.data.lotes_con_diferencia||0)} con diferencia.`;
     await modalAlert(`Control de frescura guardado correctamente.\n\nNro. de control: ${data.data.id}\nLotes guardados: ${data.data.items_guardados}\nDiferencias stock: ${data.data.lotes_con_diferencia_stock||0}\nDiferencias fecha: ${data.data.lotes_con_diferencia_fecha||0}`);
     loadDiferenciasFrescura();
@@ -3027,6 +3074,10 @@ async function loadPlanilla(){
   const data=await res.json();
   if(!res.ok||data.ok===false){status.textContent='Error: '+(data.error||'No se pudo cargar');return}
   currentRows=data.rows||[];
+  const missingLogistics=currentRows.filter(r=>r.logistica_incompleta).length;
+  const logisticsNotice=document.getElementById('logisticaConteoAviso');
+  logisticsNotice.hidden=!missingLogistics;
+  logisticsNotice.innerHTML=`<strong>${missingLogistics} articulo(s) con datos logisticos pendientes.</strong> Faltan pisos o bultos por piso en el maestro. Hace clic en &quot;Sin dato&quot; para completarlos, o usa <a href="/importaciones-datos" target="_blank" rel="noopener">Datos faltantes de articulos</a>. Actualizar Frescura trae stock y vencimientos; estos datos se cargan desde el maestro.`;
   mobileIndex=0;
   await confirmarBorradorPendiente();
   document.querySelector('#viewConteo .save-footer')?.classList.remove('ready');
