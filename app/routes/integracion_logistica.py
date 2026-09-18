@@ -6,6 +6,8 @@ from datetime import date, datetime, timezone
 from flask import Blueprint, current_app, jsonify, request
 
 from app.services import integracion_logistica_svc as svc
+from app.services import integracion_rechazos_svc
+from app.services import integracion_pedidos_svc
 
 
 bp = Blueprint(
@@ -17,6 +19,96 @@ bp = Blueprint(
 MAX_RANGE_DAYS = 31
 MAX_LIMIT = 1000
 MAX_LIMIT_WITH_CLIENTS = 200
+
+
+@bp.get('/pedidos')
+def pedidos():
+    try:
+        desde, hasta = _periodo()
+        sucursal = str(request.args.get('sucursal', 'TODAS')).strip()
+        limit = _parse_int(request.args.get('limit'), 'limit', 200)
+        offset = _parse_int(request.args.get('offset'), 'offset', 0)
+        if 'empresa_id' in request.args:
+            raise ValueError('El detalle de repartos no tiene empresa_id; filtrar por sucursal.')
+        if not sucursal or not 1 <= limit <= MAX_LIMIT or offset < 0:
+            raise ValueError('Sucursal requerida; limit entre 1 y 1000; offset mayor o igual a 0.')
+    except ValueError as exc:
+        return _error(str(exc), 400, 'invalid_request')
+    try:
+        result = integracion_pedidos_svc.get_pedidos(
+            desde=desde, hasta=hasta, sucursal=sucursal, limit=limit, offset=offset)
+    except Exception:
+        current_app.logger.exception('Error en integración de pedidos')
+        return _error('No se pudieron consultar los pedidos.', 500, 'integration_query_failed')
+    datos, total = result['datos'], int(result['total'])
+    response = jsonify({
+        'api_version': 'v1',
+        'generado_en': datetime.now(timezone.utc).isoformat(),
+        'filtros': dict(desde=desde.isoformat(), hasta=hasta.isoformat(), sucursal=sucursal),
+        'cobertura': {'ultima_fecha_disponible': result['ultima_fecha_disponible']},
+        'paginacion': dict(limit=limit, offset=offset, devueltos=len(datos), total=total,
+                           hay_mas=offset + len(datos) < total),
+        'criterios': {
+            'fuente': 'repartos_detalle',
+            'unidad': 'pedido (o comprobante) por sucursal, cliente y fecha de entrega de planilla',
+            'estado': 'derivado de los estados registrados de todas las líneas; no compara cantidades pedidas',
+            'fecha_entrega': 'fecha de entrega de planilla; no acredita por sí sola entrega efectiva',
+            'vinculo_foxtrot': 'referencias de origen para cruce; no es un ID externo confirmado',
+            'ausencia': 'sin fila significa sin datos',
+        },
+        'datos': datos,
+    })
+    response.headers['X-Total-Count'] = str(total)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
+@bp.get('/rechazos/clientes-diario')
+def rechazos_clientes_diario():
+    try:
+        desde, hasta = _periodo()
+        empresa_id = str(request.args.get('empresa_id', '1')).strip()
+        sucursal = str(request.args.get('sucursal', 'TODAS')).strip()
+        limit = _parse_int(request.args.get('limit'), 'limit', 200)
+        offset = _parse_int(request.args.get('offset'), 'offset', 0)
+        if not empresa_id or not sucursal:
+            raise ValueError('empresa_id y sucursal no pueden quedar vacíos.')
+        if limit < 1 or limit > MAX_LIMIT or offset < 0:
+            raise ValueError('limit debe estar entre 1 y 1000; offset debe ser mayor o igual a 0.')
+    except ValueError as exc:
+        return _error(str(exc), 400, 'invalid_request')
+    try:
+        result = integracion_rechazos_svc.get_clientes_diario(
+            empresa_id=empresa_id, sucursal=sucursal, desde=desde, hasta=hasta,
+            limit=limit, offset=offset,
+        )
+    except Exception:
+        current_app.logger.exception('Error en integración de rechazos por cliente')
+        return _error('No se pudieron consultar los rechazos.', 500, 'integration_query_failed')
+    datos = result['datos']
+    total = result['total']
+    response = jsonify({
+        'api_version': 'v1',
+        'generado_en': datetime.now(timezone.utc).isoformat(),
+        'filtros': dict(empresa_id=empresa_id, sucursal=sucursal,
+                        desde=desde.isoformat(), hasta=hasta.isoformat()),
+        'paginacion': dict(limit=limit, offset=offset, devueltos=len(datos),
+                           total=total, hay_mas=offset + len(datos) < total),
+        'criterios': {
+            'clave': ['empresa_id', 'fecha', 'cliente_id'],
+            'fecha': 'fecha del movimiento de ventas; no acredita fecha de entrega',
+            'alcance': 'mercadería con movimiento registrado, excluye remitos y comodatos',
+            'incluye_sin_rechazo': True,
+            'computable': 'rechazo con cantidad positiva y motivo configurado con tomar=true',
+            'volumen': 'cantidades de origen; no se infieren cantidades pedidas ni entregadas',
+            'ausencia': 'sin fila significa sin datos, no entrega exitosa',
+            'otif_calculable': False,
+        },
+        'datos': datos,
+    })
+    response.headers['X-Total-Count'] = str(total)
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 def _error(message: str, status: int, code: str):

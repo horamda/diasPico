@@ -48,7 +48,11 @@ Para integraciones externas, usar estas rutas base:
 | Admin proyecto | `/api/admin-proyecto` | Estado tecnico de tablas, indices y dashboard. |
 | Foxtrot review | `/api/foxtrot` | Datasets y edicion de filas de revision. |
 
-Recomendacion concreta para rechazos: consumir `GET /api/rechazos/diario/integracion` cuando la app externa necesite una respuesta completa. Si la app necesita pantallas o procesos separados, consumir `GET /api/rechazos/diario/resumen` y `GET /api/rechazos/diario/detalle`.
+Para cruzar rechazos por fecha y cliente, consumir `GET /api/v1/integracion/logistica/rechazos/clientes-diario` con API key. Ver [contrato por cliente/día](API_RECHAZOS_CLIENTE_DIA.md). Para resúmenes diarios agregados, consumir `GET /api/rechazos/diario/integracion`, o por separado `GET /api/rechazos/diario/resumen` y `GET /api/rechazos/diario/detalle`.
+
+Para pedidos/comprobantes con cliente, sucursal, fecha de planilla, rutas y estado de entrega,
+consumir `GET /api/v1/integracion/logistica/pedidos` con API key.
+Ver [contrato por pedido](API_PEDIDOS_INTEGRACION.md).
 
 ## Convenciones
 

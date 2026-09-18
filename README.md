@@ -137,6 +137,8 @@ GET /api/rechazos
 GET /api/rechazos/diario/resumen?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
 GET /api/rechazos/diario/detalle?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
 GET /api/rechazos/diario/integracion?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=TODAS
+GET /api/v1/integracion/logistica/rechazos/clientes-diario?fecha=YYYY-MM-DD&empresa_id=1&sucursal=TODAS
+GET /api/v1/integracion/logistica/pedidos?fecha=YYYY-MM-DD&sucursal=TODAS
 GET /api/admin-proyecto/dashboard
 GET /api/admin-proyecto/tablas
 GET /api/admin-proyecto/indices

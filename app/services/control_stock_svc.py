@@ -4,12 +4,13 @@ import calendar as cal_mod
 import random
 from datetime import date, datetime, timedelta
 from threading import Lock
+from decimal import Decimal, InvalidOperation
 
 import psycopg2.extras
 
 from app.database import pg_conn, pg_cursor
 from app.services.articulos_svc import ensure_articulos_table
-from app.services import frescura_svc
+from app.services import frescura_svc, frescura_control_svc
 from app.services.ventas_svc import ensure_ventas_detalle_table
 
 
@@ -144,6 +145,7 @@ def ensure_control_stock_tables() -> None:
                     ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS fecha_vencimiento_sistema DATE;
                     ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS fecha_vencimiento_controlada DATE;
                     ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS diferencia_fecha BOOLEAN NOT NULL DEFAULT FALSE;
+                    ALTER TABLE control_frescura_conteo_items ADD COLUMN IF NOT EXISTS distribucion_fechas JSONB NOT NULL DEFAULT '[]'::jsonb;
                     ALTER TABLE control_stock_conteos ADD COLUMN IF NOT EXISTS tipo_conteo VARCHAR(20) NOT NULL DEFAULT 'mensual';
                     CREATE INDEX IF NOT EXISTS idx_control_stock_conteos_mes
                         ON control_stock_conteos(mes_abc, sucursal, fecha);
@@ -154,6 +156,7 @@ def ensure_control_stock_tables() -> None:
                     CREATE INDEX IF NOT EXISTS idx_control_frescura_conteos_fecha
                         ON control_frescura_conteos(sucursal, fecha);
                 """)
+                cur.execute(frescura_control_svc.SCHEMA)
         _CONTROL_STOCK_READY = True
 
 
@@ -1171,6 +1174,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
                      ELSE 'OK' END AS estado_frescura,
                 COALESCE(fa.stock_bultos, fa.stock_actual, 0) AS stock_sistema_bultos,
                 COALESCE(fa.stock_unidades, 0) AS stock_sistema_unidades,
+                MAX(a.bultos_por_pallet) AS bultos_por_pallet,
                 ROUND(MAX(a.valor_unidad_medida) * 100000 / NULLIF(MAX(a.unidades_por_bulto), 0)) AS calibre_ml,
                 fa.fecha_actualizacion
             FROM frescura_articulos fa
@@ -1203,6 +1207,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
         rows.append({
             "codigo_articulo": str(row.get("codigo_articulo") or ""),
             "descripcion_articulo": row.get("descripcion_articulo") or "",
+            "bultos_por_pallet": float(row.get("bultos_por_pallet") or 0),
             "calibre_ml": calibre_ml,
             "calibre_label": _calibre_label(calibre_ml),
             "lote": row.get("lote") or "",
@@ -1231,6 +1236,44 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
     }
 
 
+def _validate_frescura_distribution(item: dict, control_date: date) -> list[dict]:
+    groups = item.get('distribucion_fechas', [])
+    if not isinstance(groups, list) or len(groups) > 500:
+        raise ValueError('Distribucion de fechas invalida (maximo 500 grupos por lote)')
+    result = []
+    for index, group in enumerate(groups, 1):
+        if not isinstance(group, dict):
+            raise ValueError(f'Grupo {index} invalido')
+        try:
+            expiry = date.fromisoformat(str(group.get('fecha_vencimiento') or ''))
+        except ValueError as exc:
+            raise ValueError(f'Cargar vencimiento real del grupo {index}') from exc
+        quantities = {}
+        for field in ('bultos', 'unidades'):
+            try:
+                value = Decimal(str(group.get(field) or 0))
+            except InvalidOperation as exc:
+                raise ValueError(f'Cantidad invalida en grupo {index}') from exc
+            if not value.is_finite() or value < 0 or value != value.to_integral_value():
+                raise ValueError(f'El grupo {index} requiere cantidades enteras no negativas')
+            quantities[field] = int(value)
+        if not any(quantities.values()):
+            raise ValueError(f'El grupo {index} debe contener bultos o unidades')
+        revision = group.get('revision')
+        if revision is not None:
+            if revision not in {'OK', 'NO_OK'}:
+                raise ValueError(f'El grupo {index} esta pendiente de revision')
+            matches = expiry.isoformat() == item.get('fecha_vencimiento_sistema')
+            if (revision == 'OK') != matches:
+                raise ValueError(f'La fecha real del grupo {index} no coincide con su revision')
+        days = (expiry - control_date).days
+        result.append({**quantities, 'revision': revision, 'fecha_vencimiento': expiry.isoformat(),
+                       'referencia': str(group.get('referencia') or '').strip()[:120],
+                       'dias_frescura_restantes': days,
+                       'estado_frescura': frescura_svc._estado_from_days(days)})
+    return result
+
+
 def guardar_control_frescura(payload: dict, responsable_default: str = "") -> dict:
     ensure_control_stock_tables()
     suc = _sucursal_id(payload.get("sucursal"))
@@ -1245,8 +1288,6 @@ def guardar_control_frescura(payload: dict, responsable_default: str = "") -> di
         control_date = date.fromisoformat(fecha)
     except ValueError as exc:
         raise ValueError("fecha debe tener formato YYYY-MM-DD") from exc
-    if control_date.weekday() != 2:
-        raise ValueError("El control de frescura se realiza los miercoles")
 
     rows = []
     for item in items:
@@ -1254,6 +1295,12 @@ def guardar_control_frescura(payload: dict, responsable_default: str = "") -> di
         lote = str(item.get("lote") or "").strip()
         if not codigo or not lote:
             continue
+        distribution = _validate_frescura_distribution(item, control_date)
+        if distribution:
+            item = {**item,
+                    'stock_contado_bultos': sum(g['bultos'] for g in distribution),
+                    'stock_contado_unidades': sum(g['unidades'] for g in distribution),
+                    'fecha_vencimiento': min(g['fecha_vencimiento'] for g in distribution)}
         sistema_bultos = _float_or_none(item.get("stock_sistema_bultos")) or 0.0
         sistema_unidades = _float_or_none(item.get("stock_sistema_unidades")) or 0.0
         contado_bultos = _float_or_none(item.get("stock_contado_bultos"))
@@ -1286,6 +1333,8 @@ def guardar_control_frescura(payload: dict, responsable_default: str = "") -> di
                 except ValueError:
                     pass
         diferencia_fecha = parsed_vto_sistema is None or parsed_vto_sistema != parsed_vto
+        if distribution:
+            diferencia_fecha = any(g['fecha_vencimiento'] != (parsed_vto_sistema.isoformat() if parsed_vto_sistema else '') for g in distribution)
         dias_frescura = (parsed_vto - control_date).days
         estado_frescura = (
             "CRITICO" if dias_frescura < 30
@@ -1308,12 +1357,17 @@ def guardar_control_frescura(payload: dict, responsable_default: str = "") -> di
             diferencia,
             diferencia_fecha,
             str(item.get("observacion") or ""),
+            psycopg2.extras.Json(distribution),
         ))
     if not rows:
         raise ValueError("No hay lotes cargados para guardar")
 
     with pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+            session_row = None
+            if payload.get('sesion_id'):
+                session_row = frescura_control_svc.lock_for_finish(
+                    cur, int(payload['sesion_id']), suc, control_date, responsable, items)
             cur.execute(
                 """SELECT id
                    FROM control_frescura_conteos
@@ -1344,11 +1398,30 @@ def guardar_control_frescura(payload: dict, responsable_default: str = "") -> di
                        fecha_vencimiento_sistema, fecha_vencimiento_controlada,
                        dias_frescura_restantes, estado_frescura, stock_sistema_bultos,
                        stock_sistema_unidades, stock_contado_bultos, stock_contado_unidades,
-                       diferencia, diferencia_fecha, observacion
+                       diferencia, diferencia_fecha, observacion, distribucion_fechas
                    ) VALUES %s""",
                 [(saved["id"], *row) for row in rows],
             )
 
+            if session_row:
+                saved.update(frescura_control_svc.finish(cur, session_row, saved['id']))
+
+    saved['no_ok'] = []
+    for row in rows:
+        common = {'codigo_articulo': row[0], 'descripcion': row[1], 'lote': row[2],
+                  'fecha_sistema': row[4], 'observacion': row[14]}
+        groups = row[15].adapted
+        if groups:
+            for group in groups:
+                if group['fecha_vencimiento'] != row[4]:
+                    saved['no_ok'].append({**common, **group, 'tipo': 'FECHA'})
+        elif row[13]:
+            saved['no_ok'].append({**common, 'tipo': 'FECHA', 'referencia': 'Lote completo',
+                                  'fecha_vencimiento': row[5], 'bultos': row[10], 'unidades': row[11]})
+        if row[12]:
+            saved['no_ok'].append({**common, 'tipo': 'CANTIDAD', 'referencia': 'Total del lote',
+                                  'bultos': row[10], 'unidades': row[11],
+                                  'diferencia_bultos': row[10]-row[8], 'diferencia_unidades': row[11]-row[9]})
     saved["items_guardados"] = len(rows)
     saved["lotes_con_diferencia"] = sum(1 for row in rows if row[12] or row[13])
     saved["lotes_con_diferencia_stock"] = sum(1 for row in rows if row[12])
@@ -1361,6 +1434,7 @@ def get_control_frescura_diferencias(
     desde: str | None = None,
     hasta: str | None = None,
     responsable: str | None = "",
+    conteo_id: int | None = None,
 ) -> dict:
     ensure_control_stock_tables()
     suc = _sucursal_id(sucursal)
@@ -1374,6 +1448,7 @@ def get_control_frescura_diferencias(
         raise ValueError("desde y hasta deben tener formato YYYY-MM-DD") from exc
 
     params = {
+        "conteo_id": conteo_id,
         "sucursal": suc,
         "desde": str(desde_value)[:10],
         "hasta": str(hasta_value)[:10],
@@ -1405,10 +1480,12 @@ def get_control_frescura_diferencias(
                 COALESCE(i.stock_contado_unidades, 0) AS stock_contado_unidades,
                 COALESCE(i.diferencia, FALSE) AS diferencia_stock,
                 COALESCE(i.diferencia_fecha, FALSE) AS diferencia_fecha,
-                i.observacion
+                i.observacion,
+                i.distribucion_fechas
             FROM control_frescura_conteos c
             JOIN control_frescura_conteo_items i ON i.conteo_id = c.id
             WHERE c.sucursal = %(sucursal)s
+              AND (%(conteo_id)s IS NULL OR c.id = %(conteo_id)s)
               AND c.fecha BETWEEN %(desde)s AND %(hasta)s
               {responsable_filter}
               AND (COALESCE(i.diferencia, FALSE) OR COALESCE(i.diferencia_fecha, FALSE))
@@ -1441,6 +1518,7 @@ def get_control_frescura_diferencias(
             "stock_contado_unidades": round(float(row.get("stock_contado_unidades") or 0), 2),
             "diferencia_stock": bool(row.get("diferencia_stock")),
             "diferencia_fecha": bool(row.get("diferencia_fecha")),
+            "distribucion_fechas": row.get("distribucion_fechas") or [],
             "observacion": row.get("observacion") or "",
             "observaciones_control": row.get("observaciones_control") or "",
         })

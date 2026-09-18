@@ -36,8 +36,8 @@ def test_control_frescura_muestra_calibre_en_tabla_y_mobile():
 def test_control_frescura_fecha_ok_no_ok_y_fecha_real():
     html = TEMPLATE.read_text(encoding="utf-8")
 
-    assert "<th>Articulo</th><th>Descripcion</th><th>fecvtolote</th><th>Bultos</th><th>Unids</th>" in html
-    assert "<th>fecha OK / No OK</th><th>fecha real</th>" in html
+    assert "<th>Articulo</th><th>Descripcion</th><th>Vencimiento esperado</th><th>Bultos contados</th><th>Unidades contadas</th>" in html
+    assert "<th>¿Coincide la fecha?</th><th>Fecha real (si no coincide)</th>" in html
     assert "function frescuraFechaControlada(idx)" in html
     assert 'data-fr-ok="${idx}"' in html
     assert 'data-fr-real="${idx}"' in html

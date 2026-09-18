@@ -200,11 +200,47 @@ def frescura_diferencias():
             desde=request.args.get("desde"),
             hasta=request.args.get("hasta"),
             responsable=request.args.get("responsable", ""),
+            conteo_id=request.args.get("conteo_id", type=int),
         ))
     except ValueError as exc:
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post('/frescura-sesiones')
+@login_required
+def iniciar_sesion_frescura():
+    from app.services import frescura_control_svc
+    try:
+        return jsonify({'ok': True, 'data': frescura_control_svc.start(request.get_json() or {})})
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+
+
+@bp.put('/frescura-sesiones/<int:session_id>')
+@login_required
+def actualizar_sesion_frescura(session_id):
+    from app.services import frescura_control_svc
+    try:
+        return jsonify({'ok': True, 'data': frescura_control_svc.update(session_id, request.get_json() or {})})
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
+
+
+@bp.get('/frescura-tiempos')
+@login_required
+def tiempos_frescura():
+    from datetime import date
+    from app.services import frescura_control_svc
+    try:
+        today = date.today()
+        return jsonify({'ok': True, **frescura_control_svc.history(
+            request.args.get('desde') or today.replace(day=1).isoformat(),
+            request.args.get('hasta') or today.isoformat(),
+            request.args.get('sucursal', ''), request.args.get('responsable', ''))})
+    except ValueError as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 400
 
 
 @bp.post("/conteos")
@@ -228,8 +264,11 @@ def guardar_conteo():
 def guardar_control_frescura():
     try:
         user = getattr(g, "portal_user", None) or {}
+        payload = request.get_json(force=True) or {}
+        if not payload.get('sesion_id'):
+            raise ValueError('Inicia el control de frescura para registrar su tiempo antes de finalizar')
         data = control_stock_svc.guardar_control_frescura(
-            request.get_json(force=True) or {},
+            payload,
             responsable_default=str(user.get("nombre") or user.get("username") or ""),
         )
         return jsonify({"ok": True, "data": data})
