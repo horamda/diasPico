@@ -192,3 +192,27 @@ def test_servicio_normaliza_numeros_calidad_y_clientes(monkeypatch):
     assert len(cursor.executions) == 2
     assert "LOWER(TRIM(COALESCE(a.tipo_producto" in cursor.executions[0][0]
     assert "LEFT JOIN flota_vehiculos" in cursor.executions[1][0]
+
+
+def test_logistics_key_and_legacy_key_remain_valid(monkeypatch):
+    monkeypatch.setattr(route.svc, "get_logistica_diaria", lambda **_: {
+        "total": 0, "fecha_min": None, "fecha_max": None, "datos": [],
+    })
+    client = _client("legacy-key")
+    client.application.config["LOGISTICS_INTEGRATION_API_KEY"] = "logistics-key"
+    url = "/api/v1/integracion/logistica/diaria?fecha=2026-08-13"
+    for key in ("legacy-key", "logistics-key"):
+        assert client.get(url, headers={"X-API-Key": key}).status_code == 200
+        assert client.get(url, headers={"Authorization": "Bearer " + key}).status_code == 200
+    for key in ("", "wrong-key"):
+        assert client.get(url, headers={"X-API-Key": key}).status_code == 401
+    client.application.config["INTEGRATION_API_KEY"] = None
+    assert client.get(url, headers={"X-API-Key": "logistics-key"}).status_code == 200
+    assert client.get(url, headers={"X-API-Key": "legacy-key"}).status_code == 401
+
+
+def test_logistics_key_loaded_from_environment(monkeypatch):
+    from app.config import AppSettings, Config
+    monkeypatch.setenv("LOGISTICS_INTEGRATION_API_KEY", "environment-test-key")
+    settings = AppSettings(_env_file=None, RAILWAY_URL="postgresql://localhost/test")
+    assert Config(settings).LOGISTICS_INTEGRATION_API_KEY == "environment-test-key"

@@ -68,3 +68,5 @@ La respuesta incluye también `api_version`, `generado_en`, `filtros`, `criterio
 
 Los endpoints diarios anteriores conservan sus respuestas. Este endpoint utiliza
 la fuente `repartos_detalle`, que puede tener una cobertura temporal distinta de ventas.
+
+Autenticacion: se acepta `LOGISTICS_INTEGRATION_API_KEY` y tambien `INTEGRATION_API_KEY` para conservar clientes existentes. Configurar la misma clave logistica en productor y consumidor. Las variables requieren reiniciar/desplegar el servicio.

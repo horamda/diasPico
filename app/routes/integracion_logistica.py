@@ -117,8 +117,12 @@ def _error(message: str, status: int, code: str):
 
 @bp.before_request
 def require_integration_api_key():
-    expected = str(current_app.config.get("INTEGRATION_API_KEY") or "").strip()
-    if not expected:
+    accepted_keys = [
+        str(current_app.config.get(name) or "").strip()
+        for name in ("LOGISTICS_INTEGRATION_API_KEY", "INTEGRATION_API_KEY")
+    ]
+    accepted_keys = [key for key in accepted_keys if key]
+    if not accepted_keys:
         return _error(
             "La integración logística no está habilitada.",
             503,
@@ -128,7 +132,10 @@ def require_integration_api_key():
     auth = str(request.headers.get("Authorization") or "").strip()
     if not provided and auth.lower().startswith("bearer "):
         provided = auth[7:].strip()
-    if not provided or not hmac.compare_digest(provided, expected):
+    # Compare every configured key, retaining compatibility with existing clients.
+    matches = [hmac.compare_digest(provided.encode("utf-8"), key.encode("utf-8"))
+               for key in accepted_keys]
+    if not provided or not any(matches):
         response, status = _error("API key inválida o ausente.", 401, "unauthorized")
         response.headers["WWW-Authenticate"] = "ApiKey"
         return response, status
