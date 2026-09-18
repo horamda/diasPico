@@ -50,7 +50,7 @@ Para integraciones externas, usar estas rutas base:
 
 Para cruzar rechazos por fecha y cliente, consumir `GET /api/v1/integracion/logistica/rechazos/clientes-diario` con API key. Ver [contrato por cliente/día](API_RECHAZOS_CLIENTE_DIA.md). Para resúmenes diarios agregados, consumir `GET /api/rechazos/diario/integracion`, o por separado `GET /api/rechazos/diario/resumen` y `GET /api/rechazos/diario/detalle`.
 
-Para pedidos/comprobantes con cliente, sucursal, fecha de planilla, rutas y estado de entrega,
+Para comprobantes actualizados de ventas con cliente, sucursal, fecha de movimiento, rutas y rechazos,
 consumir `GET /api/v1/integracion/logistica/pedidos` con API key.
 Ver [contrato por pedido](API_PEDIDOS_INTEGRACION.md).
 

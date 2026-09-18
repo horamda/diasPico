@@ -25,18 +25,18 @@ MAX_LIMIT_WITH_CLIENTS = 200
 def pedidos():
     try:
         desde, hasta = _periodo()
+        empresa_id = str(request.args.get('empresa_id', '1')).strip()
         sucursal = str(request.args.get('sucursal', 'TODAS')).strip()
         limit = _parse_int(request.args.get('limit'), 'limit', 200)
         offset = _parse_int(request.args.get('offset'), 'offset', 0)
-        if 'empresa_id' in request.args:
-            raise ValueError('El detalle de repartos no tiene empresa_id; filtrar por sucursal.')
-        if not sucursal or not 1 <= limit <= MAX_LIMIT or offset < 0:
-            raise ValueError('Sucursal requerida; limit entre 1 y 1000; offset mayor o igual a 0.')
+        if not empresa_id or not sucursal or not 1 <= limit <= MAX_LIMIT or offset < 0:
+            raise ValueError('Empresa y sucursal requeridas; limit entre 1 y 1000; offset mayor o igual a 0.')
     except ValueError as exc:
         return _error(str(exc), 400, 'invalid_request')
     try:
         result = integracion_pedidos_svc.get_pedidos(
-            desde=desde, hasta=hasta, sucursal=sucursal, limit=limit, offset=offset)
+            desde=desde, hasta=hasta, sucursal=sucursal, limit=limit, offset=offset,
+            empresa_id=empresa_id)
     except Exception:
         current_app.logger.exception('Error en integración de pedidos')
         return _error('No se pudieron consultar los pedidos.', 500, 'integration_query_failed')
@@ -44,15 +44,19 @@ def pedidos():
     response = jsonify({
         'api_version': 'v1',
         'generado_en': datetime.now(timezone.utc).isoformat(),
-        'filtros': dict(desde=desde.isoformat(), hasta=hasta.isoformat(), sucursal=sucursal),
+        'contrato': 'comprobantes_ventas_v2',
+        'filtros': dict(desde=desde.isoformat(), hasta=hasta.isoformat(), sucursal=sucursal,
+                        empresa_id=empresa_id),
         'cobertura': {'ultima_fecha_disponible': result['ultima_fecha_disponible']},
         'paginacion': dict(limit=limit, offset=offset, devueltos=len(datos), total=total,
                            hay_mas=offset + len(datos) < total),
         'criterios': {
-            'fuente': 'repartos_detalle',
-            'unidad': 'pedido (o comprobante) por sucursal, cliente y fecha de entrega de planilla',
-            'estado': 'derivado de los estados registrados de todas las líneas; no compara cantidades pedidas',
-            'fecha_entrega': 'fecha de entrega de planilla; no acredita por sí sola entrega efectiva',
+            'fuente': 'ventas_detalle',
+            'unidad': 'comprobante por empresa, sucursal, cliente y fecha de movimiento',
+            'alcance': 'mercadería; excluye remitos y comodatos',
+            'estado': 'rechazo inferido de cantidades y marca rechazo_total; sin rechazo no confirma entrega completa',
+            'fecha_filtro': 'ventas_detalle.fecha (movimiento)',
+            'fecha_entrega': 'no disponible en esta fuente; se devuelve null',
             'vinculo_foxtrot': 'referencias de origen para cruce; no es un ID externo confirmado',
             'ausencia': 'sin fila significa sin datos',
         },
