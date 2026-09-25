@@ -1518,6 +1518,25 @@ def reporte_costos_atencion():
         return _err(e, 500)
 
 
+@bp.get('/reporte/costos-km')
+def reporte_costos_km():
+    from flask import session
+    from app.services import pdv_km_cost_svc
+    if not session.get('portal_user_id'):
+        return _err('Iniciá sesión para consultar costos por km.', 401)
+    try:
+        return _ok(pdv_km_cost_svc.report(
+            rate=request.args.get('tarifa', '2500'),
+            sucursal=request.args.get('sucursal', ''),
+            cluster=request.args.get('cluster', ''),
+        ))
+    except ValueError as exc:
+        return _err(str(exc), 400)
+    except Exception:
+        current_app.logger.exception('No se pudo consultar el costo por km de Reparto')
+        return _err('No se pudieron obtener las distancias de Reparto. Revisá la conexión e intentá nuevamente.', 503)
+
+
 @bp.get('/reporte/costos-atencion/export')
 def reporte_costos_atencion_export():
     """Exporta el analisis de costo por PDV en Excel, respetando filtros principales."""

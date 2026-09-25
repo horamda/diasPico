@@ -497,39 +497,65 @@ Uso en el modulo:
 
 El subdriver Delivery es prioritario para logistica porque refleja entrega, cumplimiento, completitud y experiencia de recepcion.
 
-## 12. Costo de atender un cliente
+## 12. Costo estimado y prioridad de revision
 
-El reporte de costos de atencion identifica clientes costosos y explica el motivo.
+Version de metodologia: `volumen_senales_v2`.
 
-Endpoint:
+Endpoint: `GET /api/segmentacion/reporte/costos-atencion`.
 
-- `GET /api/segmentacion/reporte/costos-atencion`
+El importe es una estimacion por volumen: `HL vendidos * (costo_entrega_hl + costo_almacen_hl)`.
+No representa gasto real individual, costo por visita ni rentabilidad. La venta menos logistica
+no descuenta el costo de mercaderia ni otros gastos. El autoelevador es informativo en este reporte;
+no aplica el multiplicador de las vistas de simulacion operativa.
 
-Criterios considerados:
+### Tres preguntas separadas
 
-- ratio de costo logistico alto
-- margen logistico proxy negativo
-- bajo dropsize
-- alto porcentaje de rechazo HL
-- baja venta con alta complejidad operativa
-- cliente sin autoelevador cuando el volumen o frecuencia lo justifican
-- RMD, OTIF o NPS bajos
+- Mayor gasto estimado: maximo costo total. Puede reflejar mayor volumen.
+- Mayor costo por dia con ventas: costo total / fechas distintas con ventas por cliente.
+  Los campos historicos `pedidos_ytd`, `pedidos_gm` y `costo_por_pedido` conservan sus nombres
+  en la API por compatibilidad; no acreditan pedidos individuales, visitas ni entregas.
+- Mayor costo sobre venta: costo total / venta * 100. Una base de venta pequena puede distorsionarlo.
 
-El reporte devuelve:
+Los destacados se calculan sobre todos los clientes con venta y costo positivos de la sucursal
+ y cluster seleccionados, antes del minimo de venta y del limite del ranking. Desempates por
+codigo de cliente y sucursal. La busqueda de texto filtra las filas recibidas, no los destacados
+ni los totales del ranking. El ranking de pantalla conserva su limite de 80 filas.
 
-- ranking principal de clientes costosos
-- motivo principal
-- explicacion operativa
-- score de costo
-- recomendacion
-- resumen por cluster/sucursal
-- excluidos por baja venta con margen logistico proxy negativo
+### Senales de revision, de 0 a 3
 
-Regla de excluidos:
+Cada condicion suma exactamente una senal:
 
-- Los clientes con baja venta y margen logistico proxy negativo pueden quedar fuera del ranking principal para no mezclar segmentos incomparables.
-- Deben mostrarse debajo del reporte como alerta separada.
-- El texto obligatorio es: "Clientes excluidos del ranking principal por baja venta, pero con margen logistico proxy negativo".
+1. Costo/venta igual o mayor al p75 positivo, o superior al 100%.
+2. Rechazo de dias igual o mayor a `max(p75_rechazo, 10%)`, o rechazo HL igual o mayor
+   a `max(p75_rechazo_hl, 3%)`. Ambas condiciones juntas siguen contando una sola senal.
+3. Dias con ventas iguales o mayores al p75 positivo y bultos/dia positivos iguales o
+   menores al p25 positivo. Es una senal de ventas fragmentadas; validar visitas reales.
+
+El campo `indice_costo_servicio` ahora contiene este conteo (0-3), no el indice anterior
+(0-100). Se ordena por senales descendentes, costo/venta descendente y codigo/sucursal.
+No suma puntos por gasto total, costo por dia ni autoelevador. Los percentiles corresponden
+a todos los evaluados dentro de los filtros, antes del corte por venta minima.
+
+La segmentacion usa costo/venta (alto desde p75 o sobre 100%, medio desde p50, bajo debajo),
+con precedencia para rechazos altos. Las etiquetas historicas se conservan en la API.
+No determina rentabilidad ni demuestra ineficiencia.
+
+Por defecto se separan ventas inferiores al p25; `min_venta` puede reemplazar el corte y
+`incluir_outliers` lo desactiva. Los excluidos con venta menos logistica negativa se mantienen
+como alerta separada. Los destacados siempre incluyen baja venta.
+
+El promedio de costo por dia del ranking es ponderado: suma de costos / suma de dias,
+considerando solo clientes con dias positivos. Si no hay denominador valido es nulo.
+El costo/venta agregado tambien usa sumas, no un promedio simple de porcentajes.
+Pantalla y Excel incluyen las definiciones y las limitaciones.
+
+### Siguiente modelo: visitas y gastos reales
+
+Requiere completar repartos para el mismo periodo del analisis, validar las visitas efectivas
+(incluidos intentos fallidos) e incorporar gastos de distribucion y almacen por periodo y sucursal.
+Separar gastos por parada, movimiento de mercaderia y adicionales comprobados; asignar cada gasto
+una sola vez y conciliar el total distribuido. No monetizar rechazos ni multiplicar por falta de
+autoelevador sin tarifas o tiempos medidos. Este modelo aun no esta implementado.
 
 ## 13. Plan de servicio logistico
 

@@ -120,6 +120,11 @@ def test_postgres_comprobantes_actualizados_y_aislamiento(monkeypatch):
         assert partial['numero_pedido'] is None
         assert partial['fecha_entrega'] is None
         assert partial['fecha_movimiento'] == '2026-09-17'
+        for field in ('fecha_comprobante', 'fecha_entrega_planificada', 'fecha_entrega_real'):
+            assert field in partial
+            assert partial[field] is None
+            assert partial['fuentes_fechas'][field] is None
+        assert partial['fuentes_fechas']['fecha_movimiento'] == 'ventas_detalle.fecha'
         assert partial['vinculo_foxtrot']['rutas_venta'] == ['R1']
         assert partial['estado_entrega_inferido'] is True
         assert partial['tiene_rechazo_computable'] is False  # physical rejection still present

@@ -4701,6 +4701,97 @@ def export_clientes_excel(
     return bio, filename, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 
 
+_COST_METHODOLOGY = {
+    'version': 'volumen_senales_v2',
+    'modelo': 'Costo estimado por volumen',
+    'formula': 'HL vendidos x (tarifa de entrega por HL + tarifa de almacen por HL)',
+    'unidad_frecuencia': 'Dias con ventas por cliente; no visitas ni entregas confirmadas',
+    'prioridad': (
+        '0 a 3 senales, una por condicion: costo/venta sobre p75 o costo mayor que venta; '
+        'rechazos sobre el mayor entre p75 y 10% de dias o 3% de HL; '
+        'dias con ventas sobre p75 y bultos/dia bajo p25. '
+        'No suma puntos por gasto total, costo por dia ni autoelevador.'
+    ),
+    'limite': 'No mide costo real por visita ni rentabilidad; no incluye costo de mercaderia.',
+}
+
+
+def _cost_attention_assessment(row: dict, thresholds: dict) -> dict:
+    """Three independent review signals, never a penalty for customer size."""
+    def value(key):
+        return float(row.get(key) or 0)
+
+    def threshold(key):
+        return float(thresholds.get(key) or 0)
+
+    ratio = value('ratio_costo_logistico_pct')
+    high_ratio = (threshold('p75_ratio') > 0 and ratio >= threshold('p75_ratio')) or ratio > 100
+    high_rejection = (
+        value('pct_rechazo_pedidos') >= max(threshold('p75_rechazo'), 10)
+        or value('pct_rechazo_hl') >= max(threshold('p75_rechazo_hl'), 3)
+    )
+    fragmented = (
+        threshold('p75_pedidos') > 0 and value('pedidos_ytd') >= threshold('p75_pedidos')
+        and threshold('p25_dropsize') > 0
+        and row.get('dropsize_bultos_ytd') is not None
+        and 0 < value('dropsize_bultos_ytd') <= threshold('p25_dropsize')
+    )
+    reasons = []
+    if high_ratio:
+        reasons.append(f"Costo estimado / venta: {ratio:.2f}% (p75: {threshold('p75_ratio'):.2f}%).")
+    if high_rejection:
+        reasons.append(
+            f"Rechazos: {value('pct_rechazo_pedidos'):.2f}% de dias con ventas y "
+            f"{value('pct_rechazo_hl'):.2f}% de HL; umbrales: "
+            f"{max(threshold('p75_rechazo'), 10):.2f}% y {max(threshold('p75_rechazo_hl'), 3):.2f}%."
+        )
+    if fragmented:
+        reasons.append(
+            f"Ventas fragmentadas: {value('pedidos_ytd'):.0f} dias (p75: {threshold('p75_pedidos'):.0f}) "
+            f"y {value('dropsize_bultos_ytd'):.2f} bultos/dia (p25: {threshold('p25_dropsize'):.2f}). "
+            'Validar visitas antes de cambiar frecuencia.'
+        )
+    label = 'Bajo costo'
+    if high_rejection:
+        label = 'Rechazadores'
+    elif high_ratio:
+        label = 'Alto costo'
+    elif threshold('p50_ratio') > 0 and ratio >= threshold('p50_ratio'):
+        label = 'Medio costo'
+    return {
+        # Preserve API keys; v2 counts signals (0-3), not a monetary cost or probability.
+        'indice_costo_servicio': len(reasons),
+        'segmentacion_costo_pdv': label,
+        'motivo_principal': (
+            'Costo estimado superior a la venta' if ratio > 100 else
+            'Costo relativo alto' if high_ratio else
+            'Rechazo operativo alto' if high_rejection else
+            'Ventas fragmentadas' if fragmented else 'Sin senales destacadas'
+        ),
+        'motivos': reasons,
+        'explicacion': ' '.join(reasons) or 'Sin senales destacadas; no acredita eficiencia real de entrega.',
+    }
+
+
+def _cost_report_leaders(rows: list[dict]) -> dict:
+    """Leaders across the population, before the review ranking's cutoff/limit."""
+    leaders = {}
+    for key, field in (
+        ('gasto_total', 'costo_logistico_total'),
+        ('costo_dia', 'costo_por_pedido'),
+        ('costo_venta', 'ratio_costo_logistico_pct'),
+    ):
+        candidates = [row for row in rows if row.get(field) is not None
+                      and (key != 'costo_dia' or float(row.get('pedidos_ytd') or 0) > 0)]
+        if candidates:
+            row = min(candidates, key=lambda r: (-float(r[field]), str(r.get('cliente')), str(r.get('sucursal'))))
+            leaders[key] = {name: row.get(name) for name in (
+                'cliente', 'descripcion_cliente', 'sucursal', 'venta_ytd', 'hl_ytd',
+                'pedidos_ytd', 'costo_logistico_total', 'costo_por_pedido', 'ratio_costo_logistico_pct',
+            )}
+    return leaders
+
+
 def get_reporte_costos_atencion(
     sucursal: str | None = None,
     cluster: str | None = None,
@@ -4735,7 +4826,7 @@ def get_reporte_costos_atencion(
                     CASE WHEN SUM(venta_ytd) > 0
                          THEN ROUND((SUM(costo_logistico_total) / SUM(venta_ytd) * 100)::NUMERIC,2)
                          ELSE 0 END AS ratio_prom_evaluado,
-                    ROUND((AVG(costo_logistico_total / NULLIF(pedidos_ytd,0)) FILTER (WHERE COALESCE(pedidos_ytd,0) > 0))::NUMERIC,2) AS costo_pdv_prom_evaluado,
+                    ROUND(((SUM(costo_logistico_total) FILTER (WHERE pedidos_ytd > 0)) / NULLIF(SUM(pedidos_ytd) FILTER (WHERE pedidos_ytd > 0),0))::NUMERIC,2) AS costo_pdv_prom_evaluado,
                     percentile_cont(0.50) WITHIN GROUP (ORDER BY ratio_costo_logistico_pct) AS p50_ratio,
                     percentile_cont(0.75) WITHIN GROUP (ORDER BY ratio_costo_logistico_pct) AS p75_ratio,
                     percentile_cont(0.50) WITHIN GROUP (ORDER BY (costo_logistico_total / NULLIF(pedidos_ytd,0))) FILTER (WHERE COALESCE(pedidos_ytd,0) > 0) AS p50_costo_pdv,
@@ -4757,6 +4848,8 @@ def get_reporte_costos_atencion(
             if not int(umbrales.get('clientes_evaluados') or 0):
                 return {
                     'items': [],
+                    'destacados': {},
+                    'metodologia': dict(_COST_METHODOLOGY),
                     'resumen': {
                         'clientes_evaluados': 0,
                         'clientes_en_reporte': 0,
@@ -4768,24 +4861,8 @@ def get_reporte_costos_atencion(
             effective_min_venta = None if incluir_outliers else (
                 min_venta if min_venta is not None else umbrales.get('p25_venta')
             )
-            data_params = {
-                **params,
-                'lim': limit,
-                'min_venta': effective_min_venta,
-                'p50_ratio': umbrales.get('p50_ratio') or 0,
-                'p75_ratio': umbrales.get('p75_ratio') or 0,
-                'p50_costo_pdv': umbrales.get('p50_costo_pdv') or 0,
-                'p75_costo_pdv': umbrales.get('p75_costo_pdv') or 0,
-                'p25_dropsize': umbrales.get('p25_dropsize') or 0,
-                'p50_dropsize': umbrales.get('p50_dropsize') or 0,
-                'p75_pedidos': umbrales.get('p75_pedidos') or 0,
-                'p75_rechazo': umbrales.get('p75_rechazo') or 0,
-                'p75_rechazo_hl': umbrales.get('p75_rechazo_hl') or 0,
-                'p75_costo': umbrales.get('p75_costo') or 0,
-            }
+            # Fetch the full population: leaders must not depend on the ranking limit.
             data_where = where
-            if effective_min_venta is not None:
-                data_where += ' AND venta_ytd >= %(min_venta)s'
 
             cur.execute(
                 f"""
@@ -4871,82 +4948,29 @@ def get_reporte_costos_atencion(
                         b.hl_rechazado_ytd, b.score_total,
                         ROUND((b.costo_logistico_total / NULLIF(b.pedidos_ytd,0))::NUMERIC,2) AS costo_por_pedido,
                         ROUND((b.venta_ytd / NULLIF(b.pedidos_ytd,0))::NUMERIC,2) AS venta_por_pedido,
-                        ROUND((b.costo_logistico_total / NULLIF(b.hl_ytd,0))::NUMERIC,2) AS costo_por_hl,
-                        CASE
-                            WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
-                              OR COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazadores'
-                            WHEN COALESCE(b.margen_logistico_proxy,0) < 0
-                              OR COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s
-                              OR (%(p75_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s)
-                              OR COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 'Alto costo'
-                            WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p50_ratio)s
-                              OR (%(p50_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p50_costo_pdv)s)
-                              OR (COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s) THEN 'Medio costo'
-                            ELSE 'Bajo costo'
-                        END AS segmentacion_costo_pdv,
-                        CASE
-                            WHEN COALESCE(b.margen_logistico_proxy,0) < 0 THEN 'Margen logistico negativo'
-                            WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s THEN 'Costo relativo alto'
-                            WHEN %(p75_costo_pdv)s > 0
-                             AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s THEN 'Costo por PDV alto'
-                            WHEN COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s
-                             AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s THEN 'Muchas entregas de bajo drop size'
-                            WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
-                              OR COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3) THEN 'Rechazo operativo alto'
-                            WHEN COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 'Costo absoluto alto'
-                            ELSE 'Costo logistico relevante'
-                        END AS motivo_principal,
-                        ARRAY_REMOVE(ARRAY[
-                            CASE WHEN COALESCE(b.ratio_costo_logistico_pct,0) >= %(p75_ratio)s
-                                THEN 'Costo sobre venta alto: ' || ROUND(b.ratio_costo_logistico_pct::NUMERIC,2) || ' %% vs p75 ' || ROUND(%(p75_ratio)s::NUMERIC,2) || ' %%' END,
-                            CASE WHEN COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s
-                                THEN 'Costo absoluto por encima del p75: $' || ROUND(b.costo_logistico_total::NUMERIC,0) || ' vs $' || ROUND(%(p75_costo)s::NUMERIC,0) END,
-                            CASE WHEN %(p75_costo_pdv)s > 0
-                              AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s
-                                THEN 'Costo por PDV alto: $' || ROUND((b.costo_logistico_total / NULLIF(b.pedidos_ytd,0))::NUMERIC,0) || ' vs p75 $' || ROUND(%(p75_costo_pdv)s::NUMERIC,0) END,
-                            CASE WHEN COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s
-                                THEN 'Drop size bajo: ' || ROUND(b.dropsize_bultos_ytd::NUMERIC,2) || ' bultos/pedido vs p25 ' || ROUND(%(p25_dropsize)s::NUMERIC,2) END,
-                            CASE WHEN COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s
-                                THEN 'Frecuencia alta con poco volumen: ' || b.pedidos_ytd || ' pedidos y drop size ' || ROUND(b.dropsize_bultos_ytd::NUMERIC,2) END,
-                            CASE WHEN COALESCE(b.pct_rechazo_pedidos,0) >= GREATEST(%(p75_rechazo)s, 10)
-                                THEN 'Rechazo alto: ' || ROUND(b.pct_rechazo_pedidos::NUMERIC,2) || ' %% de pedidos' END,
-                            CASE WHEN COALESCE(b.pct_rechazo_hl,0) >= GREATEST(%(p75_rechazo_hl)s, 3)
-                                THEN 'Rechazo HL alto: ' || ROUND(b.pct_rechazo_hl::NUMERIC,2) || ' %% HL (' || ROUND(COALESCE(b.hl_rechazado_ytd,0)::NUMERIC,2) || ' HL rechazados)' END,
-                            CASE WHEN COALESCE(b.margen_logistico_proxy,0) < 0
-                                THEN 'Margen logistico proxy negativo: $' || ROUND(b.margen_logistico_proxy::NUMERIC,0) END
-                        ], NULL) AS motivos,
-                        ROUND(LEAST(100,
-                            CASE WHEN %(p75_ratio)s > 0
-                                THEN LEAST(35, COALESCE(b.ratio_costo_logistico_pct,0) / %(p75_ratio)s * 28)
-                                ELSE 0 END
-                            + CASE WHEN %(p75_costo)s > 0 AND COALESCE(b.costo_logistico_total,0) >= %(p75_costo)s THEN 10 ELSE 0 END
-                            + CASE WHEN %(p75_costo_pdv)s > 0 AND COALESCE(b.costo_logistico_total / NULLIF(b.pedidos_ytd,0),0) >= %(p75_costo_pdv)s THEN 12 ELSE 0 END
-                            + CASE WHEN %(p25_dropsize)s > 0 AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p25_dropsize)s THEN 20 ELSE 0 END
-                            + CASE WHEN %(p75_pedidos)s > 0 AND COALESCE(b.pedidos_ytd,0) >= %(p75_pedidos)s AND COALESCE(b.dropsize_bultos_ytd,0) <= %(p50_dropsize)s THEN 15 ELSE 0 END
-                            + CASE WHEN COALESCE(b.pct_rechazo_pedidos,0) >= 20 THEN 15 WHEN COALESCE(b.pct_rechazo_pedidos,0) >= 10 THEN 8 ELSE 0 END
-                            + CASE WHEN COALESCE(b.pct_rechazo_hl,0) >= 5 THEN 10 WHEN COALESCE(b.pct_rechazo_hl,0) >= 3 THEN 5 ELSE 0 END
-                            + CASE WHEN COALESCE(b.margen_logistico_proxy,0) < 0 THEN 15 ELSE 0 END
-                        )::NUMERIC,2) AS indice_costo_servicio
+                        ROUND((b.costo_logistico_total / NULLIF(b.hl_ytd,0))::NUMERIC,2) AS costo_por_hl
                     FROM base b
                     LEFT JOIN canales ch ON ch.cliente = b.cliente AND ch.sucursal = b.sucursal
                     LEFT JOIN clientes cli
                       ON cli.cliente = b.cliente
                      AND COALESCE(NULLIF(TRIM(cli.sucursal),''), b.sucursal) = b.sucursal
                 )
-                SELECT *,
-                       CASE WHEN ARRAY_LENGTH(motivos, 1) > 0
-                            THEN ARRAY_TO_STRING(motivos, '; ')
-                            ELSE 'El costo es relevante por su combinacion de costo total, venta y volumen atendido.'
-                       END AS explicacion
-                FROM evaluado
-                ORDER BY indice_costo_servicio DESC NULLS LAST,
-                         ratio_costo_logistico_pct DESC NULLS LAST,
-                         costo_logistico_total DESC NULLS LAST
-                LIMIT %(lim)s
+                SELECT * FROM evaluado
                 """,
-                data_params,
+                params,
             )
-            rows = _dict_rows(cur)
+            population = _dict_rows(cur)
+            destacados = _cost_report_leaders(population)
+            eligible = [row for row in population if effective_min_venta is None
+                        or float(row.get('venta_ytd') or 0) >= float(effective_min_venta)]
+            for row in eligible:
+                row.update(_cost_attention_assessment(row, umbrales))
+            eligible.sort(key=lambda row: (
+                -row['indice_costo_servicio'],
+                -float(row.get('ratio_costo_logistico_pct') or 0),
+                str(row.get('cliente')), str(row.get('sucursal')),
+            ))
+            rows = eligible[:limit]
             segmentacion_costo = {
                 'Bajo costo': 0,
                 'Medio costo': 0,
@@ -5037,33 +5061,34 @@ def get_reporte_costos_atencion(
     costo_reportado = sum(float(r.get('costo_logistico_total') or 0) for r in rows)
     costo_entrega_reportado = sum(float(r.get('costo_entrega') or 0) for r in rows)
     costo_almacen_reportado = sum(float(r.get('costo_almacen') or 0) for r in rows)
-    costo_pdv_values: list[float] = []
-    for row in rows:
-        costo_pdv = float(row.get('costo_por_pedido') or 0)
-        if costo_pdv > 0:
-            costo_pdv_values.append(costo_pdv)
+    rows_with_days = [r for r in rows if float(r.get('pedidos_ytd') or 0) > 0]
+    total_days = sum(float(r['pedidos_ytd']) for r in rows_with_days)
+    cost_with_days = sum(float(r.get('costo_logistico_total') or 0) for r in rows_with_days)
     venta_reportada = sum(float(r.get('venta_ytd') or 0) for r in rows)
     umbrales['min_venta_efectiva'] = effective_min_venta
     return {
         'items': rows,
+        'destacados': destacados,
+        'metodologia': dict(_COST_METHODOLOGY),
         'resumen': {
             'clientes_evaluados': int(umbrales.get('clientes_evaluados') or 0),
             'clientes_en_reporte': len(rows),
+            'clientes_elegibles': len(eligible),
             'costo_total_evaluado': umbrales.get('costo_total_evaluado'),
             'venta_total_evaluada': umbrales.get('venta_total_evaluada'),
             'ratio_prom_evaluado': umbrales.get('ratio_prom_evaluado'),
             'costo_total_reportado': round(costo_reportado, 2),
             'costo_entrega_reportado': round(costo_entrega_reportado, 2),
             'costo_almacen_reportado': round(costo_almacen_reportado, 2),
-            'costo_por_pdv_promedio_reportado': round(sum(costo_pdv_values) / len(costo_pdv_values), 2) if costo_pdv_values else 0,
+            'costo_por_pdv_promedio_reportado': round(cost_with_days / total_days, 2) if total_days else None,
             'venta_total_reportada': round(venta_reportada, 2),
             'ratio_reportado': round((costo_reportado / venta_reportada * 100), 2) if venta_reportada else 0,
             'segmentacion_costo': segmentacion_costo,
             'excluidos_margen_negativo': excluidos_resumen,
             'criterio': (
                 'Incluye todos los clientes con venta y costo logistico'
-                if incluir_outliers
-                else 'Excluye baja venta por debajo del p25 para evitar outliers'
+                if effective_min_venta is None
+                else f'Ranking: venta minima {float(effective_min_venta):.2f}; destacados: todos los evaluados'
             ),
         },
         'umbrales': umbrales,
@@ -5091,6 +5116,10 @@ def _cost_export_rows(rows: list[dict], query: str = '') -> list[list[Any]]:
     data: list[list[Any]] = []
     for row in filtered:
         enriched = dict(row)
+        enriched['segmentacion_costo_pdv'] = {
+            'Alto costo': 'Costo/venta alto', 'Medio costo': 'Costo/venta medio',
+            'Bajo costo': 'Costo/venta bajo', 'Rechazadores': 'Rechazos altos',
+        }.get(enriched.get('segmentacion_costo_pdv'), enriched.get('segmentacion_costo_pdv'))
         motivos = enriched.get('motivos')
         enriched['motivos_texto'] = '; '.join(str(item) for item in motivos) if isinstance(motivos, list) else motivos
         data.append([enriched.get(field) for field in _COST_REPORT_EXPORT_FIELDS])
@@ -5149,11 +5178,32 @@ def export_costos_atencion_excel(
         ('excluidos_venta_total', (resumen.get('excluidos_margen_negativo') or {}).get('venta_total')),
         ('excluidos_costo_total', (resumen.get('excluidos_margen_negativo') or {}).get('costo_total')),
         ('excluidos_margen_proxy_total', (resumen.get('excluidos_margen_negativo') or {}).get('margen_logistico_proxy_total')),
+        ('modelo', (report.get('metodologia') or _COST_METHODOLOGY)['modelo']),
+        ('formula', (report.get('metodologia') or _COST_METHODOLOGY)['formula']),
+        ('unidad_frecuencia', _COST_METHODOLOGY['unidad_frecuencia']),
+        ('senales_revision', _COST_METHODOLOGY['prioridad']),
+        ('limitaciones', _COST_METHODOLOGY['limite']),
+        ('alcance_resumen', 'Ranking antes de busqueda de texto. Destacados: todos los evaluados, incluso baja venta.'),
+        *[(f'destacado_{key}',
+           f"{row.get('cliente')} - {row.get('descripcion_cliente')} | sucursal {row.get('sucursal')} | "
+           f"costo total {row.get('costo_logistico_total')} | costo/dia {row.get('costo_por_pedido')} | "
+           f"costo/venta {row.get('ratio_costo_logistico_pct')}%")
+          for key, row in (report.get('destacados') or {}).items()],
     ])
 
-    headers = [_label(field) for field in _COST_REPORT_EXPORT_FIELDS]
+    cost_labels = {
+        'indice_costo_servicio': 'Senales de revision (0-3)',
+        'pedidos_gm': 'Dias con ventas', 'pedidos_ytd': 'Dias con ventas (base)',
+        'costo_por_pedido': 'Costo estimado por dia con ventas',
+        'dropsize_bultos_ytd': 'Bultos por dia con ventas',
+        'costo_logistico_total': 'Costo estimado por volumen',
+        'rentabilidad_entrega': 'Venta menos distribucion estimada',
+        'margen_logistico_proxy': 'Venta menos logistica estimada',
+        'pct_rechazo_pedidos': 'Dias con rechazo (%)',
+    }
+    headers = [cost_labels.get(field, _label(field)) for field in _COST_REPORT_EXPORT_FIELDS]
     ws_rank = wb.create_sheet('PDV costosos')
-    _append_table(ws_rank, 'Ranking de PDV costosos de entregar', headers, rows)
+    _append_table(ws_rank, 'Clientes para revisar: senales operativas y costo estimado por volumen', headers, rows)
     ws_rank.freeze_panes = 'A4'
     ws_rank.auto_filter.ref = f'A3:{get_column_letter(len(headers))}{max(3, len(rows) + 3)}'
     for idx, field in enumerate(_COST_REPORT_EXPORT_FIELDS, start=1):

@@ -56,6 +56,7 @@ def pedidos():
             'alcance': 'mercadería; excluye remitos y comodatos',
             'estado': 'rechazo inferido de cantidades y marca rechazo_total; sin rechazo no confirma entrega completa',
             'fecha_filtro': 'ventas_detalle.fecha (movimiento)',
+            'fechas': 'movimiento, comprobante, entrega planificada y entrega real; null cuando no existe fuente independiente',
             'fecha_entrega': 'no disponible en esta fuente; se devuelve null',
             'vinculo_foxtrot': 'referencias de origen para cruce; no es un ID externo confirmado',
             'ausencia': 'sin fila significa sin datos',

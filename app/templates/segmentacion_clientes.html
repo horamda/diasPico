@@ -873,6 +873,20 @@
       gap: 10px;
     }
 
+    .metric-grid.cost-leaders { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .cost-leaders .metric-detail { max-width: none; }
+    .cost-caption { margin: 8px 0; color: var(--muted); font-size: 12px; }
+    .cost-secondary { margin-top: 8px; }
+    #view-costs summary, #view-cost-pdv summary { cursor: pointer; font-weight: 700; }
+    #view-costs summary:focus-visible, #view-cost-pdv summary:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 4px;
+    }
+
+    @media (max-width: 900px) {
+      .metric-grid.cost-leaders { grid-template-columns: 1fr; }
+    }
+
     .metric {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -1530,8 +1544,13 @@
             <div class="panel-meta" id="costReportMeta"></div>
           </div>
           <div class="panel-body">
-            <div class="metric-grid" id="costSummary"></div>
+            <div id="costOverview"></div>
+            <details class="note cost-secondary">
+              <summary>Ver indicadores y umbrales del ranking</summary>
+              <div class="metric-grid" id="costSummary" style="margin-top:12px"></div>
+            </details>
           </div>
+          <div class="panel-head"><div class="panel-title">Clientes para revisar</div><div class="panel-meta">Ordenados por senales y luego por costo/venta</div></div>
           <div class="table-wrap" id="costReportTable"></div>
           <div class="panel-body" id="costExcludedNote"></div>
           <div class="table-wrap" id="costExcludedTable"></div>
@@ -1539,6 +1558,23 @@
       </section>
 
       <section class="view" id="view-cost-pdv">
+        <article class="panel" style="margin-bottom:18px">
+          <div class="panel-head"><div class="panel-title">Costo de atención por kilómetros</div></div>
+          <div class="panel-body">
+            <form id="pdvKmForm" class="period-actions" style="flex-wrap:wrap">
+              <label for="pdvKmRate">Costo por km · todos los gastos incluidos</label>
+              <input id="pdvKmRate" type="number" min="0.01" max="100000000" step="0.01" value="2500" required style="max-width:170px">
+              <button type="submit" class="btn" id="pdvKmApply">Calcular / actualizar</button>
+              <button type="button" class="btn" id="pdvKmExport" disabled>Exportar costos CSV</button>
+            </form>
+            <p class="cost-caption">Tramo hasta el cliente + parte proporcional del regreso al depósito, multiplicados por la tarifa.
+              Incluye combustible, personal y vehículo. No se agregan otros gastos.</p>
+            <p id="pdvKmStatus" role="status" aria-live="polite"></p>
+            <div id="pdvKmSummary" class="metric-grid"></div>
+          </div>
+          <div id="pdvKmTable" class="table-wrap"></div>
+          <div id="pdvKmPager" class="panel-body period-actions" style="flex-wrap:wrap"></div>
+        </article>
         <article class="panel">
           <div class="panel-head">
             <div>
@@ -1553,20 +1589,17 @@
             </div>
           </div>
           <div class="panel-body">
-            <div class="note">
-              <strong>Criterio del analisis</strong><br>
-              El sistema identifica que PDV es mas costoso de entregar cruzando costo logistico, costo de entrega,
-              rentabilidad proxy, frecuencia de pedidos, drop size, rechazos y autoelevador. Sirve como evidencia
-              para ajustar prioridades de ruteo y plan de servicio junto con la clusterizacion.
-            </div>
-            <div class="note" style="margin-top:12px">
-              <strong>Evidencia por periodo</strong><br>
+            <div id="costPdvOverview"></div>
+            <details class="note cost-secondary">
+              <summary>Ver indicadores y evidencia por periodo</summary>
+              <div class="metric-grid" id="costPdvSummary" style="margin-top:12px"></div>
+              <p><strong>Evidencia por periodo</strong><br>
               Para sacar dos periodos: entrar en Parametros, cargar Desde/Hasta actual y Desde/Hasta base,
               usar Guardar y recalcular, exportar la evidencia, y repetir con el segundo periodo. La solapa
-              Evolucion conserva la auditoria mensual de las corridas.
-            </div>
-            <div class="metric-grid" id="costPdvSummary" style="margin-top:12px"></div>
+              Evolucion conserva la auditoria mensual de las corridas.</p>
+            </details>
           </div>
+          <div class="panel-head"><div class="panel-title">Clientes para revisar</div><div class="panel-meta">Ordenados por senales y luego por costo/venta</div></div>
           <div class="table-wrap" id="costPdvTable"></div>
           <div class="panel-body" id="costPdvExcludedNote"></div>
           <div class="table-wrap" id="costPdvExcludedTable"></div>
@@ -1891,6 +1924,15 @@
     const FULL_PLAN_LIMIT = 50000;
     const CLIENT_PAGE_SIZE = 500;
     const HELP_TEXT = {
+      "Senales (0-3)": "Una por condicion: costo/venta alto, rechazos altos y ventas fragmentadas. Sin penalizar gasto total ni compras grandes.",
+      "Dias con rechazo": "Dias con rechazo / dias con ventas. La segunda linea muestra rechazo en HL.",
+      "Dias con ventas": "Fechas distintas con ventas por cliente. No son visitas ni entregas confirmadas.",
+      "Bultos / dia": "Bultos vendidos / dias con ventas. No acredita volumen por visita.",
+      "Costo estimado": "HL vendidos x (tarifa de entrega/HL + tarifa de almacen/HL). No es gasto real individual.",
+      "Venta menos logistica": "Venta menos costo logistico estimado. No descuenta mercaderia ni otros gastos; no es rentabilidad.",
+      "Venta menos distribucion": "Venta menos costo estimado de distribucion. No descuenta almacen, mercaderia ni otros gastos.",
+      "Costo / dia ponderado": "Suma de costos / suma de dias con ventas del ranking, solo clientes con dias positivos. No es promedio simple por cliente.",
+      "P75 costo/dia": "Percentil 75 del costo estimado por dia con ventas; no genera una senal de ineficiencia.",
       "Cliente": "Codigo y razon social del cliente. Se usa como llave para unir ventas, servicio, NPS, RMD, OTIF y atributos.",
       "Clientes": "Cantidad de clientes activos dentro de los filtros actuales. Excluye anulados y rutas temporales.",
       "Clientes activos": "Cantidad de clientes activos DPO en la localidad o sucursal filtrada.",
@@ -1914,10 +1956,10 @@
       "Bultos": "Bultos vendidos en el periodo actual.",
       "Bultos totales": "Bultos totales vendidos/entregados al PDV en el periodo actual.",
       "Pallets": "Pallets estimados/vendidos segun conversion de articulos.",
-      "Pedidos": "Cantidad de pedidos del periodo actual.",
-      "Pedidos GM": "Cantidad de pedidos del periodo actual usados como visitas/entregas al PDV.",
-      "Drop": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
-      "Drop size": "Volumen promedio por pedido. Formula: bultos_ytd / pedidos_ytd.",
+      "Pedidos": "Dias distintos con ventas por cliente en este calculo; no acredita entregas.",
+      "Pedidos GM": "Dias distintos con ventas por cliente. No equivale a visitas ni entregas confirmadas.",
+      "Drop": "Bultos promedio por dia con ventas; no por visita real. Formula: bultos_ytd / pedidos_ytd.",
+      "Drop size": "Bultos promedio por dia con ventas; no por visita real. Formula: bultos_ytd / pedidos_ytd.",
       "P25 drop size": "Percentil 25 del drop size. Los clientes por debajo tienen entregas pequenas y suelen ser mas caros de atender.",
       "Canal": "Canal principal del cliente tomado de ventas del periodo; si no existe, usa subcanal del maestro de clientes.",
       "Subcanal": "Subcanal del maestro de clientes. Sirve para comparar costo por tipo de negocio.",
@@ -1931,23 +1973,23 @@
       "Costo logistico": "Costo total logistico. Formula: (HL * costo_entrega_hl) + (HL * costo_almacen_hl).",
       "Costo total": "Costo logistico total del PDV. Formula: costo_entrega + costo_almacen.",
       "Costo total entrega": "Costo directo de entrega del PDV. Formula: HL YTD * costo_entrega_hl parametrizado.",
-      "Costo / PDV": "Costo logistico promedio por entrega/pedido al PDV. Formula: costo_logistico_total / pedidos_ytd.",
-      "Costo / pedido": "Costo logistico promedio por entrega/pedido. Formula: costo_logistico_total / pedidos_ytd.",
+      "Costo / PDV": "Costo estimado por dia con ventas; no por visita real. Formula: costo_logistico_total / pedidos_ytd.",
+      "Costo / pedido": "Costo estimado por dia con ventas; no por visita real. Formula: costo_logistico_total / pedidos_ytd.",
       "Costo / HL": "Costo logistico por hectolitro entregado. Formula: costo_logistico_total / hl_ytd.",
       "Costo %": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
       "Costo / venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
       "Costo/venta": "Costo logistico sobre venta. Formula: costo_logistico_total / venta_ytd * 100.",
-      "Ratio reportado": "Promedio costo/venta de los clientes incluidos en el reporte de costos.",
+      "Ratio reportado": "Suma de costos / suma de ventas del ranking. No es promedio simple de porcentajes.",
       "Costo reportado": "Suma del costo logistico de los clientes incluidos en el reporte de costos.",
       "Costo entrega reportado": "Suma del costo de entrega de los PDV incluidos en el ranking.",
       "Costo PDV prom.": "Promedio del costo logistico por entrega/pedido de los PDV incluidos en el ranking.",
       "P75 costo/venta": "Percentil 75 del ratio costo/venta. Por encima de este umbral se considera costo alto.",
-      "P75 costo/PDV": "Percentil 75 del costo por entrega/pedido al PDV. Por encima de este umbral se considera caro de entregar.",
+      "P75 costo/PDV": "Percentil 75 del costo por entrega/pedido al PDV. Un valor alto puede deberse a mayor volumen por dia, no a ineficiencia.",
       "Margen": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total.",
       "Margen proxy": "Margen logistico proxy. Formula: venta_ytd - costo_logistico_total. Es una aproximacion operativa, no rentabilidad contable.",
       "Rentabilidad proxy": "Margen logistico proxy usado como aproximacion operativa de rentabilidad. Formula: venta_ytd - costo_logistico_total.",
       "Rent. entrega": "Rentabilidad contra costo directo de entrega. Formula: facturacion_total - costo_total_entrega.",
-      "Segmentacion costo": "Clasificacion auditora del costo por PDV: Rechazadores, Alto costo, Medio costo o Bajo costo segun rechazo, margen y umbrales de costo.",
+      "Segmentacion costo": "Costo/venta alto desde p75 o sobre 100%; medio desde p50, bajo debajo. Rechazos altos tiene precedencia. No depende del gasto total ni del costo por dia.",
       "Fact. total": "Facturacion total del PDV en el periodo actual. Formula: suma importe neto.",
       "Precio/bulto": "Precio promedio por bulto. Formula: facturacion_total / bultos_totales.",
       "Cantidad": "Cantidad de PDV en la fila. En el detalle por cliente siempre vale 1.",
@@ -1970,7 +2012,7 @@
       "Score NPS prom.": "Promedio simple del score de encuesta NPS entre 0 y 10.",
       "Score": "Score DPO 0-100. Combina negocio, productividad, servicio, rentabilidad y geo/frecuencia con pesos parametrizables.",
       "Score prom.": "Promedio del score DPO 0-100 para los clientes filtrados.",
-      "Indice": "Indice de costo de servicio. Sube cuando hay alto costo/venta, margen negativo, bajo drop, rechazos o mal servicio.",
+      "Indice": "Cantidad de senales de revision (0 a 3): costo/venta alto, rechazos altos y ventas fragmentadas. No mide costo real ni rentabilidad.",
       "Motivo principal": "Principal causa por la cual el cliente aparece como costoso o complejo de atender.",
       "Explicacion": "Detalle operativo de los factores que explican el costo o complejidad del cliente.",
       "Prioridad": "Orden operativo sugerido para gestion/ruteo. 1 es mayor prioridad.",
@@ -3957,6 +3999,51 @@
       if (window.lucide) lucide.createIcons();
     }
 
+    function costSegmentLabel(value) {
+      return {"Alto costo": "Costo/venta alto", "Medio costo": "Costo/venta medio",
+        "Bajo costo": "Costo/venta bajo", "Rechazadores": "Rechazos altos"}[value] || value || "-";
+    }
+
+    function renderCostOverview(report, target) {
+      const leaders = report.destacados || {};
+      const card = (key, title, field, asPercent = false) => {
+        const row = leaders[key];
+        if (!row) return metric(title, "Sin datos");
+        const value = asPercent ? pct(row[field]) : moneyCard(row[field]);
+        return metric(title, value, "var(--text)", `<div class="metric-detail">
+          <b>${esc(row.descripcion_cliente || row.cliente)}</b> &middot; ${esc(row.cliente)} &middot; Suc. ${esc(row.sucursal)}<br>
+          ${num(row.pedidos_ytd)} dias con ventas &middot; ${num(row.hl_ytd, 2)} HL<br>
+          Venta: ${money(row.venta_ytd)} &middot; Costo/venta: ${pct(row.ratio_costo_logistico_pct)}
+          ${Number(row.venta_ytd) < Number(report.umbrales?.p25_venta || 0) ? '<br><b>Venta baja: interpretar el cociente con cautela.</b>' : ''}
+        </div>`);
+      };
+      $(target).innerHTML = `
+        <div class="metric-grid cost-leaders">
+          ${card("gasto_total", "Mayor gasto estimado", "costo_logistico_total")}
+          ${card("costo_dia", "Mayor costo / dia con ventas", "costo_por_pedido")}
+          ${card("costo_venta", "Mayor costo / venta", "ratio_costo_logistico_pct", true)}
+        </div>
+        <p class="cost-caption">Estimaciones por volumen de toda la cartera filtrada. No miden costo real por visita ni rentabilidad.</p>
+        <details class="note"><summary>Como se calcula y como leer el ranking</summary>
+          <p>Mas gasto total puede significar mas volumen. Un costo alto por dia puede significar una compra grande.
+          El costo sobre venta indica cuanto de la facturacion absorbe la estimacion logistica; no es rentabilidad.</p>
+          <p>Los maximos incluyen todos los clientes evaluados de la sucursal y cluster seleccionados, incluso baja venta.
+          No dependen del limite del ranking ni de la busqueda de texto. Con pocas ventas, los cocientes pueden ser poco representativos.
+          Los indicadores del ranking corresponden a sus filas antes de la busqueda de texto.</p>
+          <p><strong>Costo estimado = HL vendidos &times; (tarifa de entrega/HL + tarifa de almacen/HL).</strong>
+          Dias con ventas cuenta fechas distintas por cliente; no confirma visitas ni entregas.</p>
+          <p>El ranking cuenta de 0 a 3 senales de revision, una por condicion:</p>
+          <ul><li>Costo/venta igual o mayor al percentil 75, o costo superior a la venta.</li>
+          <li>Rechazos iguales o mayores al umbral: el mayor entre p75 y 10% de dias, o p75 y 3% de HL. Cuenta una sola senal.</li>
+          <li>Dias con ventas iguales o mayores al p75 y bultos/dia positivos iguales o menores al p25.</li></ul>
+          <p>P75 deja al 75% de los valores por debajo o igual; p25, al 25%. Se calculan dentro de la sucursal y cluster elegidos.
+          Se ordena por cantidad de senales y luego por costo/venta. No suma puntos por gasto total,
+          costo por dia o autoelevador. Las senales orientan una revision, no prueban ineficiencia.</p>
+          <p>Para medir costo por visita falta completar los repartos del periodo y asignar gastos reales
+          de distribucion y almacen. Venta menos logistica no descuenta la mercaderia ni otros gastos.</p>
+        </details>`;
+    }
+
     function renderCosts() {
       if (state.activeTab !== "costs") return;
       const report = state.costReport || { items: [], resumen: {}, umbrales: {} };
@@ -3969,22 +4056,23 @@
       if (q) {
         rows = rows.filter((row) => `${row.cliente || ""} ${row.descripcion_cliente || ""} ${row.localidad || ""}`.toLowerCase().includes(q));
       }
-      $("costReportMeta").textContent = `${num(rows.length)} de ${num(resumen.clientes_evaluados || 0)} evaluados`;
+      renderCostOverview(report, "costOverview");
+      $("costReportMeta").textContent = `${num(rows.length)} visibles de ${num(resumen.clientes_en_reporte || 0)} en ranking | ${num(resumen.clientes_evaluados || 0)} evaluados`;
       $("costSummary").innerHTML = `
-        ${metric("Costo reportado", moneyCard(resumen.costo_total_reportado || 0))}
-        ${metric("Ratio reportado", pctCard(resumen.ratio_reportado || 0), Number(resumen.ratio_reportado || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--amber)")}
+        ${metric("Costo estimado del ranking", moneyCard(resumen.costo_total_reportado || 0))}
+        ${metric("Costo/venta del ranking", pctCard(resumen.ratio_reportado || 0), Number(resumen.ratio_reportado || 0) >= Number(umbrales.p75_ratio || 0) ? "var(--red)" : "var(--amber)")}
         ${metric("P75 costo/venta", pctCard(umbrales.p75_ratio || 0))}
         ${metric("P25 drop size", num(umbrales.p25_dropsize || 0, 2))}
         ${metric("Venta minima", moneyCard(umbrales.min_venta_efectiva || 0))}
         ${metric("Criterio", esc(resumen.criterio || "-"))}
       `;
       if (!rows.length) {
-        $("costReportTable").innerHTML = `<div class="empty">Sin clientes costosos para los filtros actuales</div>`;
+        $("costReportTable").innerHTML = `<div class="empty">Sin clientes con venta y costo estimado para los filtros actuales</div>`;
       } else {
         $("costReportTable").innerHTML = `
           <table>
             <thead><tr>
-              ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Indice", "num")}${thHelp("Motivo principal")}${thHelp("Explicacion")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}${thHelp("Rechazo", "num")}${thHelp("Margen", "num")}
+              ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Senales (0-3)", "num")}${thHelp("Motivo principal")}${thHelp("Explicacion")}${thHelp("Costo estimado", "num")}${thHelp("Costo/venta", "num")}${thHelp("Venta", "num")}${thHelp("Dias con ventas", "num")}${thHelp("Bultos / dia", "num")}${thHelp("Dias con rechazo", "num")}${thHelp("Venta menos logistica", "num")}
             </tr></thead>
             <tbody>${rows.map((row) => {
               const reasons = Array.isArray(row.motivos) ? row.motivos : [];
@@ -3995,9 +4083,9 @@
                 <tr class="clickable" data-client="${esc(row.cliente)}">
                   <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
                   <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
-                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "-")}</span></td>
+                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(costSegmentLabel(row.segmentacion_costo_pdv))}</span></td>
                   <td>${autoBadge(row)}</td>
-                  <td class="num">${num(row.indice_costo_servicio, 2)}</td>
+                  <td class="num">${`${num(row.indice_costo_servicio)} / 3`}</td>
                   <td><span class="badge ${badgeClass(row.motivo_principal)}">${esc(row.motivo_principal || "-")}</span></td>
                   <td class="reason-cell">${explanation}</td>
                   <td class="num">${money(row.costo_logistico_total)}</td>
@@ -4042,13 +4130,13 @@
       $("costExcludedTable").innerHTML = `
         <table>
           <thead><tr>
-            ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Motivo principal")}${thHelp("Margen proxy", "num")}${thHelp("Venta", "num")}${thHelp("Costo", "num")}${thHelp("Costo/venta", "num")}${thHelp("Pedidos", "num")}${thHelp("Drop", "num")}
+            ${thHelp("Cliente")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Motivo principal")}${thHelp("Venta menos logistica", "num")}${thHelp("Venta", "num")}${thHelp("Costo estimado", "num")}${thHelp("Costo/venta", "num")}${thHelp("Dias con ventas", "num")}${thHelp("Bultos / dia", "num")}
           </tr></thead>
           <tbody>${filtered.map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
               <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
-              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "Alto costo")}</span></td>
+              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(costSegmentLabel(row.segmentacion_costo_pdv || "Alto costo"))}</span></td>
               <td>${autoBadge(row)}</td>
               <td class="reason-cell">
                 <div class="reason-list">${(Array.isArray(row.motivos) ? row.motivos : [row.explicacion || "-"]).slice(0, 3).map((item) => `<span class="reason-pill">${esc(item)}</span>`).join("")}</div>
@@ -4069,23 +4157,20 @@
 
     function pdvCostAction(row, umbrales = {}) {
       const ratio = Number(row.ratio_costo_logistico_pct || 0);
-      const p75Ratio = Number(umbrales.p75_ratio || 0);
-      const costPdv = Number(row.costo_por_pedido || 0);
-      const p75CostPdv = Number(umbrales.p75_costo_pdv || 0);
-      const drop = Number(row.dropsize_bultos_ytd || 0);
-      const p25Drop = Number(umbrales.p25_dropsize || 0);
-      const rechazoHl = Number(row.pct_rechazo_hl || 0);
-      const margen = Number(row.margen_logistico_proxy || 0);
-      if (margen < 0) return "Revisar rentabilidad, precio o frecuencia antes de priorizar entregas especiales.";
-      if (rechazoHl >= 3) return "Atacar causas de rechazo y ventanas de entrega antes de aumentar frecuencia.";
-      if (p75CostPdv > 0 && costPdv >= p75CostPdv) return "Revisar ruteo, consolidacion y frecuencia: costo por visita por encima del p75.";
-      if (p25Drop > 0 && drop <= p25Drop) return "Consolidar pedidos o ajustar frecuencia para subir drop size.";
-      if (p75Ratio > 0 && ratio >= p75Ratio) return "Validar mix de costo/venta y mantener seguimiento semestral.";
-      return "Mantener en monitoreo y usar cluster para prioridad de ruteo.";
+      if (ratio > 100) return "Validar tarifas, ventas y notas de credito: el costo estimado supera la venta.";
+      const reasons = row.motivos || [];
+      if (reasons.some((reason) => reason.startsWith("Rechazos:"))) return "Revisar causas de rechazo; el reporte no cuantifica su costo adicional.";
+      if (reasons.some((reason) => reason.startsWith("Ventas fragmentadas:"))) return "Confirmar visitas reales antes de proponer consolidacion o cambios de frecuencia.";
+      if (Number(umbrales.p75_ratio) > 0 && ratio >= Number(umbrales.p75_ratio)) return "Revisar precio, mix y tarifas: costo estimado alto en relacion con la venta.";
+      return "Sin senales destacadas. Validar costos reales antes de cambiar el servicio.";
     }
 
     function renderCostPdv() {
       if (state.activeTab !== "cost-pdv") return;
+      window.renderPdvKmCosts?.({
+        sucursal: selectedBranch(), cluster: selectedCluster(), q: $("searchInput").value,
+        desde: state.params?.periodo?.fecha_desde, hasta: state.params?.periodo?.fecha_hasta
+      });
       const report = state.costReport || { items: [], resumen: {}, umbrales: {} };
       const resumen = report.resumen || {};
       const umbrales = report.umbrales || {};
@@ -4103,45 +4188,45 @@
       const period = state.params.periodo || {};
       const periodText = `${dateInputValue(period.fecha_desde) || "-"} / ${dateInputValue(period.fecha_hasta) || "-"}`;
       const baseText = `${dateInputValue(period.fecha_base_desde) || "-"} / ${dateInputValue(period.fecha_base_hasta) || "-"}`;
-      $("costPdvMeta").textContent = `${num(rows.length)} PDV | ${periodText}`;
+      renderCostOverview(report, "costPdvOverview");
+      $("costPdvMeta").textContent = `${num(rows.length)} visibles de ${num(resumen.clientes_en_reporte || 0)} en ranking | ${periodText}`;
       updateCostPdvExportLink();
       $("costPdvSummary").innerHTML = `
         ${metric("Periodo actual", esc(periodText), "var(--text)", `<span class="metric-detail">Base: <b>${esc(baseText)}</b></span>`)}
         ${metric("Clientes evaluados", num(resumen.clientes_evaluados || 0))}
         ${metric("Costo entrega reportado", moneyCard(resumen.costo_entrega_reportado || 0), "var(--amber)")}
-        ${metric("Costo reportado", moneyCard(resumen.costo_total_reportado || 0))}
-        ${metric("Costo PDV prom.", moneyCard(resumen.costo_por_pdv_promedio_reportado || 0))}
-        ${metric("P75 costo/PDV", moneyCard(umbrales.p75_costo_pdv || 0))}
+        ${metric("Costo estimado del ranking", moneyCard(resumen.costo_total_reportado || 0))}
+        ${metric("Costo / dia ponderado", resumen.costo_por_pdv_promedio_reportado == null ? "Sin datos" : moneyCard(resumen.costo_por_pdv_promedio_reportado))}
+        ${metric("P75 costo/dia", moneyCard(umbrales.p75_costo_pdv || 0))}
         ${metric("P75 costo/venta", pctCard(umbrales.p75_ratio || 0))}
-        ${metric("PDV sobre p75", num(highCostPdv), highCostPdv ? "var(--red)" : "var(--green)")}
+        ${metric("Clientes con costo/dia alto", num(highCostPdv))}
         ${metric("Margen proxy negativo", num(negativeMargin), negativeMargin ? "var(--red)" : "var(--green)")}
-        ${metric("Alto costo", num(segmentCounts["Alto costo"] || 0), (segmentCounts["Alto costo"] || 0) ? "var(--red)" : "var(--green)")}
-        ${metric("Rechazadores", num(segmentCounts["Rechazadores"] || 0), (segmentCounts["Rechazadores"] || 0) ? "var(--red)" : "var(--green)")}
-        ${metric("Bajo / Medio", `${num(segmentCounts["Bajo costo"] || 0)} / ${num(segmentCounts["Medio costo"] || 0)}`)}
+        ${metric("Costo/venta alto", num(segmentCounts["Alto costo"] || 0), (segmentCounts["Alto costo"] || 0) ? "var(--red)" : "var(--green)")}
+        ${metric("Rechazos altos", num(segmentCounts["Rechazadores"] || 0), (segmentCounts["Rechazadores"] || 0) ? "var(--red)" : "var(--green)")}
+        ${metric("Costo/venta bajo / medio", `${num(segmentCounts["Bajo costo"] || 0)} / ${num(segmentCounts["Medio costo"] || 0)}`)}
       `;
       if (!rows.length) {
-        $("costPdvTable").innerHTML = `<div class="empty">Sin PDV costosos para los filtros actuales</div>`;
+        $("costPdvTable").innerHTML = `<div class="empty">Sin clientes con venta y costo estimado para los filtros actuales</div>`;
       } else {
         $("costPdvTable").innerHTML = `
           <table>
             <thead><tr>
-              ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Indice", "num")}
-              ${thHelp("Pedidos GM", "num")}${thHelp("Bultos totales", "num")}${thHelp("Precio/bulto", "num")}${thHelp("Fact. total", "num")}
-              ${thHelp("Costo dist./bulto", "num")}${thHelp("Costo total entrega", "num")}${thHelp("Costo total", "num")}
-              ${thHelp("Costo / venta", "num")}${thHelp("Rent. entrega", "num")}${thHelp("Rentabilidad proxy", "num")}${thHelp("Rechazo HL", "num")}
+              ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Senales (0-3)", "num")}
+              ${thHelp("Dias con ventas", "num")}${thHelp("Bultos totales", "num")}${thHelp("Precio/bulto", "num")}${thHelp("Fact. total", "num")}
+              ${thHelp("Costo dist./bulto", "num")}${thHelp("Costo total entrega", "num")}${thHelp("Costo estimado", "num")}
+              ${thHelp("Costo / venta", "num")}${thHelp("Venta menos distribucion", "num")}${thHelp("Venta menos logistica", "num")}${thHelp("Rechazo HL", "num")}
               ${thHelp("Explicacion")}${thHelp("Accion prioritaria")}
             </tr></thead>
             <tbody>${rows.map((row) => {
               const reasons = Array.isArray(row.motivos) && row.motivos.length ? row.motivos : [row.explicacion || "-"];
-              const costPdvHigh = p75CostPdv > 0 && Number(row.costo_por_pedido || 0) >= p75CostPdv;
               return `
                 <tr class="clickable" data-client="${esc(row.cliente)}">
                   <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div><div class="client-sub">${esc(row.localidad || "")}</div></td>
                   <td><strong>${esc(row.canal || "-")}</strong><span class="cell-sub">${esc(row.subcanal || "")}</span></td>
                   <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span><span class="cell-sub">${esc(row.subcluster_logistico || "-")}</span></td>
-                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "-")}</span></td>
+                  <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(costSegmentLabel(row.segmentacion_costo_pdv))}</span></td>
                   <td>${autoBadge(row)}</td>
-                  <td class="num">${num(row.indice_costo_servicio, 2)}</td>
+                  <td class="num">${`${num(row.indice_costo_servicio)} / 3`}</td>
                   <td class="num">${num(row.pedidos_gm ?? row.pedidos_ytd)}</td>
                   <td class="num">${num(row.bultos_totales ?? row.bultos_ytd, 2)}</td>
                   <td class="num">${money(row.precio_por_bulto)}</td>
@@ -4190,14 +4275,14 @@
       $("costPdvExcludedTable").innerHTML = `
         <table>
           <thead><tr>
-            ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Margen proxy", "num")}${thHelp("Costo / PDV", "num")}${thHelp("Costo total", "num")}${thHelp("Costo / venta", "num")}${thHelp("Venta", "num")}${thHelp("Explicacion")}
+            ${thHelp("Cliente")}${thHelp("Canal")}${thHelp("Cluster")}${thHelp("Segmentacion costo")}${thHelp("Auto")}${thHelp("Venta menos logistica", "num")}${thHelp("Costo / PDV", "num")}${thHelp("Costo estimado", "num")}${thHelp("Costo / venta", "num")}${thHelp("Venta", "num")}${thHelp("Explicacion")}
           </tr></thead>
           <tbody>${filtered.map((row) => `
             <tr class="clickable" data-client="${esc(row.cliente)}">
               <td><div class="client-main">${esc(row.cliente || "-")}</div><div class="client-sub">${esc(row.descripcion_cliente || "")}</div></td>
               <td><strong>${esc(row.canal || "-")}</strong><span class="cell-sub">${esc(row.subcanal || "")}</span></td>
               <td><span class="badge ${badgeClass(row.cluster_dpo)}">${esc(clusterLabel(row.cluster_dpo) || "-")}</span></td>
-              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(row.segmentacion_costo_pdv || "Alto costo")}</span></td>
+              <td><span class="badge ${badgeClass(row.segmentacion_costo_pdv)}">${esc(costSegmentLabel(row.segmentacion_costo_pdv || "Alto costo"))}</span></td>
               <td>${autoBadge(row)}</td>
               <td class="num" style="color:var(--red)">${money(row.margen_logistico_proxy)}</td>
               <td class="num">${money(row.costo_por_pedido)}</td>
@@ -5140,5 +5225,6 @@
       loadData();
     });
   </script>
+  <script src="{{ url_for('static', filename='pdv-km-cost.js') }}"></script>
 </body>
 </html>

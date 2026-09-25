@@ -168,7 +168,13 @@ def test_export_costos_atencion_excel_genera_resumen_y_ranking(monkeypatch):
     assert ws["A4"].value == "10001"
     headers = {cell.value: idx for idx, cell in enumerate(ws[3], start=1)}
     assert ws.cell(row=4, column=headers["Canal"]).value == "KIOSCOS"
-    assert ws.cell(row=4, column=headers["Segmentacion costo PDV"]).value == "Alto costo"
+    assert ws.cell(row=4, column=headers["Segmentacion costo PDV"]).value == "Costo/venta alto"
+    assert "Dias con ventas" in headers
+    assert "Costo estimado por dia con ventas" in headers
+    assert "Senales de revision (0-3)" in headers
+    meta_values = [cell.value for row in wb["Resumen"].iter_rows() for cell in row]
+    assert "Costo estimado por volumen" in meta_values
+    assert svc._COST_METHODOLOGY['unidad_frecuencia'] in meta_values
     assert "Costo por PDV alto" in ws.cell(row=4, column=headers["Motivos"]).value
     ws_excluded = wb["Margen proxy negativo"]
     assert "detectados: 0" in ws_excluded["A1"].value
@@ -257,11 +263,11 @@ def test_update_dpo_cache_scores_actualiza_dimensiones():
 
 
 def test_reporte_costos_atencion_explica_motivos_operativos():
-    source = inspect.getsource(svc.get_reporte_costos_atencion)
+    source = inspect.getsource(svc.get_reporte_costos_atencion) + inspect.getsource(svc._cost_attention_assessment)
 
     assert "indice_costo_servicio" in source
     assert "motivo_principal" in source
-    assert "ARRAY_REMOVE" in source
+    assert "_cost_attention_assessment" in source
     assert "ratio_costo_logistico_pct" in source
     assert "p75_costo_pdv" in source
     assert "p50_costo_pdv" in source

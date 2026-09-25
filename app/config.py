@@ -43,6 +43,9 @@ class AppSettings(BaseSettings):
     EXTERNAL_API_TIMEOUT: int = 20
     INTEGRATION_API_KEY: str | None = None
     LOGISTICS_INTEGRATION_API_KEY: str | None = None
+    REPARTO_COST_API_URL: str | None = None
+    REPARTO_COST_API_KEY: str | None = None
+    REPARTO_COST_EMPRESA_ID: str = '1'
 
     FRESCURA_API_BASE_URL: str | None = None
     FRESCURA_API_USER: str | None = None

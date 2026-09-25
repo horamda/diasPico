@@ -45,8 +45,13 @@ cruce sus datos. Un pedido puede corresponder a varios comprobantes.
 ## Fechas y vínculo con Foxtrot
 
 - `fecha_movimiento`: `ventas_detalle.fecha`, disponible para cruce por día/cliente.
-- `fecha_entrega`: **null**, porque esta fuente no confirma la fecha real de entrega.
-- `fuente_fecha_movimiento` y `fuente_fecha_entrega` explicitan esa diferencia.
+- `fecha_comprobante`: **null**; ventas no aporta una fecha de comprobante independiente.
+- `fecha_entrega_planificada`: **null**; no existe en esta fuente.
+- `fecha_entrega_real`: **null**; no hay confirmación de entrega efectiva en esta fuente.
+- `fuentes_fechas`: identifica la fuente de cada una de las cuatro fechas; devuelve
+  `null` para las que no tienen fuente. Las fechas presentes usan formato `YYYY-MM-DD`.
+- `fecha_entrega`, `fuente_fecha_movimiento` y `fuente_fecha_entrega` se conservan
+  por compatibilidad. `fecha_entrega` y su fuente siguen siendo **null**.
 - `vinculo_foxtrot`: comprobantes y `rutas_venta` (códigos de `ventas_detalle.ruta`).
   Las listas `planillas` y `rutas_distribucion` están vacías porque no existen en esta fuente.
 - `detalle`: artículo, cantidades, rechazos, marca de rechazo total, motivo, sector,
@@ -54,6 +59,27 @@ cruce sus datos. Un pedido puede corresponder a varios comprobantes.
 
 La ruta comercial es una referencia de origen; no equivale a una ruta Foxtrot
 confirmada. No se cruzan automáticamente las tablas antiguas por cliente/día.
+
+Ejemplo de fechas de una fila:
+
+```json
+{
+  "fecha_movimiento": "2026-09-17",
+  "fecha_comprobante": null,
+  "fecha_entrega_planificada": null,
+  "fecha_entrega_real": null,
+  "fuentes_fechas": {
+    "fecha_movimiento": "ventas_detalle.fecha",
+    "fecha_comprobante": null,
+    "fecha_entrega_planificada": null,
+    "fecha_entrega_real": null
+  }
+}
+```
+
+Esta ampliación es aditiva y conserva `contrato: comprobantes_ventas_v2`.
+Los filtros `fecha` y `desde`/`hasta` siguen consultando exclusivamente fecha de
+movimiento. No copiar esa fecha a los demás campos para completar valores faltantes.
 
 ## Estados y cantidades
 

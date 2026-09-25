@@ -114,6 +114,18 @@ def get_pedidos(*, desde, hasta, sucursal, limit, offset, empresa_id='1'):
         row['empresa_id'] = empresa_id
         row['tipo_identificador'] = 'fila' if referencia[0] == 'fila' else 'comprobante'
         row['numero_pedido'] = None
+        # Ventas solo aporta fecha de movimiento. No reutilizarla como evidencia
+        # de emisión, planificación o entrega efectiva.
+        row['fecha_comprobante'] = None
+        row['fecha_entrega_planificada'] = None
+        row['fecha_entrega_real'] = None
+        row['fuentes_fechas'] = {
+            'fecha_movimiento': 'ventas_detalle.fecha',
+            'fecha_comprobante': None,
+            'fecha_entrega_planificada': None,
+            'fecha_entrega_real': None,
+        }
+        # Campos previos conservados para compatibilidad.
         row['fecha_entrega'] = None
         row['fuente_fecha_entrega'] = None
         row['fuente_fecha_movimiento'] = 'ventas_detalle.fecha'
