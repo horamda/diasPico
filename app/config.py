@@ -9,8 +9,9 @@ load_dotenv()
 
 def _normalize_database_url(url: str) -> str:
     url = url.strip()
-    if url.startswith('postgres://'):
-        return 'postgresql://' + url[len('postgres://'):]
+    for prefix in ('postgres://', 'postgresql+psycopg://', 'postgresql+psycopg2://'):
+        if url.startswith(prefix):
+            return 'postgresql://' + url[len(prefix):]
     return url
 
 
@@ -35,7 +36,10 @@ class AppSettings(BaseSettings):
     
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
-        return self.RAILWAY_URL or self.DATABASE_URL or ''
+        # SQLAlchemy may default to psycopg v3; this app installs and uses psycopg2.
+        return (self.RAILWAY_URL or self.DATABASE_URL or '').replace(
+            'postgresql://', 'postgresql+psycopg2://', 1
+        )
 
     SHEETS_TIMEOUT: int = 30
     EXTERNAL_API_BASE_URL: HttpUrl = Field(default='https://control-asistencia.up.railway.app')
@@ -101,8 +105,9 @@ class Config:
             setattr(self, field.upper(), value)
         
         # Add special SQLAlchemy keys
-        self.RAILWAY_URL = str(settings.SQLALCHEMY_DATABASE_URI)
-        self.DATABASE_URL = str(settings.SQLALCHEMY_DATABASE_URI)
+        # The direct psycopg2 pool needs a plain PostgreSQL DSN, without +driver.
+        self.RAILWAY_URL = settings.RAILWAY_URL
+        self.DATABASE_URL = settings.DATABASE_URL
         self.SQLALCHEMY_DATABASE_URI = str(settings.SQLALCHEMY_DATABASE_URI)
         self.SQLALCHEMY_TRACK_MODIFICATIONS = False
 
