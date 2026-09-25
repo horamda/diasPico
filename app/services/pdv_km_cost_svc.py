@@ -69,7 +69,7 @@ def fetch_distances(base_url, key, desde, hasta):
     return data
 
 
-def aggregate(clients, visits, rate, base_url, sucursal='', cluster=''):
+def aggregate(clients, visits, rate, base_url, sucursal='', cluster='', metodo='tramos'):
     """Keep uncosted visits visible and never join customers across branches."""
     groups = {}
     for client in clients:
@@ -97,14 +97,17 @@ def aggregate(clients, visits, rate, base_url, sucursal='', cluster=''):
             'localidad': '', 'cluster': 'Sin clasificar', 'venta': None, 'bultos': None,
             'visitas': [], 'sin_maestro': True,
         })
-        km = visit.get('km_asignados')
+        km = visit.get('km_prorrateados' if metodo == 'prorrateo' else 'km_asignados')
         if km is not None and (not isinstance(km, (int, float)) or not math.isfinite(km) or km < 0):
             raise ValueError('Reparto devolvió una distancia inválida.')
         row['visitas'].append({
             'rid': visit['rid'], 'fecha': visit.get('fecha'),
             'km_tramo': visit.get('km_tramo'), 'km_regreso': visit.get('km_regreso'),
             'km_asignados': km, 'costo': km * rate if km is not None else None,
-            'estimada': visit.get('distancia_estimada'),
+            'metodo': metodo,
+            'km_recorrido_real': visit.get('km_recorrido_real'),
+            'pdv_recorrido': visit.get('pdv_recorrido'),
+            'estimada': metodo == 'prorrateo' or visit.get('distancia_estimada'),
             'estado_entrega': visit.get('estado_entrega') or 'Sin estado',
             'detalle_url': base_url.rstrip('/') + '/costos-distribucion?' + urlencode({'rid': visit['rid']}),
         })
@@ -127,7 +130,7 @@ def aggregate(clients, visits, rate, base_url, sucursal='', cluster=''):
             'costo_por_bulto': cost / row['bultos'] if complete and (row['bultos'] or 0) > 0 else None,
             'costo_sobre_venta': cost / row['venta'] * 100 if complete and (row['venta'] or 0) > 0 else None,
             'estado': ('Sin visitas registradas' if not visits else 'Sin distancias' if not known
-                       else 'Parcial' if pending else 'Calculado'),
+                       else 'Parcial' if pending else 'Prorrateado' if metodo == 'prorrateo' else 'Calculado por tramos'),
             'estimadas': sum(bool(v['estimada']) for v in known),
         })
         result.append(row)
@@ -135,8 +138,10 @@ def aggregate(clients, visits, rate, base_url, sucursal='', cluster=''):
     return result
 
 
-def report(rate=2500, sucursal='', cluster=''):
+def report(rate=2500, sucursal='', cluster='', metodo='prorrateo'):
     rate = rate_value(rate)
+    if metodo not in ('prorrateo', 'tramos'):
+        raise ValueError('Seleccioná prorrateo o tramos como método de cálculo.')
     base = str(current_app.config.get('REPARTO_COST_API_URL') or '').strip().rstrip('/')
     key = str(current_app.config.get('REPARTO_COST_API_KEY') or '').strip()
     if not base or not key:
@@ -158,11 +163,17 @@ def report(rate=2500, sucursal='', cluster=''):
         raise ValueError('La empresa del período no coincide con la conexión de Reparto.')
     data = fetch_distances(base, key, desde, hasta)
     rows = aggregate(load_clients(desde, hasta, empresa), data['items'], rate, base, str(sucursal or ''),
-                     segmentation._normalize_cluster_filter(cluster) or '')
-    return {'configurado': True, 'tarifa': rate, 'desde': desde, 'hasta': hasta,
+                     segmentation._normalize_cluster_filter(cluster) or '', metodo)
+    message = (
+        'Costo prorrateado = km reales del recorrido × tarifa / puntos atendidos en ese recorrido. '
+        'Es una distribución en partes iguales del costo, no la distancia exacta hasta cada local. '
+        'Incluye todos los puntos identificados del recorrido, incluso entregas fallidas; los filtros no alteran el reparto.'
+        if metodo == 'prorrateo' else
+        'Costo por tramos = (tramo hasta el cliente + regreso proporcional) × tarifa. '
+        'Sólo incluye rutas con ruteo guardado. Las coordenadas incompletas o redondeadas pueden producir '
+        'tramos faltantes o cercanos a cero; este método no mide el trayecto GPS real.'
+    )
+    return {'configurado': True, 'tarifa': rate, 'desde': desde, 'hasta': hasta, 'metodo': metodo,
             'items': rows, 'rutas': data.get('rutas'),
-            'rutas_sin_distancias': data.get('rutas_sin_distancias'),
-            'mensaje': 'Costo = (tramo hasta el cliente + regreso proporcional) × tarifa por km. '
-                       'Una atención corresponde a un cliente en un recorrido. '
-                       'Los kilómetros provienen del ruteo calculado; no son un registro GPS del trayecto real. '
-                       'Los totales parciales incluyen sólo atenciones con distancia disponible.'}
+            'rutas_sin_distancias': data.get('rutas_sin_km_reales' if metodo == 'prorrateo' else 'rutas_sin_distancias'),
+            'mensaje': message + ' Los totales parciales incluyen sólo atenciones con distancia disponible.'}

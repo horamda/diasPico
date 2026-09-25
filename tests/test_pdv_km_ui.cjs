@@ -33,6 +33,7 @@ function response(cost = 20000, items) {
   const h = harness();
   h.render({sucursal:'1',q:''});
   assert.match(h.requests[0].url, /tarifa=2500/);
+  assert.match(h.requests[0].url, /metodo=prorrateo/);
   h.requests[0].resolve(response()); await tick();
   assert.match(h.get('pdvKmTable').innerHTML, /20\.000,00/);
   assert.match(h.get('pdvKmTable').innerHTML, /&lt;script&gt;/);
@@ -50,6 +51,9 @@ function response(cost = 20000, items) {
   h.requests[1].resolve(response(999999)); await tick();
   assert.match(h.get('pdvKmTable').innerHTML, /25\.000,00/);
   assert.doesNotMatch(h.get('pdvKmTable').innerHTML, /999\.999/);
+  h.get('pdvKmMethod').value = 'tramos';
+  h.get('pdvKmMethod').handlers.change();
+  assert.match(h.requests[3].url, /metodo=tramos/);
   const missing = harness();
   missing.render({});
   missing.requests[0].resolve({ok:true,json:async()=>({ok:true,data:{configurado:false,mensaje:'Falta conectar'}})});

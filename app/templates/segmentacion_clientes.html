@@ -1564,10 +1564,15 @@
             <form id="pdvKmForm" class="period-actions" style="flex-wrap:wrap">
               <label for="pdvKmRate">Costo por km · todos los gastos incluidos</label>
               <input id="pdvKmRate" type="number" min="0.01" max="100000000" step="0.01" value="2500" required style="max-width:170px">
+              <label for="pdvKmMethod">Método</label>
+              <select id="pdvKmMethod">
+                <option value="prorrateo">Km reales del recorrido / puntos atendidos</option>
+                <option value="tramos">Tramos calculados hasta cada punto (cobertura limitada)</option>
+              </select>
               <button type="submit" class="btn" id="pdvKmApply">Calcular / actualizar</button>
               <button type="button" class="btn" id="pdvKmExport" disabled>Exportar costos CSV</button>
             </form>
-            <p class="cost-caption">Tramo hasta el cliente + parte proporcional del regreso al depósito, multiplicados por la tarifa.
+            <p class="cost-caption">El prorrateo distribuye el costo real del recorrido por igual entre sus puntos atendidos.
               Incluye combustible, personal y vehículo. No se agregan otros gastos.</p>
             <p id="pdvKmStatus" role="status" aria-live="polite"></p>
             <div id="pdvKmSummary" class="metric-grid"></div>

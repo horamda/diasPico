@@ -98,7 +98,7 @@ def test_report_uses_active_period_and_rate(monkeypatch):
     monkeypatch.setattr(svc, 'fetch_distances', fetch)
     monkeypatch.setattr(svc, 'load_clients', lambda *_: [client()])
     with app.app_context():
-        result = svc.report(2500)
+        result = svc.report(2500, metodo='tramos')
     assert result['items'][0]['costo'] == 20000
     assert fetch.call_args.args[-2:] == ('2026-09-01', '2026-09-30')
 
@@ -132,3 +132,37 @@ def test_sales_query_uses_same_dates_as_kilometers(monkeypatch):
     assert 'ventas_detalle' in sql
     assert 's.venta AS venta_ytd' in sql
     assert 'LIMIT' not in sql
+
+
+def test_proration_uses_real_route_share_and_filters_do_not_redistribute():
+    visits = [{**visit(km=0), 'km_prorrateados': 40, 'km_recorrido_real': 120, 'pdv_recorrido': 3},
+              {**visit('2'), 'km_prorrateados': 40}, {**visit('3', branch='2'), 'km_prorrateados': 40}]
+    rows = svc.aggregate([client()], visits, 2500, 'https://reparto.example', '1', 'Ganador', 'prorrateo')
+    assert len(rows) == 1
+    assert rows[0]['costo'] == 100000
+    assert rows[0]['estado'] == 'Prorrateado'
+    assert rows[0]['visitas'][0]['km_recorrido_real'] == 120
+    assert rows[0]['visitas'][0]['pdv_recorrido'] == 3
+
+
+def test_proration_never_silently_substitutes_saved_legs():
+    rows = svc.aggregate([client()], [visit()], 2500, 'https://reparto.example', metodo='prorrateo')
+    assert rows[0]['costo'] is None
+    assert rows[0]['pendientes'] == 1
+
+
+def test_default_report_is_explicit_proration(monkeypatch):
+    app = Flask(__name__)
+    app.config.update(REPARTO_COST_API_URL='https://reparto.example', REPARTO_COST_API_KEY='test')
+    monkeypatch.setattr(svc.segmentation, 'get_parametros', lambda: {
+        'periodo': {'fecha_desde': '2026-09-01', 'fecha_hasta': '2026-09-30'}})
+    monkeypatch.setattr(svc, 'fetch_distances', lambda *_: {
+        'items': [{**visit(), 'km_prorrateados': 5}], 'rutas_sin_km_reales': 2})
+    monkeypatch.setattr(svc, 'load_clients', lambda *_: [client()])
+    with app.app_context():
+        result = svc.report()
+        with pytest.raises(ValueError):
+            svc.report(metodo='invalido')
+    assert result['metodo'] == 'prorrateo'
+    assert result['items'][0]['costo'] == 12500
+    assert result['rutas_sin_distancias'] == 2

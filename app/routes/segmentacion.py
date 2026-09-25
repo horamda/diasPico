@@ -1527,6 +1527,7 @@ def reporte_costos_km():
     try:
         return _ok(pdv_km_cost_svc.report(
             rate=request.args.get('tarifa', '2500'),
+            metodo=request.args.get('metodo', 'prorrateo'),
             sucursal=request.args.get('sucursal', ''),
             cluster=request.args.get('cluster', ''),
         ))
