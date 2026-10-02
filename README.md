@@ -170,42 +170,31 @@ Módulo integrado en `/rutas/` (mapa) y `/rutas/plan` (consulta de recorridos), 
 
 Validación: `python -m pytest tests/test_rutas_entrega.py -q`.
 
-### Ventas y comportamiento de compra
+### Pedidos, volumen y comportamiento de compra
 
-Las ventas se cargan desde la API de ChessERP en `rt_venta` (un registro por comprobante,
-clave `idDocumento-letra-serie-nrodoc`) y `rt_venta_art` (bultos, HL y neto por artículo,
-solo con carga detallada). Volver a cargar un período no duplica comprobantes.
+Rutas lee las ventas de `ventas_detalle`, la misma tabla que se carga en Importaciones de datos y
+que usan Días Pico y Drop Size, con sus mismas reglas (`app/rutas/ventas_app.py`):
 
-- Login: el mismo de frescura (`auth/login` → `sessionId` como Cookie). Usa `CHESS_USER`/`CHESS_PASSWORD`
-  o, si no están, `FRESCURA_API_USER`/`FRESCURA_API_PASSWORD`.
-- La consulta se parte por mes calendario y recorre los lotes de 1000 comprobantes.
-- `CHESS_SUCURSALES` (default `2`, Dolores con Chascomús) filtra las sucursales que se guardan.
-- La ruta (`CHESS_VENTAS_PATH`, default `ventas/`) y el formato de fecha (`CHESS_FECHA_FMT`, default
-  `%d-%m-%Y`) todavía no se validaron contra la API real: probar con `--dias 1` antes de programar el cron.
+- Se excluyen remitos (REMIT) y comodatos (COMOD).
+- Bultos y HL cuentan solo artículos de tipo mercadería (sin envases ni esqueletos).
+- Un **pedido** es un comprobante (`detalle_documento`); una **entrega**, un día con comprobantes del cliente.
+  RMCYO cuenta como pedido y volumen, sin importe.
+- La ventana termina en la última fecha cargada en `ventas_detalle`. Los resultados quedan en memoria
+  10 minutos.
 
-```bash
-flask --app "app:create_app()" rutas sync-ventas --dias 7          # resumen, diario
-flask --app "app:create_app()" rutas sync-ventas --dias 7 --detalle # bultos y HL, de noche (~7 MB por día)
-flask --app "app:create_app()" rutas sync-ventas --dias 60         # carga inicial
-flask --app "app:create_app()" rutas import-ventas respuesta.json  # JSON guardado de la API
-```
+En el mapa, **Color por: Volumen** pinta y agranda los puntos según bultos por semana (quintiles), y al
+elegir un día cada localidad muestra la **carga estimada** (suma del promedio de bultos por entrega de
+sus clientes). La ficha del cliente tiene el panel **Pedidos y volumen** (30, 60 o 90 días): pedidos,
+entregas, frecuencia, bultos y HL, promedio por entrega comparado con su localidad, venta neta, rechazo
+y motivos, días de la semana en que recibe frente a sus días asignados, bultos por semana, últimos
+pedidos y artículos más comprados. Estados: **inactivo** con más de 45 días sin comprar; **en riesgo**
+con más de 2,5 veces su frecuencia habitual (mínimo 21 días). ABC por venta neta (80 / 15 / 5).
 
-Cron de Railway: un servicio cron con el mismo repo y variables, con el comando anterior como
-start command (por ejemplo `0 9 * * *` para el resumen y `0 5 * * *` para el detalle). Alternativa:
-`curl -X POST "https://<app>/rutas/api/sync?dias=7" -H "X-Sync-Token: $RUTAS_SYNC_TOKEN"`
-(`&detalle=1` para el detalle). Sin `RUTAS_SYNC_TOKEN` el endpoint responde 403. Para el detalle
-preferir el comando: el request queda atado al timeout de gunicorn (900 s).
+Opcional: `flask --app "app:create_app()" rutas sync-ventas` carga comprobantes desde la API de ChessERP
+en `rt_venta` (login de frescura; ruta `CHESS_VENTAS_PATH` y formato `CHESS_FECHA_FMT` sin validar
+contra la API real). El mapa no la usa.
 
-En el mapa, **Ver: Días / Estado / Venta** cambia el color de los puntos y la pestaña **Ventas** resume
-la vista. La ficha del cliente muestra su comportamiento de los últimos 60 días, los últimos
-comprobantes y los artículos más comprados. Reglas:
-
-- **Inactivo:** más de 45 días sin comprar. **En riesgo:** días sin comprar mayores a 2,5 veces su
-  frecuencia habitual (mínimo 21). **Sin compras:** ninguna factura en el período.
-- ABC por venta neta (80 / 15 / 5). Las notas de crédito (`DVVTA`, `PRDVO`) restan.
-- Los bultos se muestran solo si al menos el 80% del período se cargó con detalle.
-
-Pruebas: `python -m pytest tests/test_rutas_ventas.py -q`.
+Pruebas: `python -m pytest tests/test_rutas_ventas_app.py tests/test_rutas_ventas.py -q`.
 
 ### Importar días desde CSV
 

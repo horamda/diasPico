@@ -6,13 +6,19 @@ const DAYSHORT = {LU:'Lun',MA:'Mar',MI:'Mié',JU:'Jue',VI:'Vie',SA:'Sáb'};
 const PCOL = {LUJU:'#2f6fde',MAVI:'#159a62',MISA:'#8a4fd0',MAJU:'#0e97ad',MASA:'#c2559b',LU:'#86a9ec',JU:'#86a9ec',MA:'#74c7a1',VI:'#74c7a1',MI:'#b89be6',SA:'#b89be6'};
 // Paleta categórica para localidades: localidades vecinas nunca comparten color.
 const LOC_PAL = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#c026d3','#65a30d','#b45309','#0f766e','#db2777','#4f46e5'];
-const VER = {loc:'Localidad', dias:'Días', estado:'Estado', venta:'Venta'};
+const VER = {loc:'Localidad', dias:'Días', vol:'Volumen', estado:'Estado', venta:'Venta $'};
+// Volumen: bultos por semana en 5 escalones (quintiles de los clientes con compras).
+const VOL_PAL = ['#c6dcf2','#8bbbe6','#4b93d4','#2166ad','#123d75'];
+let VOL_Q = [];
+const volNivel = c => { const v = venta(c); if (!v || !v.bultos) return -1; let i = 0; while (i < VOL_Q.length && v.bultos_sem > VOL_Q[i]) i++; return i; };
+const num = (n, d = 0) => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: d});
+const PERIODOS = [30, 60, 90];
 const API = window.RUTAS.api;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
 const venta = c => S.V && S.V.clientes[c.id];
@@ -28,8 +34,9 @@ try {
   if (typeof p.suc === 'string') S.suc = p.suc;
   if (typeof p.zonas === 'boolean') S.zonas = p.zonas;
   if (typeof p.ctx === 'boolean') S.ctx = p.ctx;
+  if ([30, 60, 90].includes(p.periodo)) S.periodo = p.periodo;
 } catch {}
-function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx})); } catch {} }
+function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo})); } catch {} }
 
 let byId = new Map();
 let mapPositioned = false;
@@ -110,6 +117,7 @@ function zoomLoc(loc){
 function colorDe(c, sd) {
   if (S.ver === 'estado' && S.V) return {activo:tok('--ok'), riesgo:tok('--warn'), inactivo:tok('--bad'), sin_compras:'#9a9f9b'}[estadoDe(c)];
   if (S.ver === 'venta' && S.V) return ABC_COL[venta(c)?.abc || '-'];
+  if (S.ver === 'vol' && S.V) { const n = volNivel(c); return n < 0 ? '#9a9f9b' : VOL_PAL[n]; }
   if (c.an) return '#9a9f9b';
   if (S.ver !== 'dias') return colorLoc(c.loc);   // también Estado/Venta sin ventas cargadas
   return sd ? tok('--bad') : (PCOL[c.d] || '#8d8a5c');
@@ -129,9 +137,10 @@ function drawPoints(list) {
     if (!isGeo(c)) return;
     const sd = sinDias(c), sel = S.sel === c.id;
     const borde = sel ? tok('--ink') : c.far ? tok('--warn') : (S.ver === 'loc' && sd && !c.an) ? tok('--bad') : 'rgba(0,0,0,.45)';
-    const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:(sd?6:5), weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
+    const rad = S.ver === 'vol' && S.V ? 3.5 + 1.6 * Math.max(0, volNivel(c)) : (sd?6:5);
+    const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
       color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
-    const vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${venta(c)?' · '+venta(c).abc+' · '+money(venta(c).neto):''}` : '';
+    const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.pedidos)} pedidos · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
     m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
@@ -156,10 +165,10 @@ function drawZonas(list) {
   const g = new Map();
   for (const c of list) {
     if (c.an) continue;
-    const x = g.get(c.loc) || {loc:c.loc, n:0, pts:[]};
-    x.n++; if (isGeo(c) && !c.far) x.pts.push([c.lat, c.lng]); g.set(c.loc, x);
+    const x = g.get(c.loc) || {loc:c.loc, n:0, pts:[], carga:0};
+    x.n++; x.carga += venta(c)?.drop || 0; if (isGeo(c) && !c.far) x.pts.push([c.lat, c.lng]); g.set(c.loc, x);
   }
-  const zonas = S.zonas && S.day !== 'TODOS';
+  const zonas = S.zonas && S.day !== 'TODOS', carga = !!S.V && S.day !== 'TODOS';
   for (const x of g.values()) {
     if (!x.pts.length) continue;
     const col = colorLoc(x.loc), foco = S.foco === x.loc;
@@ -175,7 +184,7 @@ function drawZonas(list) {
     }
     const norte = Math.max(...x.pts.map(p => p[0])), lng = x.pts.reduce((t,p)=>t+p[1],0)/x.pts.length;
     const m = L.marker([norte + .0035, lng], {keyboard:false, riseOnHover:true, icon:L.divIcon({className:'loc-tag-wrap', iconSize:null,
-      html:`<span class="loc-tag${foco?' foco':''}" style="--c:${col}" title="Acercar a ${esc(x.loc)}">${esc(x.loc)}<b>${x.n}</b></span>`})});
+      html:`<span class="loc-tag${foco?' foco':''}" style="--c:${col}" title="Acercar a ${esc(x.loc)}${carga?' · carga estimada: promedio de bultos por entrega de sus clientes':''}">${esc(x.loc)}<b>${x.n}</b>${carga?`<em>~${num(x.carga)} b</em>`:''}</span>`})});
     m.on('click', () => zoomLoc(x.loc));
     tagLayer.addLayer(m);
   }
@@ -220,6 +229,10 @@ function renderLegend(list) {
       + `<span><i class="sw" style="background:#86a9ec"></i>Un solo día</span><span><i class="sw" style="background:var(--bad)"></i>Sin días</span>`;
   } else if (!S.V) {
     body = '<p class="note">No hay ventas cargadas.</p>';
+  } else if (S.ver === 'vol') {
+    const r = [0, ...VOL_Q];
+    body = VOL_PAL.map((col, i) => `<span><i class="sw" style="background:${col}"></i>${i < VOL_Q.length ? `${num(r[i],1)}–${num(VOL_Q[i],1)}` : `más de ${num(r[i],1)}`} bultos/sem</span>`).join('')
+      + '<span><i class="sw" style="background:#9a9f9b"></i>Sin compras</span><p class="note">El tamaño del punto también crece con el volumen.</p>';
   } else if (S.ver === 'estado') {
     body = [['--ok','Activo'],['--warn','En riesgo'],['--bad','Inactivo']].map(([v,l]) => `<span><i class="sw" style="background:var(${v})"></i>${l}</span>`).join('')
       + '<span><i class="sw" style="background:#9a9f9b"></i>Sin compras</span>';
@@ -286,19 +299,21 @@ function renderExp(){
 }
 function renderVen() {
   const el = $('p-ven');
-  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="empty">No hay ventas cargadas. Se cargan con <code>flask rutas sync-ventas</code>.</p>'; return; }
+  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="empty">No hay ventas importadas en el período. Se cargan desde Importaciones de datos → Ventas detalle.</p>'; return; }
   const act = scope().filter(c => !c.an), cnt = e => act.filter(c => estadoDe(c) === e).length;
-  const abc = l => act.filter(c => venta(c)?.abc === l).length;
-  const neto = act.reduce((t, c) => t + (venta(c)?.neto || 0), 0);
+  const tot = k => act.reduce((t, c) => t + (venta(c)?.[k] || 0), 0);
   const kp = [['',cnt('activo'),'activos',null],['warn',cnt('riesgo'),'en riesgo','riesgo'],
     ['bad',cnt('inactivo'),'inactivos (+45 días)','inactivo'],['',cnt('sin_compras'),'sin compras','sin_compras']];
-  const lista = (e, n) => act.filter(c => estadoDe(c) === e).sort((a, b) => (venta(b)?.neto || 0) - (venta(a)?.neto || 0)).slice(0, n);
-  const tag = c => { const v = venta(c); return v ? `<span class="pill">${v.abc}</span><span class="pill">${v.dias_sin} d</span>` : ''; };
-  el.innerHTML = `<p class="status">Del ${esc(S.V.desde)} al ${esc(S.V.hasta)} · ${S.V.comprobantes} comprobantes · venta neta de la vista ${money(neto)}</p>
+  const lista = (e, n) => act.filter(c => estadoDe(c) === e).sort((a, b) => (venta(b)?.bultos || 0) - (venta(a)?.bultos || 0)).slice(0, n);
+  const top = act.filter(venta).sort((a, b) => venta(b).bultos - venta(a).bultos).slice(0, 15);
+  const tag = c => { const v = venta(c); return v ? `<span class="pill">${num(v.bultos_sem,1)} b/sem</span><span class="pill">${v.dias_sin} d</span>` : ''; };
+  el.innerHTML = `<p class="status">Ventas importadas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} (60 días) · sin remitos ni comodatos · volumen de mercadería</p>
+   <div class="vtot"><div><b>${num(tot('pedidos'))}</b><span>pedidos</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
    <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
-   <p class="note">ABC por venta neta: <b>${abc('A')}</b> A · <b>${abc('B')}</b> B · <b>${abc('C')}</b> C. En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días).</p>
-   <h2>En riesgo · mayor venta primero</h2><div class="list">${lista('riesgo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>
-   <h2>Inactivos · mayor venta primero</h2><div class="list">${lista('inactivo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>`;
+   <p class="note">En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días). Inactivo: más de 45 días.</p>
+   <h2>Mayor volumen</h2><div class="list">${top.map(c => itemHTML(c, `<span class="pill">${num(venta(c).bultos)} b</span>`)).join('') || '<p class="note">Sin datos.</p>'}</div>
+   <h2>En riesgo · mayor volumen primero</h2><div class="list">${lista('riesgo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>
+   <h2>Inactivos · mayor volumen primero</h2><div class="list">${lista('inactivo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>`;
   el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
   bindItems(el);
 }
@@ -322,7 +337,7 @@ function renderCard(){
     <div class="dchips" aria-label="Días de entrega">${DAYS.map(d=>`<span class="dchip${c.d.includes(d)?' on':''}" title="${DAYNAME[d]}">${d}</span>`).join('')}</div>
     <dl class="kv"><dt>Domicilio</dt><dd>${esc(c.dom)||'—'}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd>${c.ven?`<dt>Vendedor</dt><dd>${esc(c.ven)}</dd>`:''}<dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
     <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver en Google Maps</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
-    <div id="clientSales" class="status">Consultando compras...</div>`;
+    <section id="clientSales" class="pv" aria-live="polite"><p class="status">Consultando pedidos...</p></section>`;
   $('map').appendChild(card);L.DomEvent.disableClickPropagation(card);L.DomEvent.disableScrollPropagation(card);
   card.querySelector('.x').onclick=cerrarCard;
   cargarVentas(c, card.querySelector('#clientSales'));
@@ -333,23 +348,47 @@ function renderCard(){
 }
 
 async function cargarVentas(c, el) {
-  try {
-    const r = await api('/clientes/' + c.id + '/ventas');
-    if (!el.isConnected) return;
-    const m = r.metricas;
-    if (!m) { el.innerHTML = '<h2>Comportamiento de compra</h2><p class="note">Sin compras en los últimos 60 días.</p>'; return; }
-    const cls = {activo:'ok', riesgo:'warn', inactivo:'bad'}[m.estado] || '';
-    const tend = m.tend == null ? '—' : (m.tend > 0 ? '+' : '') + Math.round(m.tend * 100) + '%';
-    const sug = r.sugerencia ? `<dt>Recibe más</dt><dd>${esc(r.sugerencia.dias) || '—'} · ${Math.round(r.sugerencia.en_dia * 100)}% de sus entregas cae en sus días asignados</dd>` : '';
-    el.innerHTML = `<h2>Comportamiento de compra <span class="pill ${cls}">${ESTADO[m.estado]}</span> <span class="pill">${esc(m.abc)}</span></h2>
-      <dl class="kv"><dt>Compras (60 días)</dt><dd>${m.compras} · cada ${m.frec ?? '—'} días</dd>
-      <dt>Última compra</dt><dd>${esc(m.ultima)} · hace ${m.dias_sin} días</dd>
-      <dt>Venta neta</dt><dd>${money(m.neto)} · ticket ${money(m.ticket)}${m.bultos != null ? ' · ' + m.bultos + ' bultos' : ''}</dd>
-      <dt>Notas de crédito</dt><dd>${m.nc_n} · ${money(m.nc)}${m.fallidas ? ' · ' + m.fallidas + ' entregas fallidas' : ''}</dd>
-      <dt>Tendencia</dt><dd>${tend} · BEES ${Math.round(m.bees * 100)}%</dd>${sug}</dl>
-      ${r.ultimos.length ? `<table><thead><tr><th>Fecha</th><th>Doc</th><th>Neto</th><th>Origen</th></tr></thead><tbody>${r.ultimos.slice(0, 6).map(u => `<tr><td>${esc(u.fecha)}</td><td class="${u.nc ? 'bad' : ''}">${esc(u.doc)}</td><td>${money(u.neto)}</td><td>${esc(u.origen || '')}${u.rechazo ? ' · ' + esc(u.rechazo) : ''}</td></tr>`).join('')}</tbody></table>` : ''}
-      ${r.articulos.length ? `<p class="note">Más comprado: ${r.articulos.slice(0, 5).map(a => esc(a.articulo) + ' (' + a.bultos + ')').join(', ')}</p>` : ''}`;
-  } catch (e) { if (el.isConnected) el.textContent = 'No se pudieron consultar las compras: ' + e.message; }
+  const dias = PERIODOS.includes(S.periodo) ? S.periodo : 60;
+  el.innerHTML = '<p class="status"><span class="spinner"></span> Consultando pedidos...</p>';
+  let r;
+  try { r = await api(`/clientes/${c.id}/ventas?dias=${dias}`); }
+  catch (e) { if (el.isConnected) el.innerHTML = `<p class="status">No se pudieron consultar los pedidos: ${esc(e.message)}</p>`; return; }
+  if (!el.isConnected) return;
+  const selector = `<div class="seg seg-sm" role="group" aria-label="Período">${PERIODOS.map(p => `<button type="button" data-p="${p}" aria-pressed="${p===dias}">${p} d</button>`).join('')}</div>`;
+  const head = `<div class="pv-head"><h2>Pedidos y volumen</h2>${selector}</div>`;
+  const m = r.metricas;
+  if (!m) {
+    el.innerHTML = head + `<p class="empty">Sin pedidos entre el ${esc(r.desde || '—')} y el ${esc(r.hasta || '—')}.</p>`;
+  } else {
+    const ref = r.referencia, cls = {activo:'ok', riesgo:'warn', inactivo:'bad'}[m.estado] || '';
+    const vsRef = ref && ref.drop ? Math.round((m.drop / ref.drop - 1) * 100) : null;
+    const tend = m.tend == null ? null : Math.round(m.tend * 100);
+    const asig = r.asignados || '', totEnt = Object.values(m.ent).reduce((a, b) => a + b, 0) || 1;
+    const dias7 = [...DAYS, ...(m.ent.DO ? ['DO'] : [])];
+    const barras = dias7.map(d => { const n = m.ent[d] || 0, pct = Math.round(n / totEnt * 100);
+      return `<div class="wd${asig.includes(d)?' asig':''}" title="${n} entregas (${pct}%)${asig.includes(d)?' · día asignado':''}"><i style="height:${Math.max(pct, 3)}%"></i><b>${pct}%</b><span>${d}</span></div>`; }).join('');
+    const maxB = Math.max(1, ...r.semanas.map(s => s.bultos)), W = r.semanas.length;
+    const spark = `<svg class="spark" viewBox="0 0 ${W * 10} 44" preserveAspectRatio="none" role="img" aria-label="Bultos por semana">${r.semanas.map((s, i) =>
+      `<rect x="${i * 10 + 1}" y="${44 - Math.max(1, s.bultos / maxB * 42)}" width="8" height="${Math.max(1, s.bultos / maxB * 42)}" rx="1.5"><title>Semana del ${s.desde}: ${num(s.bultos,1)} bultos · ${num(s.hl,2)} HL · ${s.pedidos} pedidos</title></rect>`).join('')}</svg>`;
+    const kpi = (t, v, sub, k='') => `<div class="pv-kpi ${k}"><span>${t}</span><b>${v}</b>${sub?`<small>${sub}</small>`:''}</div>`;
+    el.innerHTML = head + `<p class="status">${esc(r.desde)} al ${esc(r.hasta)} · ventas importadas, sin remitos ni comodatos</p>
+      <div class="pv-tags"><span class="pill ${cls}">${ESTADO[m.estado]}</span><span class="pill" title="Clasificación ABC por venta neta">ABC ${esc(m.abc)}</span>${tend!=null?`<span class="pill ${tend<-15?'warn':''}" title="Bultos de la segunda mitad del período contra la primera">${tend>0?'▲':'▼'} ${Math.abs(tend)}%</span>`:''}<span class="pill" title="Pedidos que entraron por BEES">BEES ${Math.round(m.bees * 100)}%</span></div>
+      <div class="pv-kpis">
+        ${kpi('Pedidos', num(m.pedidos), `${num(m.compras)} entregas`)}
+        ${kpi('Frecuencia', m.frec != null ? `cada ${num(m.frec,1)} d` : '—', `última hace ${m.dias_sin} d`, m.estado === 'activo' ? '' : cls)}
+        ${kpi('Bultos', num(m.bultos), `${num(m.hl,1)} HL · ${num(m.bultos_sem,1)}/sem`)}
+        ${kpi('Por entrega', `${num(m.drop,1)} b`, ref ? `${vsRef>0?'+':''}${vsRef}% vs ${esc(ref.localidad)} (${num(ref.drop,1)})` : `${num(m.drop_hl,2)} HL`)}
+        ${kpi('Venta neta', money(m.neto), `ticket ${money(m.ticket)}`)}
+        ${kpi('Rechazo', `${num(m.rech_pct * 100, 1)}%`, `${num(m.rech,1)} bultos`, m.rech_pct > .05 ? 'bad' : '')}
+      </div>
+      <h3>Días en que recibe</h3><div class="wdays">${barras}</div>
+      <p class="note">${r.sugerencia ? `${Math.round(r.sugerencia.en_dia * 100)}% de sus entregas cae en sus días asignados (${asig || 'sin días'}). Recibe más: ${esc(r.sugerencia.dias) || '—'}.` : 'Pocas entregas para comparar con los días asignados.'}</p>
+      <h3>Bultos por semana</h3>${spark}
+      ${r.ultimos.length ? `<h3>Últimos pedidos</h3><div class="tw"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Bultos</th><th>HL</th><th>Neto</th><th>Rech.</th></tr></thead><tbody>${r.ultimos.slice(0, 8).map(u => `<tr title="${esc(u.doc)} · ${esc(u.origen)}${u.motivo ? ' · ' + esc(u.motivo) : ''}"><td>${esc(u.fecha.slice(5).split('-').reverse().join('/'))}</td><td>${esc(u.tipo)}</td><td>${num(u.bultos,1)}</td><td>${num(u.hl,2)}</td><td>${money(u.neto)}</td><td class="${u.rech ? 'bad' : 'z'}">${u.rech ? num(u.rech,1) : '·'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${num(a.bultos,1)} b</b></li>`).join('')}</ol>` : ''}
+      ${Object.keys(m.motivos || {}).length ? `<p class="note">Motivos de rechazo: ${Object.entries(m.motivos).map(([k, n]) => `${esc(k)} (${n})`).join(', ')}</p>` : ''}`;
+  }
+  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.p; savePrefs(); cargarVentas(c, el); });
 }
 
 // ---------- controles ----------
@@ -399,6 +438,8 @@ async function load() {
     const [data, ventas] = await Promise.all([api('/datos?'+params), api('/ventas/comportamiento').catch(() => null)]);
     if(request!==loadRequest)return;
     S.D=data; S.V=ventas && ventas.comprobantes ? ventas : null;
+    if (S.V) { const vs = Object.values(S.V.clientes).map(v => v.bultos_sem).filter(v => v > 0).sort((a,b) => a-b);
+      VOL_Q = vs.length >= 5 ? [.2,.4,.6,.8].map(q => vs[Math.floor(q * (vs.length - 1))]) : []; }
     byId = new Map(S.D.clientes.map(c => [c.id, c]));
     asignarColores(S.D.clientes);
     render(); renderCard();

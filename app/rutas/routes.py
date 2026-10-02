@@ -227,13 +227,15 @@ def _dias_param(default):
     return dias
 
 
-_RESUMEN_VENTA = ('compras', 'neto', 'ticket', 'nc', 'bultos', 'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado')
+_RESUMEN_VENTA = ('pedidos', 'compras', 'neto', 'ticket', 'bultos', 'hl', 'drop', 'bultos_sem', 'rech_pct',
+                  'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado')
 
 
 @bp.get("/api/ventas/comportamiento")
 @protegido
 def api_comportamiento():
-    from .ventas import comportamiento
+    """Resumen por cliente para el mapa, desde ventas_detalle."""
+    from .ventas_app import comportamiento
     res = comportamiento(_dias_param(60))
     clientes = {cid: {k: c[k] for k in _RESUMEN_VENTA} for cid, c in res['clientes'].items()}
     return jsonify(dict(res, clientes=clientes))
@@ -242,12 +244,28 @@ def api_comportamiento():
 @bp.get("/api/clientes/<int:cid>/ventas")
 @protegido
 def api_ventas_cliente(cid):
-    from .models import ClienteEntrega
-    from .ventas import comportamiento, detalle_cliente, sugerencia_dias
-    met = comportamiento(_dias_param(60))['clientes'].get(cid)
+    """Pedidos y volumen del cliente, con el promedio de su localidad como referencia."""
+    from statistics import mean
+    from .models import Cliente, ClienteEntrega
+    from .ventas import sugerencia_dias
+    from .ventas_app import comportamiento, detalle_cliente
+    dias = _dias_param(60)
+    todos = comportamiento(dias)['clientes']
+    met = todos.get(cid)
     ent = Session().get(ClienteEntrega, cid)
     sug = sugerencia_dias(met, ent.dias if ent else '') if met else None
-    return jsonify(metricas=met, sugerencia=sug, **detalle_cliente(cid, request.args.get('serie', 90, type=int) or 90))
+    cli = Session().get(Cliente, cid)
+    ref = None
+    if cli and cli.localidad_erp:
+        ids = [i for (i,) in Session().query(Cliente.id_cliente).filter(Cliente.localidad_erp == cli.localidad_erp)]
+        pares = [todos[i] for i in ids if i in todos and todos[i]['compras']]
+        if pares:
+            ref = {'localidad': cli.localidad_erp, 'clientes': len(pares),
+                   'drop': round(mean(c['drop'] for c in pares), 1),
+                   'bultos_sem': round(mean(c['bultos_sem'] for c in pares), 1),
+                   'frec': round(mean(c['frec'] for c in pares if c['frec']), 1) if any(c['frec'] for c in pares) else None}
+    return jsonify(metricas=met, sugerencia=sug, referencia=ref, dias=dias,
+                   asignados=ent.dias if ent else '', **detalle_cliente(cid, dias))
 
 
 @bp.post("/api/sync")

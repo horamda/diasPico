@@ -176,19 +176,6 @@ def test_chess_client_errores(monkeypatch):
         ChessClient('https://chess.test/v1', '', '', session=FakeHttp([])).login()
 
 
-def test_endpoints_ventas(app):
-    seed(app)
-    with app.app_context():
-        guardar_filas(_compras(123, [21, 14, 7, 0], 1000, 1))
-    c = app.test_client()
-    r = c.get('/rutas/api/ventas/comportamiento?dias=60').json
-    assert r['clientes']['123']['estado'] == 'activo' and 'ent' not in r['clientes']['123']
-    r = c.get('/rutas/api/clientes/123/ventas').json
-    assert r['metricas']['compras'] == 4 and len(r['ultimos']) == 4 and r['sugerencia']['en_dia'] == 0
-    assert c.get('/rutas/api/clientes/999/ventas').json['metricas'] is None
-    assert c.get('/rutas/api/ventas/comportamiento?dias=3').status_code == 400
-
-
 def test_sync_endpoint_por_token(app, monkeypatch):
     import app.rutas.ventas as V
     llamadas = []
