@@ -48,12 +48,14 @@
       <button class="tab" role="tab" id="t-loc" aria-selected="true">Localidades</button>
       <button class="tab" role="tab" id="t-dia" aria-selected="false">Clientes</button>
       <button class="tab" role="tab" id="t-pen" aria-selected="false">Pendientes<span class="n" id="penN"></span></button>
+      <button class="tab" role="tab" id="t-rec" aria-selected="false" title="Recorridos por camión y clientes por día y localidad">Recorridos</button>
       <button class="tab" role="tab" id="t-ven" aria-selected="false">Ventas</button>
       <button class="tab" role="tab" id="t-exp" aria-selected="false" title="Ayuda">?</button>
     </div>
     <div class="pane" id="p-loc"></div>
     <div class="pane" id="p-dia" hidden></div>
     <div class="pane" id="p-pen" hidden></div>
+    <div class="pane" id="p-rec" hidden></div>
     <div class="pane" id="p-ven" hidden></div>
     <div class="pane" id="p-exp" hidden></div>
   </aside>
@@ -63,7 +65,8 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 window.RUTAS = {
-  api: "{{ url_for('rutas.api_datos') }}".replace(/\/datos$/, "")
+  api: "{{ url_for('rutas.api_datos') }}".replace(/\/datos$/, ""),
+  importarRutas: "{{ url_for('rutas_importaciones.importar_rutas_page') }}"
 };
 </script>
 <script src="{{ url_for('rutas.static', filename='rutas/vista.js') }}"></script>

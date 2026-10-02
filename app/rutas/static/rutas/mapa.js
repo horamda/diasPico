@@ -416,6 +416,96 @@ function renderVen() {
   bindItems(el);
 }
 
+// ---------- recorridos por camión (cuadro tipo INFORME) y clientes por día y localidad ----------
+const DIASLARGO = {LU:'LUNES', MA:'MARTES', MI:'MIÉRCOLES', JU:'JUEVES', VI:'VIERNES', SA:'SÁBADO'};
+// Clientes activos por sucursal/búsqueda, sin filtrar por día: el cuadro siempre muestra la semana.
+const baseSemana = () => RutasVista.filtrar(S.D.clientes, {suc:S.suc, day:'TODOS', q:S.q}, c => !c.an);
+function matrizLocalidades(base) {
+  const g = new Map();
+  for (const c of base) {
+    const k = c.suc + '|' + c.loc;
+    if (!g.has(k)) g.set(k, {suc:c.suc, loc:c.loc, total:0, sin:0, carga:{}, ...Object.fromEntries(DAYS.map(d => [d, 0]))});
+    const r = g.get(k); r.total++; if (!c.d) r.sin++;
+    for (const d of DAYS) if (c.d.includes(d)) { r[d]++; r.carga[d] = (r.carga[d] || 0) + (venta(c)?.drop || 0); }
+  }
+  return [...g.values()].sort((a, b) => a.suc.localeCompare(b.suc) || b.total - a.total || a.loc.localeCompare(b.loc));
+}
+function renderRec() {
+  const el = $('p-rec'), base = baseSemana(), carga = RutasVista.resumir(base, S.D.plan, S.suc).carga;
+  matrizIdx = new Map(matrizLocalidades(base).map(r => [r.suc + '|' + r.loc, r]));
+  const vehs = S.D.plan.vehiculos.filter(v => S.suc === 'TODAS' || v.deposito === S.suc);
+  const porDia = Object.fromEntries(DAYS.map(d => [d, base.filter(c => c.d.includes(d)).length]));
+  // Cuadro de recorridos
+  let cuadro;
+  if (!vehs.length) {
+    cuadro = `<div class="empty rec-empty"><b>No hay recorridos cargados${S.suc !== 'TODAS' ? ' para ' + esc(S.suc) : ''}.</b>
+      <p>Importalos en <a href="${esc(window.RUTAS.importarRutas || '#')}">Importaciones de datos → Rutas armadas por camión</a> con una fila por parada:
+      <code>SUCURSAL;VEHICULO;DIA;LOCALIDAD;ORDEN</code>. Por ejemplo <code>DOLORES;VEHICULO 1;MARTES;MAIPU;1</code>.</p></div>`;
+  } else {
+    let filas = '', dep = '';
+    for (const v of vehs) {
+      const celdas = DAYS.map(d => {
+        const info = carga[d].vehiculos.find(x => x.id === v.id);
+        if (!info || !info.paradas.length) return `<td class="vacio" title="Sin recorrido el ${DAYNAME[d].toLowerCase()}">—</td>`;
+        const exceso = v.capacidad_clientes && info.total > v.capacidad_clientes;
+        const bultos = S.V ? info.paradas.reduce((t, p) => t + (matrizIdx.get(v.deposito + '|' + p.loc)?.carga[d] || 0), 0) : 0;
+        return `<td class="rec-cell${exceso ? ' exceso' : ''}" data-dia="${d}" data-locs="${esc(info.paradas.map(p => p.loc).join('|'))}" tabindex="0"
+          title="${esc(v.nombre)} · ${DAYNAME[d]}: ${info.total} clientes${v.capacidad_clientes ? ' de ' + v.capacidad_clientes + ' de tope' : ''}${bultos ? ' · ~' + num(bultos) + ' bultos' : ''}. Tocá para verlo en el mapa.">
+          <div class="rec-locs">${info.paradas.map(p => `<span><i class="sw" style="background:${colorLoc(p.loc)}"></i>${esc(p.loc)}<b>${p.n}</b>${p.compartida ? '<em title="Localidad compartida con otro vehículo el mismo día">⇄</em>' : ''}</span>`).join('')}</div>
+          <div class="rec-tot">${info.total} clientes${bultos ? ` · ~${num(bultos)} b` : ''}</div></td>`;
+      }).join('');
+      filas += `<tr><td class="rec-dep">${v.deposito !== dep ? esc(v.deposito) : ''}</td><td class="rec-veh"><i class="sw" style="background:${esc(v.color)}"></i>${esc(v.nombre)}${v.patente ? `<small>${esc(v.patente)}</small>` : ''}</td>${celdas}</tr>`;
+      dep = v.deposito;
+    }
+    const sinCamion = DAYS.map(d => { const l = carga[d].sin_camion;
+      return `<td class="${l.length ? 'falta' : 'z'}">${l.map(x => `<span>${esc(x.loc)}<b>${x.n}</b></span>`).join('') || '·'}</td>`; }).join('');
+    cuadro = `<div class="tw"><table class="rec-tabla"><thead><tr><th>Depósito</th><th>Vehículo</th>${DAYS.map(d => `<th>${DIASLARGO[d]}</th>`).join('')}</tr></thead>
+      <tbody>${filas}</tbody><tfoot><tr><td colspan="2">Localidades con clientes y sin camión</td>${sinCamion}</tr></tfoot></table></div>`;
+  }
+  // Clientes por día y localidad
+  const filasM = matrizLocalidades(base), max = Math.max(1, ...filasM.flatMap(r => DAYS.map(d => r[d])));
+  let html = '', suc = '';
+  for (const r of filasM) {
+    if (r.suc !== suc) { html += `<tr class="suc"><td colspan="${DAYS.length + 3}">Sale de ${esc(r.suc)}</td></tr>`; suc = r.suc; }
+    html += `<tr data-loc="${esc(r.loc)}"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${DAYS.map(d => r[d]
+      ? `<td class="heat" style="--h:${Math.round(r[d] / max * 100)}%" data-dia="${d}" data-locs="${esc(r.loc)}" tabindex="0" title="${esc(r.loc)} · ${DAYNAME[d]}: ${r[d]} clientes${r.carga[d] ? ' · ~' + num(r.carga[d]) + ' bultos' : ''}">${r[d]}${S.V && r.carga[d] ? `<small>~${num(r.carga[d])} b</small>` : ''}</td>`
+      : '<td class="z">·</td>').join('')}<td><b>${r.total}</b></td><td class="${r.sin ? 'bad' : 'z'}">${r.sin || '·'}</td></tr>`;
+  }
+  el.innerHTML = `<div class="rec-head"><div><h2>Recorridos por camión</h2><p class="note">${S.suc === 'TODAS' ? 'Todas las sucursales' : esc(S.suc)} · cada celda suma los clientes activos de ese día en las localidades del recorrido. Tocá una celda para verla en el mapa.</p></div>
+      <div class="row"><button class="btn" id="recCsv" type="button">Descargar CSV</button><button class="btn primary" id="recVolver" type="button">Volver al mapa</button></div></div>
+    ${cuadro}
+    <div><h2>Clientes por día y localidad</h2><p class="note">Clientes activos con entrega cada día${S.V ? '; debajo, bultos estimados según su promedio por compra' : ''}. Un cliente con dos días cuenta en ambos; el total de la semana lo cuenta una vez.</p></div>
+    <div class="tw"><table class="rec-matriz"><thead><tr><th>Localidad</th>${DAYS.map(d => `<th>${DIASLARGO[d]}</th>`).join('')}<th>Clientes</th><th title="Sin días asignados">Sin días</th></tr></thead>
+      <tbody>${html}</tbody><tfoot><tr><td>Total</td>${DAYS.map(d => `<td>${porDia[d]}</td>`).join('')}<td>${base.length}</td><td>${base.filter(c => !c.d).length}</td></tr></tfoot></table></div>`;
+  el.querySelectorAll('[data-dia]').forEach(td => { const ir = () => irARecorrido(td.dataset.dia, td.dataset.locs.split('|'));
+    td.onclick = ir; td.onkeydown = e => { if (e.key === 'Enter') ir(); }; });
+  $('recVolver').onclick = () => elegirTab('t-loc');
+  $('recCsv').onclick = () => descargarCsv(vehs, carga, filasM);
+}
+let matrizIdx = new Map();
+function irARecorrido(dia, locs) {
+  if (S.comp) { S.comp = false; S.cdias = []; }
+  S.day = dia; S.sel = null; renderCard(); savePrefs(); elegirTab('t-loc'); render();
+  setTimeout(() => {
+    map.invalidateSize({pan:false});
+    const pts = visible().filter(c => locs.includes(c.loc) && isGeo(c) && !c.far);
+    if (pts.length) map.fitBounds(pts.map(c => [c.lat, c.lng]), {padding:[50,50], maxZoom:15});
+  }, 80);
+}
+function descargarCsv(vehs, carga, filasM) {
+  const q = v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  const lineas = [['DEPOSITO', 'VEHICULO', ...DAYS.map(d => DIASLARGO[d])].join(';')];
+  for (const v of vehs) lineas.push([v.deposito, v.nombre, ...DAYS.map(d => {
+    const i = carga[d].vehiculos.find(x => x.id === v.id);
+    return i && i.paradas.length ? i.paradas.map(p => `${p.loc} (${p.n})`).join(' / ') : '-';
+  })].map(q).join(';'));
+  lineas.push('', ['SUCURSAL', 'LOCALIDAD', ...DAYS.map(d => DIASLARGO[d]), 'CLIENTES', 'SIN DIAS'].join(';'));
+  for (const r of filasM) lineas.push([r.suc, r.loc, ...DAYS.map(d => r[d]), r.total, r.sin].map(q).join(';'));
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`recorridos_${new Date().toISOString().slice(0,10)}.csv`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 // ---------- ficha de consulta ----------
 let card=null;
 function select(id,fly){
@@ -528,14 +618,19 @@ function render() {
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderLegend(v); renderTools();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
-document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
-  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x===t));
-  ['loc','dia','pen','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== t.id); });
+function elegirTab(id) {
+  document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
+  ['loc','dia','pen','rec','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  const ancho = id === 't-rec', antes = $('main').classList.contains('ancho');
+  $('main').classList.toggle('ancho', ancho);
+  if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
+}
+document.querySelectorAll('.tab').forEach(t => t.onclick = () => elegirTab(t.id));
 let qt; $('q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; if(!S.D)return; render();
   const v = visible().filter(isGeo); if (S.q && v.length && v.length < 40) map.fitBounds(v.map(c => [c.lat,c.lng]), {padding:[50,50], maxZoom:15}); }, 200); });
 
