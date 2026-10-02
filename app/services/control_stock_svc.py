@@ -135,6 +135,7 @@ def ensure_control_stock_tables() -> None:
                         updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
                         PRIMARY KEY (conteo_id, codigo_articulo, lote)
                     );
+                    ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS stock_referencia_bultos NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_1 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_2 NUMERIC;
                     ALTER TABLE control_stock_conteo_items ADD COLUMN IF NOT EXISTS cantidad_3 NUMERIC;
@@ -348,8 +349,8 @@ def _stock_frescura_por_articulo(sucursal: str, ids: list[int]) -> dict[int, flo
     return result
 
 
-def _marcar_dispersion_frescura(rows: list[tuple], sucursal: str) -> tuple[list[tuple], list[dict]]:
-    esperado_por_articulo = _stock_frescura_por_articulo(sucursal, [int(row[0]) for row in rows])
+def _marcar_dispersion_frescura(rows: list[tuple], sucursal: str, referencia: dict | None = None) -> tuple[list[tuple], list[dict]]:
+    esperado_por_articulo = referencia if referencia is not None else _stock_frescura_por_articulo(sucursal, [int(row[0]) for row in rows])
     if not esperado_por_articulo:
         return rows, []
     adjusted: list[tuple] = []
@@ -1046,7 +1047,8 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
 
     rows = _rows_conteo_desde_items(items)
 
-    rows, alertas_dispersion = _marcar_dispersion_frescura(rows, conteo["sucursal"])
+    referencia = _stock_frescura_por_articulo(conteo["sucursal"], [int(row[0]) for row in rows])
+    rows, alertas_dispersion = _marcar_dispersion_frescura(rows, conteo["sucursal"], referencia)
 
     with pg_conn() as conn:
         with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
@@ -1091,7 +1093,7 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                     """INSERT INTO control_stock_conteo_items(
                            conteo_id, id_articulo, descripcion, abc, semana, dia,
                            cantidad_1, cantidad_2, cantidad_3, cantidad_4, cantidad_5, cantidad_6, unidades_sueltas,
-                           stock, diferencia, observacion
+                           stock, diferencia, observacion, stock_referencia_bultos
                        )
                        VALUES %s
                        ON CONFLICT (conteo_id, id_articulo) DO UPDATE SET
@@ -1106,7 +1108,7 @@ def guardar_conteo(payload: dict, responsable_default: str = "") -> dict:
                            diferencia = EXCLUDED.diferencia,
                            observacion = EXCLUDED.observacion,
                            updated_at = NOW()""",
-                    [(saved["id"], *row) for row in rows],
+                    [(saved["id"], *row, referencia.get(int(row[0]))) for row in rows],
                 )
     saved["items_guardados"] = len(rows)
     saved["alertas_dispersion"] = alertas_dispersion
@@ -2117,3 +2119,42 @@ def get_abc_mensual(anio: int | str | None = None, sucursal: str | None = "1") -
         "articulos_con_cambios": sum(1 for r in rows if r["cambios"] > 0),
         "rows": rows,
     }
+
+
+def get_controles_externos(desde=None, hasta=None, sucursal="1", responsable="", conteo_id=None):
+    """Return saved external controls independently, including legacy counts."""
+    ensure_control_stock_tables()
+    suc = _sucursal_id(sucursal)
+    with pg_cursor() as cur:
+        if conteo_id is not None:
+            cur.execute("""SELECT id, fecha::text, sucursal, responsable, observaciones
+                           FROM control_stock_conteos
+                           WHERE id = %s AND sucursal = %s AND tipo_conteo = 'externo'""",
+                        (conteo_id, suc))
+            control = cur.fetchone()
+            if not control:
+                raise ValueError("Control externo no encontrado en esta sucursal")
+            cur.execute("""SELECT id_articulo, descripcion, abc, stock, unidades_sueltas,
+                                  diferencia, observacion, stock_referencia_bultos,
+                                  stock - stock_referencia_bultos AS diferencia_bultos
+                           FROM control_stock_conteo_items WHERE conteo_id = %s
+                           ORDER BY id_articulo""", (conteo_id,))
+            return {"ok": True, "control": dict(control), "items": [dict(r) for r in cur.fetchall()]}
+        try:
+            inicio = date.fromisoformat(desde) if desde else date.today().replace(day=1)
+            fin = date.fromisoformat(hasta) if hasta else date.today()
+        except ValueError as exc:
+            raise ValueError("Las fechas deben tener formato YYYY-MM-DD") from exc
+        if inicio > fin:
+            raise ValueError("Desde no puede ser posterior a Hasta")
+        cur.execute("""SELECT c.id, c.fecha::text, c.responsable, c.observaciones,
+                              COUNT(i.id_articulo) AS articulos,
+                              COUNT(i.id_articulo) FILTER (WHERE i.diferencia) AS alertas
+                       FROM control_stock_conteos c
+                       LEFT JOIN control_stock_conteo_items i ON i.conteo_id = c.id
+                       WHERE c.tipo_conteo = 'externo' AND c.sucursal = %s
+                         AND c.fecha BETWEEN %s AND %s
+                         AND (%s = '' OR c.responsable ILIKE %s)
+                       GROUP BY c.id ORDER BY c.fecha DESC, c.id DESC""",
+                    (suc, inicio, fin, responsable or "", '%' + (responsable or "") + '%'))
+        return {"ok": True, "rows": [dict(r) for r in cur.fetchall()]}

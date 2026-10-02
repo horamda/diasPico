@@ -1,0 +1,200 @@
+{
+ "depositos": [
+  {
+   "nombre": "DOLORES",
+   "lat": -36.3153,
+   "lng": -57.6796,
+   "direccion": "(aprox.) centro de Dolores — corregir"
+  },
+  {
+   "nombre": "CHASCOMUS",
+   "lat": -35.5702,
+   "lng": -58.0113,
+   "direccion": "(aprox.) centro de Chascomús — corregir"
+  },
+  {
+   "nombre": "CASA CENTRAL",
+   "lat": null,
+   "lng": null,
+   "direccion": "completar"
+  }
+ ],
+ "localidades": [
+  {
+   "nombre": "CASTELLI",
+   "sucursal": "CHASCOMUS",
+   "lat": -36.08954,
+   "lng": -57.80552
+  },
+  {
+   "nombre": "CHASCOMUS",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.57023,
+   "lng": -58.01126
+  },
+  {
+   "nombre": "DOLORES",
+   "sucursal": "DOLORES",
+   "lat": -36.3153,
+   "lng": -57.67955
+  },
+  {
+   "nombre": "ESQUINA DE CROTTO",
+   "sucursal": "DOLORES",
+   "lat": -36.30024,
+   "lng": -57.38198
+  },
+  {
+   "nombre": "GENERAL BELGRANO",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.76906,
+   "lng": -58.49511
+  },
+  {
+   "nombre": "GENERAL CONESA",
+   "sucursal": "DOLORES",
+   "lat": -36.51858,
+   "lng": -57.32444
+  },
+  {
+   "nombre": "GENERAL GUIDO",
+   "sucursal": "DOLORES",
+   "lat": -36.64143,
+   "lng": -57.7911
+  },
+  {
+   "nombre": "LAS ARMAS",
+   "sucursal": "DOLORES",
+   "lat": -37.08377,
+   "lng": -57.82926
+  },
+  {
+   "nombre": "LEZAMA",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.87467,
+   "lng": -57.89717
+  },
+  {
+   "nombre": "MAIPU",
+   "sucursal": "DOLORES",
+   "lat": -36.86265,
+   "lng": -57.88149
+  },
+  {
+   "nombre": "PILA",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.99989,
+   "lng": -58.14226
+  },
+  {
+   "nombre": "RANCHOS",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.51637,
+   "lng": -58.31828
+  },
+  {
+   "nombre": "SANTO DOMINGO",
+   "sucursal": "DOLORES",
+   "lat": -36.71213,
+   "lng": -57.58568
+  },
+  {
+   "nombre": "SEVIGNE",
+   "sucursal": "CHASCOMUS",
+   "lat": -36.20582,
+   "lng": -57.7425
+  },
+  {
+   "nombre": "VILLANUEVA",
+   "sucursal": "CHASCOMUS",
+   "lat": -35.67633,
+   "lng": -58.43567
+  },
+  {
+   "nombre": "GENERAL LAVALLE",
+   "sucursal": "CASA CENTRAL",
+   "lat": -36.40787,
+   "lng": -56.94292
+  }
+ ],
+ "vehiculos": [
+  {
+   "sucursal": "DOLORES",
+   "nombre": "Vehículo 1",
+   "color": "#c4561e",
+   "plan": {
+    "LU": [
+     "DOLORES"
+    ],
+    "MA": [
+     "MAIPU",
+     "GENERAL GUIDO"
+    ],
+    "MI": [
+     "GENERAL CONESA",
+     "DOLORES"
+    ],
+    "JU": [
+     "DOLORES"
+    ],
+    "VI": [
+     "MAIPU"
+    ],
+    "SA": [
+     "DOLORES"
+    ]
+   }
+  },
+  {
+   "sucursal": "CHASCOMUS",
+   "nombre": "Vehículo 1",
+   "color": "#2563b8",
+   "plan": {
+    "LU": [
+     "GENERAL BELGRANO"
+    ],
+    "MA": [
+     "CHASCOMUS"
+    ],
+    "MI": [
+     "CHASCOMUS"
+    ],
+    "JU": [
+     "GENERAL BELGRANO"
+    ],
+    "VI": [
+     "CHASCOMUS",
+     "RANCHOS"
+    ],
+    "SA": [
+     "CHASCOMUS"
+    ]
+   }
+  },
+  {
+   "sucursal": "CHASCOMUS",
+   "nombre": "Vehículo 2",
+   "color": "#7b3fbf",
+   "plan": {
+    "LU": [],
+    "MA": [
+     "LEZAMA",
+     "CASTELLI"
+    ],
+    "MI": [
+     "CASTELLI"
+    ],
+    "JU": [
+     "PILA",
+     "CHASCOMUS"
+    ],
+    "VI": [
+     "LEZAMA"
+    ],
+    "SA": [
+     "CASTELLI"
+    ]
+   }
+  }
+ ]
+}

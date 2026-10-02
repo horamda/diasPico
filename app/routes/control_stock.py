@@ -345,3 +345,18 @@ def responsables_update(responsable_id: int):
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/control-externo/historial")
+@login_required
+def historial_externo():
+    try:
+        return jsonify(control_stock_svc.get_controles_externos(
+            desde=request.args.get("desde"), hasta=request.args.get("hasta"),
+            sucursal=request.args.get("sucursal", "1"),
+            responsable=request.args.get("responsable", ""),
+            conteo_id=request.args.get("conteo_id", type=int)))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception:
+        return jsonify({"ok": False, "error": "No se pudieron consultar los controles externos"}), 500

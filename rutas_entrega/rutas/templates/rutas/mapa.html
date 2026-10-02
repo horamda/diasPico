@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rutas de entrega · Del Palacio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
+</head>
+<body>
+<div class="app">
+<header>
+  <h1>Rutas de entrega<small id="sub">Cargando…</small></h1>
+  <nav class="topnav"><a href="{{ url_for('rutas.mapa') }}" aria-current="page">Mapa</a><a href="{{ url_for('rutas.plan_page') }}">Camiones y localidades</a></nav>
+  <div class="hctl">
+    <div class="seg" id="sucSeg" role="group" aria-label="Sucursal que entrega"></div>
+    <div class="seg" id="daySeg" role="group" aria-label="Día de entrega"></div>
+    <input type="search" id="q" placeholder="Buscar cliente, nº o calle" aria-label="Buscar cliente">
+  </div>
+</header>
+<div class="main">
+  <aside>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="t-loc" aria-selected="true">Localidades</button>
+      <button class="tab" role="tab" id="t-dia" aria-selected="false">Camiones</button>
+      <button class="tab" role="tab" id="t-pen" aria-selected="false">Pendientes<span class="n" id="penN"></span></button>
+      <button class="tab" role="tab" id="t-exp" aria-selected="false">BEES</button>
+    </div>
+    <div class="pane" id="p-loc"></div>
+    <div class="pane" id="p-dia" hidden></div>
+    <div class="pane" id="p-pen" hidden></div>
+    <div class="pane" id="p-exp" hidden></div>
+  </aside>
+  <div id="map"></div>
+</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+window.RUTAS = {
+  api: "{{ url_for('rutas.api_datos') }}".replace(/\/datos$/, ""),
+  exportBase: "{{ url_for('rutas.export_bees', fmt='csv') }}".replace(/bees\.csv$/, "")
+};
+</script>
+<script src="{{ url_for('rutas.static', filename='rutas/mapa.js') }}"></script>
+</body>
+</html>

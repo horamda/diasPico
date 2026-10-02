@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Camiones y localidades · Rutas de entrega</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
+<style>html,body{height:auto}</style>
+</head>
+<body>
+<header>
+  <h1>Camiones y localidades<small>Reemplaza las hojas INFORME y LOCALIDAD-SUCURSAL</small></h1>
+  <nav class="topnav"><a href="{{ url_for('rutas.mapa') }}">Mapa</a><a href="{{ url_for('rutas.plan_page') }}" aria-current="page">Camiones y localidades</a></nav>
+</header>
+<div class="wrap">
+  <section style="display:grid;gap:12px">
+    <h2>Recorrido semanal por vehículo</h2>
+    <p class="note">Las localidades de cada día van en el orden en que las visita el camión. Los números son los clientes activos con ese día asignado.</p>
+    <div class="vgrid" id="vehs"></div>
+    <div class="panel" style="display:grid;gap:8px;max-width:560px">
+      <h2>Agregar vehículo</h2>
+      <div class="row"><select class="inp" id="nvDep" style="width:auto"></select><input class="inp" id="nvNom" placeholder="Nombre (ej. Vehículo 3)" style="width:180px"><input class="inp" id="nvPat" placeholder="Patente" style="width:110px"><input class="inp" id="nvCap" type="number" min="0" placeholder="Tope clientes/día" style="width:150px"><button class="btn primary" id="nvOk">Agregar</button></div>
+    </div>
+  </section>
+  <section style="display:grid;gap:12px">
+    <h2>Localidad → sucursal que entrega</h2>
+    <div class="tw panel"><table id="locs"><thead><tr><th>Localidad</th><th>Sale de</th><th>Centro (lat)</th><th>Centro (lng)</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="row"><input class="inp" id="nlNom" placeholder="Nueva localidad" style="width:220px"><select class="inp" id="nlDep" style="width:auto"></select><button class="btn" id="nlOk">Agregar localidad</button></div>
+  </section>
+  <section style="display:grid;gap:12px">
+    <h2>Depósitos</h2>
+    <p class="note">Cargá la ubicación real de cada depósito: es el punto de salida y llegada del recorrido.</p>
+    <div class="tw panel"><table id="deps"><thead><tr><th>Depósito</th><th>Dirección</th><th>Lat</th><th>Lng</th><th></th></tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+<script>
+const API = "{{ url_for('rutas.api_datos') }}".replace(/\/datos$/, "");
+const DAYS = ['LU','MA','MI','JU','VI','SA'];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const $ = id => document.getElementById(id);
+let D;
+function toast(msg, err){ const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3000); }
+async function api(path, opts={}) {
+  const r = await fetch(API + path, {headers:{'Content-Type':'application/json'}, credentials:'same-origin', ...opts});
+  const j = await r.json().catch(()=>({})); if (!r.ok) throw new Error(j.error || ('Error ' + r.status)); return j;
+}
+const num = v => v === '' || v == null ? null : +v;
+function cuenta(loc, dia) { return D.clientes.filter(c => !c.an && c.loc === loc && c.d.includes(dia)).length; }
+
+function render() {
+  const depOpts = sel => D.plan.depositos.map(d => `<option value="${d.id}" ${d.id===sel?'selected':''}>${esc(d.nombre)}</option>`).join('');
+  $('nvDep').innerHTML = depOpts(); $('nlDep').innerHTML = depOpts();
+  $('vehs').innerHTML = D.plan.vehiculos.map(v => {
+    const locsDep = D.plan.localidades.filter(l => l.deposito === v.deposito || !l.deposito);
+    return `<div class="vcard" data-v="${v.id}">
+      <h3><input type="color" value="${v.color}" data-k="color" title="Color en el mapa" style="width:26px;height:22px;border:0;padding:0;background:none">${esc(v.deposito)} · ${esc(v.nombre)}</h3>
+      <div class="row"><input class="inp" data-k="patente" value="${esc(v.patente||'')}" placeholder="Patente" style="width:110px"><input class="inp" type="number" min="0" data-k="capacidad_clientes" value="${v.capacidad_clientes??''}" placeholder="Tope clientes/día" style="width:150px"><button class="btn" data-act="datos">Guardar datos</button></div>
+      ${DAYS.map(d => `<div class="dayrow"><b>${d}</b><div class="chips" data-dia="${d}">
+        ${(v.plan[d]||[]).map((l,i) => `<span class="chipx" data-loc="${esc(l)}">${esc(l)} · ${cuenta(l,d)}<button title="Quitar" data-act="rm">×</button></span>`).join('')}
+        <select data-act="add"><option value="">+ localidad</option>${locsDep.filter(l => !(v.plan[d]||[]).includes(l.nombre)).map(l=>`<option>${esc(l.nombre)}</option>`).join('')}</select>
+      </div></div>`).join('')}
+      <div class="row"><button class="btn" data-act="baja">Dar de baja</button></div></div>`;
+  }).join('');
+  $('vehs').querySelectorAll('.vcard').forEach(card => {
+    const vid = +card.dataset.v, v = D.plan.vehiculos.find(x => x.id === vid);
+    const savePlan = async plan => { try { await api(`/vehiculos/${vid}/plan`, {method:'PUT', body:JSON.stringify(plan)}); toast('Plan guardado'); load(); } catch(e) { toast(e.message, true); } };
+    card.querySelectorAll('[data-act="rm"]').forEach(b => b.onclick = () => { const dia = b.closest('.chips').dataset.dia, loc = b.parentElement.dataset.loc;
+      const plan = structuredClone(v.plan); plan[dia] = (plan[dia]||[]).filter(x => x !== loc); savePlan(plan); });
+    card.querySelectorAll('select[data-act="add"]').forEach(s => s.onchange = () => { if (!s.value) return; const dia = s.closest('.chips').dataset.dia;
+      const plan = structuredClone(v.plan); plan[dia] = [...(plan[dia]||[]), s.value]; savePlan(plan); });
+    card.querySelector('[data-act="datos"]').onclick = async () => { const body = {}; card.querySelectorAll('[data-k]').forEach(i => body[i.dataset.k] = i.dataset.k==='capacidad_clientes' ? num(i.value) : i.value);
+      try { await api(`/vehiculos/${vid}`, {method:'PATCH', body:JSON.stringify(body)}); toast('Guardado'); load(); } catch(e) { toast(e.message, true); } };
+    card.querySelector('[data-act="baja"]').onclick = async () => { try { await api(`/vehiculos/${vid}`, {method:'PATCH', body:JSON.stringify({activo:false})}); toast('Vehículo dado de baja'); load(); } catch(e) { toast(e.message, true); } };
+  });
+  const tb = $('locs').querySelector('tbody');
+  tb.innerHTML = D.plan.localidades.map(l => `<tr data-l="${l.id}"><td>${esc(l.nombre)}</td><td><select class="inp" data-k="deposito_id"><option value="">—</option>${depOpts(l.deposito_id)}</select></td>
+    <td><input class="inp" data-k="lat" value="${l.lat??''}" style="width:110px"></td><td><input class="inp" data-k="lng" value="${l.lng??''}" style="width:110px"></td><td><button class="btn">Guardar</button></td></tr>`).join('');
+  tb.querySelectorAll('tr').forEach(tr => tr.querySelector('button').onclick = async () => { const b = {}; tr.querySelectorAll('[data-k]').forEach(i => b[i.dataset.k] = num(i.value));
+    try { await api('/localidades/' + tr.dataset.l, {method:'PUT', body:JSON.stringify(b)}); toast('Localidad guardada'); load(); } catch(e) { toast(e.message, true); } });
+  const td = $('deps').querySelector('tbody');
+  td.innerHTML = D.plan.depositos.map(d => `<tr data-d="${d.id}"><td>${esc(d.nombre)}</td><td><input class="inp" data-k="direccion" value="${esc(d.direccion||'')}" style="min-width:220px"></td>
+    <td><input class="inp" data-k="lat" value="${d.lat??''}" style="width:110px"></td><td><input class="inp" data-k="lng" value="${d.lng??''}" style="width:110px"></td><td><button class="btn">Guardar</button></td></tr>`).join('');
+  td.querySelectorAll('tr').forEach(tr => tr.querySelector('button').onclick = async () => { const b = {}; tr.querySelectorAll('[data-k]').forEach(i => b[i.dataset.k] = i.dataset.k==='direccion' ? i.value : num(i.value));
+    try { await api('/depositos/' + tr.dataset.d, {method:'PUT', body:JSON.stringify(b)}); toast('Depósito guardado'); load(); } catch(e) { toast(e.message, true); } });
+}
+$('nvOk').onclick = async () => { try { await api('/vehiculos', {method:'POST', body:JSON.stringify({deposito_id:+$('nvDep').value, nombre:$('nvNom').value.trim(), patente:$('nvPat').value.trim()||null, capacidad_clientes:num($('nvCap').value)})}); toast('Vehículo agregado'); load(); } catch(e) { toast(e.message, true); } };
+$('nlOk').onclick = async () => { try { await api('/localidades', {method:'POST', body:JSON.stringify({nombre:$('nlNom').value, deposito_id:+$('nlDep').value})}); toast('Localidad agregada'); $('nlNom').value=''; load(); } catch(e) { toast(e.message, true); } };
+async function load() { D = await api('/datos'); render(); }
+load();
+</script>
+</body>
+</html>

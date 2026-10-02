@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -1346,6 +1346,9 @@
   </section>
 
   <section class="view" id="viewExterno" role="tabpanel" aria-labelledby="tabExterno">
+    <div class="panel"><button class="btn primary" type="button" onclick="mostrarExterno(false)">Nuevo control</button> <button class="btn" type="button" onclick="mostrarExterno(true)">Historial y resultados</button></div>
+    <style>#externoNuevo[hidden],#externoHistorial[hidden],#extHistDetalle[hidden],#externoResultadoGuardado[hidden]{display:none!important}</style><div id="externoNuevo">
+    <div id="externoResultadoGuardado" class="panel" hidden></div>
     <section class="panel">
       <div class="grid">
         <div class="field"><label>Sucursal</label><select id="sucursalExterno" onchange="syncSucursal('externo')"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
@@ -1378,6 +1381,19 @@
         <div class="save-sub" id="externoFooterSummary" aria-live="polite">Genera el sorteo y carga todos los articulos.</div>
       </div>
       <button class="btn ok save-btn" id="guardarExternoBtn" onclick="guardarControlExterno()">Guardar control externo</button>
+    </section>
+    </div>
+    <section id="externoHistorial" hidden>
+      <div class="panel grid">
+        <div class="field"><label for="extHistSucursal">Sucursal</label><select id="extHistSucursal"><option value="1">Casa Central</option><option value="2">Dolores</option></select></div>
+        <div class="field"><label for="extHistDesde">Desde</label><input type="date" id="extHistDesde"></div>
+        <div class="field"><label for="extHistHasta">Hasta</label><input type="date" id="extHistHasta"></div>
+        <div class="field"><label for="extHistResponsable">Responsable externo</label><input id="extHistResponsable" placeholder="Todos o parte del nombre"></div>
+        <button class="btn primary" type="button" onclick="cargarHistorialExterno()">Consultar controles</button>
+      </div>
+      <div id="extHistStatus" class="status" role="status" aria-live="polite"></div>
+      <div id="extHistLista"></div>
+      <section id="extHistDetalle" class="panel" hidden aria-live="polite"></section>
     </section>
   </section>
 
@@ -3162,7 +3178,7 @@ function renderControlExterno(){
   actualizarTotalesExterno();
 }
 async function generarControlExterno(){
-  externoStatus.textContent='Generando sorteo...';externalGuardado=false;externalReviewKey='';if(guardarExternoBtn){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo'}
+  externoResultadoGuardado.hidden=true;externoStatus.textContent='Generando sorteo...';externalGuardado=false;externalReviewKey='';if(guardarExternoBtn){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo'}
   mobileIndex=0;
   externalDraft={values:{},unidades:{}};
   actualizarEstadoFrescura(fechaExterno.value,'extFrescura');
@@ -3194,7 +3210,49 @@ async function guardarControlExterno(){
   guardarExternoBtn.disabled=true;guardarExternoBtn.textContent='Guardando...';externoStatus.textContent='Guardando el control externo...';
   const res=await fetch('/api/control-stock/conteos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();
   if(!res.ok||data.ok===false){guardarExternoBtn.disabled=false;guardarExternoBtn.textContent='Guardar control externo';externoStatus.textContent='Error: '+(data.error||'No se pudo guardar');return}
+  resumenLoaded=false;resumenArticuloLoaded=false;articulosLoaded=false;abcMensualLoaded=false;
+  externoResultadoGuardado.hidden=false;
+  externoResultadoGuardado.innerHTML=`Control #${Number(data.data.id)} guardado. <button type="button" class="btn primary" onclick="verResultadoExterno(${Number(data.data.id)},'${esc(payload.sucursal)}')">Ver resultado</button>`;
   externalGuardado=true;guardarExternoBtn.textContent='Control externo guardado';externoStatus.textContent=`Control externo guardado correctamente: ${data.data.items_guardados} artículos registrados.`;await modalAlert('Control externo guardado correctamente.');
+}
+function mostrarExterno(historial){
+  externoNuevo.hidden=historial;externoHistorial.hidden=!historial;
+  if(historial){
+    if(!extHistDesde.value){extHistDesde.value=today().slice(0,7)+'-01';extHistHasta.value=today();extHistSucursal.value=sucursalExterno.value}
+    cargarHistorialExterno();
+  }
+}
+let extHistoryRequest=0;
+let extDetailRequest=0;
+async function cargarHistorialExterno(){
+  const request=++extHistoryRequest;++extDetailRequest;
+  extHistDetalle.hidden=true;extHistLista.innerHTML='';extHistStatus.textContent='Consultando controles externos...';
+  const suc=extHistSucursal.value;
+  try{
+    const params=new URLSearchParams({desde:extHistDesde.value,hasta:extHistHasta.value,sucursal:suc,responsable:extHistResponsable.value.trim()});
+    const res=await fetch('/api/control-stock/control-externo/historial?'+params);const data=await res.json();
+    if(request!==extHistoryRequest)return;
+    if(!res.ok||!data.ok)throw Error(data.error||'No se pudo consultar');
+    extHistStatus.textContent=data.rows.length?`${data.rows.length} controles encontrados`:'No hay controles externos para estos filtros. Probá ampliar las fechas.';
+    extHistLista.innerHTML=data.rows.map(r=>`<article class="panel"><strong>Control #${Number(r.id)} · ${esc(r.fecha)}</strong><p>${esc(r.responsable)} · ${Number(r.articulos)} artículos · ${Number(r.alertas)} alertas</p><button type="button" class="btn primary" onclick="cargarDetalleExterno(${Number(r.id)},'${esc(suc)}')">Ver resultado</button></article>`).join('');
+  }catch(e){if(request===extHistoryRequest)extHistStatus.textContent='Error: '+e.message}
+}
+async function verResultadoExterno(id,sucursal){
+  externoNuevo.hidden=true;externoHistorial.hidden=false;
+  extHistSucursal.value=sucursal;extHistDesde.value=fechaExterno.value;extHistHasta.value=fechaExterno.value;extHistResponsable.value='';
+  await cargarHistorialExterno();await cargarDetalleExterno(id,sucursal);
+}
+async function cargarDetalleExterno(id,sucursal){
+  const request=++extDetailRequest;
+  extHistDetalle.hidden=false;extHistDetalle.textContent='Cargando resultado...';
+  try{
+    const res=await fetch('/api/control-stock/control-externo/historial?'+new URLSearchParams({conteo_id:id,sucursal}));const data=await res.json();
+    if(request!==extDetailRequest)return;
+    if(!res.ok||!data.ok)throw Error(data.error||'No se pudo consultar');
+    const c=data.control;
+    extHistDetalle.innerHTML=`<h2>Resultado del control #${Number(c.id)}</h2><p>${esc(c.fecha)} · ${esc(c.responsable)}</p><p>${esc(c.observaciones||'Sin observaciones')}</p><p>La referencia corresponde a los bultos de Frescura consultados al guardar. Las unidades sueltas se muestran por separado.</p>`+data.items.map(r=>`<article class="panel"><strong>${Number(r.id_articulo)} · ${esc(r.descripcion)}</strong><p>ABC: ${esc(r.abc)} · Contado: ${fmt.format(Number(r.stock||0))} bultos y ${fmt.format(Number(r.unidades_sueltas||0))} unidades sueltas</p><p>${r.stock_referencia_bultos==null?'Sin referencia histórica':`Referencia: ${fmt.format(Number(r.stock_referencia_bultos))} bultos · Diferencia: ${fmt.format(Number(r.diferencia_bultos))} bultos`}</p><p>${r.diferencia?'Alerta registrada: revisar diferencia':'Sin alerta registrada'}</p><p>${esc(r.observacion||'')}</p></article>`).join('');
+    extHistDetalle.scrollIntoView({behavior:'smooth',block:'start'});
+  }catch(e){if(request===extDetailRequest)extHistDetalle.textContent='Error: '+e.message}
 }
 function draftKey(){const f=filtrosEfectivos();return `stock:${sucursalConteo.value}:${mes.value}:${fecha.value}:${f.semana}:${f.dia}`}
 function guardarBorradorLocal(){
