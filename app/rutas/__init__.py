@@ -34,6 +34,8 @@ def init_rutas(app, url_prefix='/rutas'):
     app.config['RUTAS_LOGIN_REQUIRED'] = portal_access
     app.config['RUTAS_USUARIO'] = lambda: str(g.portal_user.get('username') or g.portal_user['id'])
     from . import routes
+    from .cli import cli
+    app.cli.add_command(cli)
     app.register_blueprint(bp, url_prefix=url_prefix)
     app.register_blueprint(import_bp, url_prefix='/importaciones/rutas')
     return bp

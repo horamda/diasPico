@@ -217,3 +217,61 @@ def api_historial(cid):
                      "fecha": r.fecha.isoformat()} for r in rows])
 
 
+
+
+# ---------- ventas ----------
+def _dias_param(default):
+    dias = request.args.get('dias', default, type=int)
+    if dias is None or not 7 <= dias <= 365:
+        raise ValueError('dias debe estar entre 7 y 365.')
+    return dias
+
+
+_RESUMEN_VENTA = ('compras', 'neto', 'ticket', 'nc', 'bultos', 'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado')
+
+
+@bp.get("/api/ventas/comportamiento")
+@protegido
+def api_comportamiento():
+    from .ventas import comportamiento
+    res = comportamiento(_dias_param(60))
+    clientes = {cid: {k: c[k] for k in _RESUMEN_VENTA} for cid, c in res['clientes'].items()}
+    return jsonify(dict(res, clientes=clientes))
+
+
+@bp.get("/api/clientes/<int:cid>/ventas")
+@protegido
+def api_ventas_cliente(cid):
+    from .models import ClienteEntrega
+    from .ventas import comportamiento, detalle_cliente, sugerencia_dias
+    met = comportamiento(_dias_param(60))['clientes'].get(cid)
+    ent = Session().get(ClienteEntrega, cid)
+    sug = sugerencia_dias(met, ent.dias if ent else '') if met else None
+    return jsonify(metricas=met, sugerencia=sug, **detalle_cliente(cid, request.args.get('serie', 90, type=int) or 90))
+
+
+@bp.post("/api/sync")
+def api_sync():
+    """Sync de ventas para el cron. Se autentica con X-Sync-Token, no con el login del portal."""
+    import hmac
+    import os
+    from datetime import date, timedelta
+    from .chess import ChessError
+    from .cli import sucursales_default
+    from .db import create_all
+    from .ventas import sincronizar
+    token = current_app.config.get('RUTAS_SYNC_TOKEN') or os.environ.get('RUTAS_SYNC_TOKEN') or ''
+    given = request.headers.get('X-Sync-Token', '')
+    if not token or not hmac.compare_digest(given.encode(), token.encode()):
+        return jsonify(error='Token de sincronización inválido.'), 403
+    dias = request.args.get('dias', 7, type=int)
+    if dias is None or not 1 <= dias <= 62:
+        return jsonify(error='dias debe estar entre 1 y 62.'), 400
+    create_all()
+    hasta = date.today()
+    try:
+        res = sincronizar(hasta - timedelta(days=dias - 1), hasta, sucursales_default(),
+                          detalle=request.args.get('detalle') == '1')
+    except ChessError as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(ok=True, **res)

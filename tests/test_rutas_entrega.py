@@ -123,7 +123,7 @@ def test_refresh_endpoint_and_cross_origin(app, monkeypatch):
     c=app.test_client()
     assert c.post('/importaciones/rutas/api/actualizar-maestro',json={}).json['nuevos']==1
     assert c.post('/importaciones/rutas/api/actualizar-maestro',json={},headers={'Origin':'https://other.example'}).status_code==403
-    assert c.post('/rutas/api/sync').status_code==404
+    assert c.post('/rutas/api/sync').status_code==403  # solo con X-Sync-Token
     assert c.get('/rutas/export/bees.csv').status_code==404
 
 

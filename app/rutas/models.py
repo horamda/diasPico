@@ -5,8 +5,8 @@ Dos capas separadas a propósito:
   * rt_cliente_entrega   -> lo que decide logística (días, ubicación corregida). La sync no lo toca.
 Así se puede re-sincronizar el ERP todos los días sin perder el armado de días.
 """
-from datetime import datetime
-from sqlalchemy import (Boolean, DateTime, Float, ForeignKey, Integer, SmallInteger, String,
+from datetime import date, datetime
+from sqlalchemy import (Boolean, Date, DateTime, Float, ForeignKey, Integer, SmallInteger, String,
                         Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -154,3 +154,36 @@ class ImportacionRutas(Base):
     usuario: Mapped[str] = mapped_column(String(120))
     fecha: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     resumen: Mapped[str] = mapped_column(Text)
+
+
+class Venta(Base):
+    """Comprobante de venta de ChessERP. Clave: idDocumento-letra-serie-nrodoc."""
+    __tablename__ = 'rt_venta'
+    id: Mapped[str] = mapped_column(String(60), primary_key=True)
+    id_cliente: Mapped[int] = mapped_column(Integer, index=True)
+    id_sucursal: Mapped[int | None] = mapped_column(Integer)
+    documento: Mapped[str] = mapped_column(String(10), default='')
+    es_nc: Mapped[bool] = mapped_column(Boolean, default=False)
+    fecha: Mapped[date | None] = mapped_column(Date, index=True)
+    fecha_pedido: Mapped[date | None] = mapped_column(Date)
+    fecha_entrega: Mapped[date | None] = mapped_column(Date)
+    origen: Mapped[str | None] = mapped_column(String(30))
+    vendedor: Mapped[str | None] = mapped_column(String(120))
+    fletero: Mapped[str | None] = mapped_column(String(120))
+    rechazo: Mapped[str | None] = mapped_column(String(120))
+    anulado: Mapped[bool] = mapped_column(Boolean, default=False)
+    neto: Mapped[float] = mapped_column(Float, default=0)
+    total: Mapped[float] = mapped_column(Float, default=0)
+    bultos: Mapped[float | None] = mapped_column(Float)   # solo con carga detallada
+    hl: Mapped[float | None] = mapped_column(Float)
+
+
+class VentaArticulo(Base):
+    """Totales por artículo de un comprobante (carga detallada)."""
+    __tablename__ = 'rt_venta_art'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    venta_id: Mapped[str] = mapped_column(ForeignKey('rt_venta.id', ondelete='CASCADE'), index=True)
+    articulo: Mapped[str] = mapped_column(String(160))
+    bultos: Mapped[float] = mapped_column(Float, default=0)
+    hl: Mapped[float] = mapped_column(Float, default=0)
+    neto: Mapped[float] = mapped_column(Float, default=0)
