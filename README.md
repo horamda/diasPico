@@ -166,9 +166,46 @@ Módulo integrado en `/rutas/` (mapa) y `/rutas/plan` (consulta de recorridos), 
 - El historial de cada cliente está en su ficha del mapa. Registra usuario, fecha, campo y valores anterior/nuevo.
 - Las tablas `rt_*` se crean al primer acceso autorizado a la API, usando el motor de la aplicación. El arranque no conecta a la base para crearlas. La base debe permitir crear tablas.
 - El módulo actual admite códigos numéricos de cliente hasta 2147483647. La actualización informa los códigos omitidos; no combina identificadores que colisionan al convertirlos a número.
-- La carga por camión representa cobertura por localidad, no asignación individual. Los trazos son orientativos, no rutas por calles. BEES y sincronización directa con Chess quedan para la segunda etapa y no tienen endpoints habilitados.
+- La carga por camión representa cobertura por localidad, no asignación individual. Los trazos son orientativos, no rutas por calles. El export a BEES y la sincronización de clientes con Chess no están habilitados: los clientes salen del maestro y los días, del CSV. Desde Chess solo se cargan ventas (ver abajo).
 
 Validación: `python -m pytest tests/test_rutas_entrega.py -q`.
+
+### Ventas y comportamiento de compra
+
+Las ventas se cargan desde la API de ChessERP en `rt_venta` (un registro por comprobante,
+clave `idDocumento-letra-serie-nrodoc`) y `rt_venta_art` (bultos, HL y neto por artículo,
+solo con carga detallada). Volver a cargar un período no duplica comprobantes.
+
+- Login: el mismo de frescura (`auth/login` → `sessionId` como Cookie). Usa `CHESS_USER`/`CHESS_PASSWORD`
+  o, si no están, `FRESCURA_API_USER`/`FRESCURA_API_PASSWORD`.
+- La consulta se parte por mes calendario y recorre los lotes de 1000 comprobantes.
+- `CHESS_SUCURSALES` (default `2`, Dolores con Chascomús) filtra las sucursales que se guardan.
+- La ruta (`CHESS_VENTAS_PATH`, default `ventas/`) y el formato de fecha (`CHESS_FECHA_FMT`, default
+  `%d-%m-%Y`) todavía no se validaron contra la API real: probar con `--dias 1` antes de programar el cron.
+
+```bash
+flask --app "app:create_app()" rutas sync-ventas --dias 7          # resumen, diario
+flask --app "app:create_app()" rutas sync-ventas --dias 7 --detalle # bultos y HL, de noche (~7 MB por día)
+flask --app "app:create_app()" rutas sync-ventas --dias 60         # carga inicial
+flask --app "app:create_app()" rutas import-ventas respuesta.json  # JSON guardado de la API
+```
+
+Cron de Railway: un servicio cron con el mismo repo y variables, con el comando anterior como
+start command (por ejemplo `0 9 * * *` para el resumen y `0 5 * * *` para el detalle). Alternativa:
+`curl -X POST "https://<app>/rutas/api/sync?dias=7" -H "X-Sync-Token: $RUTAS_SYNC_TOKEN"`
+(`&detalle=1` para el detalle). Sin `RUTAS_SYNC_TOKEN` el endpoint responde 403. Para el detalle
+preferir el comando: el request queda atado al timeout de gunicorn (900 s).
+
+En el mapa, **Ver: Días / Estado / Venta** cambia el color de los puntos y la pestaña **Ventas** resume
+la vista. La ficha del cliente muestra su comportamiento de los últimos 60 días, los últimos
+comprobantes y los artículos más comprados. Reglas:
+
+- **Inactivo:** más de 45 días sin comprar. **En riesgo:** días sin comprar mayores a 2,5 veces su
+  frecuencia habitual (mínimo 21). **Sin compras:** ninguna factura en el período.
+- ABC por venta neta (80 / 15 / 5). Las notas de crédito (`DVVTA`, `PRDVO`) restan.
+- Los bultos se muestran solo si al menos el 80% del período se cargó con detalle.
+
+Pruebas: `python -m pytest tests/test_rutas_ventas.py -q`.
 
 ### Importar días desde CSV
 
