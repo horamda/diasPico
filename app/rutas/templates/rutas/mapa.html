@@ -11,26 +11,39 @@
 </head>
 <body>
 <div class="app">
-<header>
-  <h1>Clientes por día de entrega<small id="sub">Cargando…</small></h1>
-  <nav class="topnav"><a href="{{ url_for('portal.portal_home') }}">Portal</a><a href="{{ url_for('rutas.mapa') }}" aria-current="page">Mapa</a></nav>
-  <div class="hctl"><button class="btn" id="refreshView">Actualizar vista</button>
-    <label for="assignedDays">Días asignados <select id="assignedDays"><option value="todos">Todos</option><option value="si">Sí</option><option value="no">No</option></select></label>
-    <label for="activeClients">Activos <select id="activeClients"><option value="si">Sí</option><option value="no">No</option><option value="todos">Todos</option></select></label>
-    <div class="seg" id="sucSeg" role="group" aria-label="Sucursal que entrega"></div>
-    <div class="seg" id="daySeg" role="group" aria-label="Día de entrega"></div>
-    <div class="seg" id="verSeg" role="group" aria-label="Color de los puntos"></div>
-    <input type="search" id="q" placeholder="Buscar cliente, nº o calle" aria-label="Buscar cliente">
+<header class="topbar">
+  <div class="brand">
+    <h1>Rutas de entrega<small id="sub" aria-live="polite">Cargando…</small></h1>
+    <nav class="topnav" aria-label="Secciones">
+      <a href="{{ url_for('portal.portal_home') }}">Portal</a>
+      <a href="{{ url_for('rutas.mapa') }}" aria-current="page">Mapa</a>
+      <a href="{{ url_for('rutas.plan_page') }}">Camiones</a>
+      <a href="{{ url_for('rutas_importaciones.importar_dias_page') }}">Importar días</a>
+    </nav>
+  </div>
+  <div class="hctl">
+    <div class="fld"><span id="lblSuc">Sucursal</span><div class="seg" id="sucSeg" role="group" aria-labelledby="lblSuc"></div></div>
+    <div class="fld"><span id="lblDia">Día de entrega</span><div class="seg seg-days" id="daySeg" role="group" aria-labelledby="lblDia"></div></div>
+    <div class="fld"><span id="lblVer">Color por</span><div class="seg" id="verSeg" role="group" aria-labelledby="lblVer"></div></div>
+    <div class="fld"><label for="q">Buscar</label><input type="search" id="q" placeholder="Cliente, nº o calle   /" autocomplete="off"></div>
+    <details class="more">
+      <summary class="btn">Filtros</summary>
+      <div class="more-body">
+        <label for="activeClients">Clientes <select id="activeClients"><option value="si">Solo activos</option><option value="no">Solo inactivos</option><option value="todos">Todos</option></select></label>
+        <label for="assignedDays">Días asignados <select id="assignedDays"><option value="todos">Con y sin días</option><option value="si">Con días</option><option value="no">Sin días</option></select></label>
+        <button class="btn" id="refreshView" type="button">Recargar datos</button>
+      </div>
+    </details>
   </div>
 </header>
 <div class="main">
   <aside>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="t-loc" aria-selected="true">Localidades</button>
-      <button class="tab" role="tab" id="t-dia" aria-selected="false">Clientes por día</button>
+      <button class="tab" role="tab" id="t-dia" aria-selected="false">Clientes</button>
       <button class="tab" role="tab" id="t-pen" aria-selected="false">Pendientes<span class="n" id="penN"></span></button>
       <button class="tab" role="tab" id="t-ven" aria-selected="false">Ventas</button>
-      <button class="tab" role="tab" id="t-exp" aria-selected="false">Información</button>
+      <button class="tab" role="tab" id="t-exp" aria-selected="false">Ayuda</button>
     </div>
     <div class="pane" id="p-loc"></div>
     <div class="pane" id="p-dia" hidden></div>
@@ -38,7 +51,7 @@
     <div class="pane" id="p-ven" hidden></div>
     <div class="pane" id="p-exp" hidden></div>
   </aside>
-  <div id="map"></div>
+  <div id="map" aria-label="Mapa de clientes"></div>
 </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>

@@ -1,21 +1,38 @@
-/* Mapa de rutas de entrega — consulta clientes y días importados */
+/* Mapa de rutas de entrega — consulta clientes, días importados y ventas */
 (() => {
 const DAYS = ['LU','MA','MI','JU','VI','SA'];
 const DAYNAME = {LU:'Lunes',MA:'Martes',MI:'Miércoles',JU:'Jueves',VI:'Viernes',SA:'Sábado'};
+const DAYSHORT = {LU:'Lun',MA:'Mar',MI:'Mié',JU:'Jue',VI:'Vie',SA:'Sáb'};
 const PCOL = {LUJU:'#2f6fde',MAVI:'#159a62',MISA:'#8a4fd0',MAJU:'#0e97ad',MASA:'#c2559b',LU:'#86a9ec',JU:'#86a9ec',MA:'#74c7a1',VI:'#74c7a1',MI:'#b89be6',SA:'#b89be6'};
+// Paleta categórica para localidades: localidades vecinas nunca comparten color.
+const LOC_PAL = ['#2563eb','#dc2626','#16a34a','#9333ea','#ea580c','#0891b2','#c026d3','#65a30d','#b45309','#0f766e','#db2777','#4f46e5'];
+const VER = {loc:'Localidad', dias:'Días', estado:'Estado', venta:'Venta'};
 const API = window.RUTAS.api;
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'dias', V:null};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
 const venta = c => S.V && S.V.clientes[c.id];
 const estadoDe = c => venta(c)?.estado || 'sin_compras';
 const money = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR');
+
+// Preferencias del usuario (solo en este navegador)
+const PREF = 'rutas.mapa.v1';
+try {
+  const p = JSON.parse(localStorage.getItem(PREF) || '{}');
+  if (p.day === 'TODOS' || DAYS.includes(p.day)) S.day = p.day;
+  if (VER[p.ver]) S.ver = p.ver;
+  if (typeof p.suc === 'string') S.suc = p.suc;
+  if (typeof p.zonas === 'boolean') S.zonas = p.zonas;
+  if (typeof p.ctx === 'boolean') S.ctx = p.ctx;
+} catch {}
+function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx})); } catch {} }
+
 let byId = new Map();
-let mapPositioned=false;
+let mapPositioned = false;
 const isGeo = c => c.lat != null && c.lng != null;
 const sinDias = c => !c.d;
 const FLT = {
@@ -27,49 +44,198 @@ const FLT_LABEL = {sindias:'sin días de entrega', singeo:'sin geolocalizar', fa
   riesgo:'en riesgo de dejar de comprar', inactivo:'sin comprar hace más de 45 días', sin_compras:'sin compras en el período'};
 for (const e of ['riesgo','inactivo','sin_compras']) FLT[e] = c => !c.an && estadoDe(c) === e;
 
-function toast(msg, err){ const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg;
+function toast(msg, err){ const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.setAttribute('role', err?'alert':'status'); t.textContent=msg;
   document.body.appendChild(t); setTimeout(()=>t.remove(), 3500); }
 
 async function api(path, opts={}) {
   const r = await fetch(API + path, {headers:{'Content-Type':'application/json'}, credentials:'same-origin', ...opts});
   const j = await r.json().catch(()=>({}));
+  if (r.status === 401) throw new Error('La sesión venció. Ingresá nuevamente al portal.');
   if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
   return j;
 }
+
+// ---------- colores por localidad ----------
+let locColor = new Map();
+function asignarColores(clientes) {
+  const acc = new Map();
+  for (const c of clientes) {
+    if (!isGeo(c) || c.far) continue;
+    const p = acc.get(c.loc) || {loc:c.loc, lat:0, lng:0, n:0};
+    p.lat += c.lat; p.lng += c.lng; p.n++; acc.set(c.loc, p);
+  }
+  const locs = [...acc.values()].map(p => ({loc:p.loc, lat:p.lat/p.n, lng:p.lng/p.n, n:p.n}))
+    .sort((a,b) => b.n - a.n || a.loc.localeCompare(b.loc));
+  const km = (a,b) => Math.hypot((a.lat-b.lat)*111, (a.lng-b.lng)*111*Math.cos(a.lat*Math.PI/180));
+  // Cada localidad toma el color cuyo uso más cercano está más lejos: primero agota la
+  // paleta y, si hay más localidades que colores, repite lo más lejos posible.
+  locColor = new Map();
+  for (const l of locs) {
+    let mejor = LOC_PAL[0], lejos = -1;
+    for (const col of LOC_PAL) {
+      const d = Math.min(Infinity, ...locs.filter(o => locColor.get(o.loc) === col).map(o => km(l, o)));
+      if (d > lejos) { mejor = col; lejos = d; }
+    }
+    locColor.set(l.loc, mejor);
+  }
+  for (const c of clientes) if (!locColor.has(c.loc)) locColor.set(c.loc, LOC_PAL[locColor.size % LOC_PAL.length]);
+}
+const colorLoc = loc => locColor.get(loc) || '#8d8a5c';
 
 // ---------- mapa ----------
 const map = L.map('map', {preferCanvas:true, zoomSnap:.25}).fitBounds([[-37.1,-58.6],[-35.3,-56.8]]);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19,
   attribution:'&copy; OpenStreetMap'}).addTo(map);
+map.createPane('zonas').style.zIndex = 350;
+const zonaLayer = L.layerGroup().addTo(map);
+const ctxLayer = L.layerGroup().addTo(map);
 const ptLayer = L.layerGroup().addTo(map);
+const tagLayer = L.layerGroup().addTo(map);
+
+const loading = document.createElement('div');
+loading.className = 'map-loading'; loading.innerHTML = '<span class="spinner"></span>Cargando clientes…';
+$('map').appendChild(loading);
 
 function visible(){return RutasVista.filtrar(S.D.clientes,S,c=>!S.flt||FLT[S.flt](c))}
 let viewData=null;
-function centrarSeleccion(){const points=visible().filter(isGeo);if(points.length)map.fitBounds(points.map(c=>[c.lat,c.lng]),{padding:[40,40],maxZoom:15})}
-function drawPoints(list) {
-  ptLayer.clearLayers();
-  if (S.sel && !list.some(c => c.id === S.sel)) { S.sel=null; renderCard(); }
-  list.forEach(c => {
-    if (!isGeo(c)) return;
-    const sd = sinDias(c), sel = S.sel === c.id;
-    const fill = colorDe(c, sd);
-    const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:(sd?6:5), weight: sel?3:(c.far?2.5:1),
-      color: sel ? tok('--ink') : (c.far ? tok('--warn') : 'rgba(0,0,0,.45)'), fillColor: fill, fillOpacity: c.an?.5:.9});
-    const vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${venta(c)?' · '+venta(c).abc+' · '+money(venta(c).neto):''}` : '';
-    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
-    m.on('click', () => select(c.id));
-    ptLayer.addLayer(m);
-  });
+function centrarSeleccion(){const points=visible().filter(c=>isGeo(c)&&!c.far);if(points.length)map.fitBounds(points.map(c=>[c.lat,c.lng]),{padding:[50,50],maxZoom:15})}
+function zoomLoc(loc){
+  const pts=visible().filter(c=>c.loc===loc&&isGeo(c)&&!c.far);
+  if(!pts.length){toast(`${loc}: sin clientes geolocalizados en la vista.`,true);return}
+  map.fitBounds(pts.map(c=>[c.lat,c.lng]),{padding:[50,50],maxZoom:15});
+  S.foco=loc; drawZonas(visible());
+  clearTimeout(zoomLoc.t); zoomLoc.t=setTimeout(()=>{S.foco=null;if(S.D)drawZonas(visible())},2500);
 }
+
 function colorDe(c, sd) {
   if (S.ver === 'estado' && S.V) return {activo:tok('--ok'), riesgo:tok('--warn'), inactivo:tok('--bad'), sin_compras:'#9a9f9b'}[estadoDe(c)];
   if (S.ver === 'venta' && S.V) return ABC_COL[venta(c)?.abc || '-'];
-  return c.an ? '#9a9f9b' : sd ? tok('--bad') : (PCOL[c.d] || '#8d8a5c');
+  if (c.an) return '#9a9f9b';
+  if (S.ver !== 'dias') return colorLoc(c.loc);   // también Estado/Venta sin ventas cargadas
+  return sd ? tok('--bad') : (PCOL[c.d] || '#8d8a5c');
 }
+function drawPoints(list) {
+  ptLayer.clearLayers(); ctxLayer.clearLayers();
+  if (S.sel && !list.some(c => c.id === S.sel)) { S.sel=null; renderCard(); }
+  // Contexto: con un día elegido, el resto de los clientes queda atenuado.
+  if (S.ctx && S.day !== 'TODOS') {
+    const ids = new Set(list.map(c => c.id));
+    RutasVista.filtrar(S.D.clientes, {suc:S.suc, day:'TODOS', q:S.q}).forEach(c => {
+      if (!isGeo(c) || ids.has(c.id) || c.an) return;
+      ctxLayer.addLayer(L.circleMarker([c.lat,c.lng], {radius:3, weight:0, fillColor:'#7a817c', fillOpacity:.28, interactive:false}));
+    });
+  }
+  list.forEach(c => {
+    if (!isGeo(c)) return;
+    const sd = sinDias(c), sel = S.sel === c.id;
+    const borde = sel ? tok('--ink') : c.far ? tok('--warn') : (S.ver === 'loc' && sd && !c.an) ? tok('--bad') : 'rgba(0,0,0,.45)';
+    const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:(sd?6:5), weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
+      color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
+    const vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${venta(c)?' · '+venta(c).abc+' · '+money(venta(c).neto):''}` : '';
+    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
+    m.on('click', () => select(c.id));
+    ptLayer.addLayer(m);
+  });
+  drawZonas(list);
+}
+
+// Envolvente convexa (monotone chain) de [lat,lng], ampliada ~400 m para que los puntos queden adentro.
+function hull(pts) {
+  const p = [...new Map(pts.map(x => [x.join(), x])).values()].sort((a,b) => a[1]-b[1] || a[0]-b[0]);
+  if (p.length < 3) return p;
+  const cross = (o,a,b) => (a[1]-o[1])*(b[0]-o[0]) - (a[0]-o[0])*(b[1]-o[1]);
+  const lo = [], up = [];
+  for (const x of p) { while (lo.length >= 2 && cross(lo.at(-2), lo.at(-1), x) <= 0) lo.pop(); lo.push(x); }
+  for (const x of [...p].reverse()) { while (up.length >= 2 && cross(up.at(-2), up.at(-1), x) <= 0) up.pop(); up.push(x); }
+  const h = lo.slice(0,-1).concat(up.slice(0,-1));
+  const cy = h.reduce((t,x) => t+x[0], 0)/h.length, cx = h.reduce((t,x) => t+x[1], 0)/h.length;
+  return h.map(([y,x]) => { const d = Math.hypot(y-cy, x-cx) || 1e-9, k = (d + .004)/d; return [cy + (y-cy)*k, cx + (x-cx)*k]; });
+}
+function drawZonas(list) {
+  zonaLayer.clearLayers(); tagLayer.clearLayers();
+  const g = new Map();
+  for (const c of list) {
+    if (c.an) continue;
+    const x = g.get(c.loc) || {loc:c.loc, n:0, pts:[]};
+    x.n++; if (isGeo(c) && !c.far) x.pts.push([c.lat, c.lng]); g.set(c.loc, x);
+  }
+  const zonas = S.zonas && S.day !== 'TODOS';
+  for (const x of g.values()) {
+    if (!x.pts.length) continue;
+    const col = colorLoc(x.loc), foco = S.foco === x.loc;
+    if (zonas || foco) {
+      const h = hull(x.pts), style = {pane:'zonas', color:col, weight:foco?3.5:2, opacity:.95, fillColor:col,
+        fillOpacity:foco?.28:.13, dashArray:foco?null:'6 5', interactive:false};
+      if (h.length >= 3) zonaLayer.addLayer(L.polygon(h, style));
+      else {
+        const lat = x.pts.reduce((t,p)=>t+p[0],0)/x.pts.length, lng = x.pts.reduce((t,p)=>t+p[1],0)/x.pts.length;
+        const r = Math.max(450, ...x.pts.map(p => map.distance([lat,lng], p) + 350));
+        zonaLayer.addLayer(L.circle([lat,lng], {...style, radius:r}));
+      }
+    }
+    const norte = Math.max(...x.pts.map(p => p[0])), lng = x.pts.reduce((t,p)=>t+p[1],0)/x.pts.length;
+    const m = L.marker([norte + .0035, lng], {keyboard:false, riseOnHover:true, icon:L.divIcon({className:'loc-tag-wrap', iconSize:null,
+      html:`<span class="loc-tag${foco?' foco':''}" style="--c:${col}" title="Acercar a ${esc(x.loc)}">${esc(x.loc)}<b>${x.n}</b></span>`})});
+    m.on('click', () => zoomLoc(x.loc));
+    tagLayer.addLayer(m);
+  }
+}
+
+// ---------- controles sobre el mapa ----------
+const Tools = L.Control.extend({options:{position:'topright'}, onAdd(){
+  const d = L.DomUtil.create('div', 'map-tools');
+  d.innerHTML = `<button type="button" data-t="centrar" title="Encuadrar los clientes de la vista">Centrar</button>
+    <button type="button" data-t="zonas" title="Sombrear la zona de cada localidad con entregas el día elegido">Zonas</button>
+    <button type="button" data-t="ctx" title="Mostrar atenuados los clientes de otros días">Otros días</button>`;
+  L.DomEvent.disableClickPropagation(d);
+  d.querySelectorAll('button').forEach(b => b.onclick = () => {
+    if (b.dataset.t === 'centrar') return centrarSeleccion();
+    S[b.dataset.t] = !S[b.dataset.t]; savePrefs(); renderTools(); drawPoints(visible());
+  });
+  return d;
+}});
+const tools = new Tools().addTo(map);
+function renderTools(){
+  const el = tools.getContainer(), dia = S.day !== 'TODOS';
+  for (const k of ['zonas','ctx']) { const b = el.querySelector(`[data-t="${k}"]`); b.setAttribute('aria-pressed', S[k]); b.disabled = !dia; }
+  el.querySelector('[data-t="zonas"]').title = dia ? 'Sombrear la zona de cada localidad con entregas el día elegido' : 'Elegí un día para ver las zonas';
+}
+
+const Legend = L.Control.extend({options:{position:'bottomright'}, onAdd(){
+  const d = L.DomUtil.create('div', 'map-legend');
+  L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+  return d;
+}});
+const legend = new Legend().addTo(map);
+let legendOpen = true;
+function renderLegend(list) {
+  const el = legend.getContainer(); let body = '';
+  if (S.ver === 'loc') {
+    const n = new Map(); list.forEach(c => { if (!c.an) n.set(c.loc, (n.get(c.loc)||0) + 1); });
+    body = [...n].sort((a,b) => b[1]-a[1]).map(([loc,k]) =>
+      `<button type="button" class="lg-loc" data-loc="${esc(loc)}"><i class="sw" style="background:${colorLoc(loc)}"></i><span>${esc(loc)}</span><b>${k}</b></button>`).join('')
+      || '<p class="note">Sin clientes en la vista.</p>';
+  } else if (S.ver === 'dias') {
+    body = ['LUJU','MAVI','MISA','MAJU','MASA'].map(p => `<span><i class="sw" style="background:${PCOL[p]}"></i>${p}</span>`).join('')
+      + `<span><i class="sw" style="background:#86a9ec"></i>Un solo día</span><span><i class="sw" style="background:var(--bad)"></i>Sin días</span>`;
+  } else if (!S.V) {
+    body = '<p class="note">No hay ventas cargadas.</p>';
+  } else if (S.ver === 'estado') {
+    body = [['--ok','Activo'],['--warn','En riesgo'],['--bad','Inactivo']].map(([v,l]) => `<span><i class="sw" style="background:var(${v})"></i>${l}</span>`).join('')
+      + '<span><i class="sw" style="background:#9a9f9b"></i>Sin compras</span>';
+  } else {
+    body = [['A','A · 80% de la venta'],['B','B · siguiente 15%'],['C','C · último 5%'],['-','Sin venta']].map(([k,l]) => `<span><i class="sw" style="background:${ABC_COL[k]}"></i>${l}</span>`).join('');
+  }
+  const extra = `<span><i class="sw" style="background:#9a9f9b"></i>Inactivo en el maestro</span><span><i class="sw ring"></i>Ubicación a revisar</span>`;
+  el.innerHTML = `<details ${legendOpen?'open':''}><summary>Color: ${VER[S.ver]}</summary><div class="lg-body ${S.ver==='loc'?'lg-scroll':''}">${body}</div>${S.ver==='loc'?'':`<div class="lg-body">${extra}</div>`}</details>`;
+  el.querySelector('details').ontoggle = e => { legendOpen = e.target.open; };
+  el.querySelectorAll('[data-loc]').forEach(b => b.onclick = () => zoomLoc(b.dataset.loc));
+}
+
 // ---------- paneles ----------
 function scope(){return visible()}
 function renderLoc() {
-  const sc = scope(), k = f => sc.filter(FLT[f]).length, act = sc.filter(c => !c.an);
+  const sc = scope(), k = f => sc.filter(FLT[f]).length;
   const kp = [['',sc.length,'clientes filtrados',null],['',sc.filter(isGeo).length,'geolocalizados',null],
     ['bad',k('sindias'),'sin días de entrega','sindias'],['bad',k('singeo'),'sin geolocalizar','singeo'],
     ['warn',k('far'),'ubicación a revisar','far'],['warn',k('anulado'),'inactivos con días asignados','anulado']];
@@ -77,21 +243,17 @@ function renderLoc() {
   const days=S.day==='TODOS'?DAYS:[S.day];
   let html = '', last = '';
   rows.forEach(r => { if (r.suc !== last) { html += `<tr class="suc"><td colspan="${4+days.length}">Sale de ${esc(r.suc)}</td></tr>`; last = r.suc; }
-    html += `<tr data-loc="${esc(r.loc)}"><td>${esc(r.loc)}</td><td>${r.clientes}</td><td class="${r.sin_geo?'bad':''}">${r.sin_geo||'·'}</td><td class="${r.sin_dias?'bad':''}">${r.sin_dias||'·'}</td>${days.map(d=>`<td class="${r[d]?'':'z'}">${r[d]||'·'}</td>`).join('')}</tr>`; });
+    html += `<tr data-loc="${esc(r.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td><td>${r.clientes}</td><td class="${r.sin_geo?'bad':''}">${r.sin_geo||'·'}</td><td class="${r.sin_dias?'bad':''}">${r.sin_dias||'·'}</td>${days.map(d=>`<td class="${r[d]?'':'z'}">${r[d]||'·'}</td>`).join('')}</tr>`; });
   $('p-loc').innerHTML = `
    <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
    ${S.flt?`<p class="note">Filtro aplicado: <b>${FLT_LABEL[S.flt]||S.flt}</b> · <a href="#" id="clrF">quitar</a></p>`:''}
-   <div><h2>Clientes filtrados por localidad y día</h2></div>
-   <div class="tw"><table><thead><tr><th>Localidad</th><th>Clientes</th><th title="Sin geolocalizar">S/geo</th><th title="Sin días">S/día</th>${days.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table></div>
-   <p class="note">Tocá una localidad para centrar el mapa.</p>
-   <div><h2>Color del punto = días asignados</h2></div>
-   <div class="legend">${['LUJU','MAVI','MISA','MAJU','MASA'].map(p=>`<span><i style="background:${PCOL[p]}"></i>${p}</span>`).join('')}
-     <span><i style="background:#86a9ec"></i>un solo día</span><span><i style="background:var(--bad)"></i>sin días</span><span><i style="background:#9a9f9b"></i>inactivo</span><span><i style="background:transparent;border:2px solid var(--warn)"></i>ubicación a revisar</span></div>`;
+   <div><h2>${S.day==='TODOS'?'Clientes por localidad y día':'Localidades con entrega el '+DAYNAME[S.day].toLowerCase()}</h2></div>
+   ${rows.length?`<div class="tw"><table><thead><tr><th>Localidad</th><th>Clientes</th><th title="Sin geolocalizar">S/geo</th><th title="Sin días">S/día</th>${days.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table></div>
+   <p class="note">Tocá una localidad para acercar el mapa y resaltar su zona.</p>`:'<p class="empty">No hay clientes para los filtros elegidos.</p>'}`;
   $('p-loc').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
   const cf = $('clrF'); if (cf) cf.onclick = e => { e.preventDefault(); S.flt = null; render(); };
-  $('p-loc').querySelectorAll('tr[data-loc]').forEach(tr => tr.onclick = () => {
-    const pts = scope().filter(c => c.loc===tr.dataset.loc && isGeo(c) && !c.far);
-    if (pts.length) map.fitBounds(pts.map(c => [c.lat,c.lng]), {padding:[40,40], maxZoom:15}); });
+  $('p-loc').querySelectorAll('tr[data-loc]').forEach(tr => { tr.onclick = () => zoomLoc(tr.dataset.loc);
+    tr.onkeydown = e => { if (e.key === 'Enter') zoomLoc(tr.dataset.loc); }; });
 }
 function renderDia() {
   const days = S.day==='TODOS' ? DAYS : [S.day];
@@ -101,11 +263,12 @@ function renderDia() {
   }).join('');
   bindItems($('p-dia'));
 }
-function itemHTML(c, tag) { return `<div class="item" data-id="${c.id}"><span class="id">${c.id}</span><span class="nm">${esc(c.n)}</span>${tag}<span class="sub">${esc(c.loc)} · ${esc(c.dom)||'sin domicilio'}${c.ven?' · '+esc(c.ven):''}</span></div>`; }
-function bindItems(el) { el.querySelectorAll('.item').forEach(x => x.onclick = () => select(+x.dataset.id, true)); }
+function itemHTML(c, tag) { return `<div class="item" data-id="${c.id}" tabindex="0"><span class="id">${c.id}</span><span class="nm">${esc(c.n)}</span>${tag}<span class="sub"><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${esc(c.dom)||'sin domicilio'}${c.ven?' · '+esc(c.ven):''}</span></div>`; }
+function bindItems(el) { el.querySelectorAll('.item').forEach(x => { x.onclick = () => select(+x.dataset.id, true);
+  x.onkeydown = e => { if (e.key === 'Enter') select(+x.dataset.id, true); }; }); }
 function renderPen() {
   const sc = scope(), sd = sc.filter(sinDias), sg = sc.filter(FLT.singeo), fr = sc.filter(FLT.far), an = sc.filter(FLT.anulado);
-  $('penN').textContent = sd.length + sg.length;
+  $('penN').textContent = (sd.length + sg.length) || '';
   const sec = (t,list,tag,note) => `<div><h2>${t} · ${list.length}</h2>${note?`<p class="note">${note}</p>`:''}</div><div class="list">${list.map(c=>itemHTML(c,tag(c))).join('') || '<p class="note">Nada pendiente.</p>'}</div>`;
   $('p-pen').innerHTML =
     sec('Sin días de entrega', sd, c => c.pl ? '<span class="pill bad">sin días</span>' : '<span class="pill warn">no estaba en planilla</span>', 'Clientes filtrados sin días asignados.') +
@@ -115,12 +278,15 @@ function renderPen() {
   bindItems($('p-pen'));
 }
 function renderExp(){
-  $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p><p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p><p class="note">Los recorridos conectan localidades en línea recta. La carga por vehículo es una estimación de cobertura.</p><p class="status">${S.D.ultima_sync?'Última actualización del maestro: '+esc(S.D.ultima_sync.fin):'Sin actualización registrada.'}</p>`;
+  $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p>
+   <p class="note">Al elegir un día, cada localidad con entregas se sombrea con su color y muestra cuántos clientes tiene. Tocá la etiqueta para acercarte.</p>
+   <p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p>
+   <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd></dl>
+   <p class="status">${S.D.ultima_sync?'Última actualización: '+esc(S.D.ultima_sync.origen)+' · '+esc((S.D.ultima_sync.fin||'').replace('T',' ').slice(0,16)):'Sin actualización registrada.'}</p>`;
 }
-
 function renderVen() {
   const el = $('p-ven');
-  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="note">No hay ventas cargadas. Se cargan con <code>flask rutas sync-ventas</code>.</p>'; return; }
+  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="empty">No hay ventas cargadas. Se cargan con <code>flask rutas sync-ventas</code>.</p>'; return; }
   const act = scope().filter(c => !c.an), cnt = e => act.filter(c => estadoDe(c) === e).length;
   const abc = l => act.filter(c => venta(c)?.abc === l).length;
   const neto = act.reduce((t, c) => t + (venta(c)?.neto || 0), 0);
@@ -144,17 +310,21 @@ function select(id,fly){
   if(fly&&isGeo(c))map.flyTo([c.lat,c.lng],Math.max(map.getZoom(),15),{duration:.6});
   renderCard();drawPoints(visible());
 }
+function cerrarCard(){S.sel=null;renderCard();drawPoints(visible())}
 function renderCard(){
   if(card)card.remove();card=null;if(!S.sel)return;
   const c=byId.get(S.sel);if(!c)return;
-  card=document.createElement('div');card.className='card';
+  card=document.createElement('div');card.className='card';card.setAttribute('role','dialog');card.setAttribute('aria-label','Ficha del cliente '+c.id);
   const gm=isGeo(c)?`https://www.google.com/maps?q=${c.lat},${c.lng}`:`https://www.google.com/maps/search/${encodeURIComponent(c.dom+', '+c.loc+', Buenos Aires')}`;
-  card.innerHTML=`<button class="x" aria-label="Cerrar">×</button><h3>${esc(c.n)}</h3>
-    <dl class="kv"><dt>Cliente</dt><dd>${c.id}</dd><dt>Domicilio</dt><dd>${esc(c.dom)}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Estado</dt><dd>${c.an?'Inactivo':'Activo'}</dd><dt>Días de entrega</dt><dd>${DAYS.filter(d=>c.d.includes(d)).map(d=>DAYNAME[d]).join(', ')||'Sin días asignados'}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd><dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
-    <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver ubicación</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
+  card.innerHTML=`<button class="x" aria-label="Cerrar ficha (Esc)">×</button>
+    <div class="card-head"><span class="mono">#${c.id}</span><span class="loc-chip" style="--c:${colorLoc(c.loc)}">${esc(c.loc)}</span>${c.an?'<span class="pill">Inactivo</span>':''}${c.far?'<span class="pill warn">Ubicación a revisar</span>':''}</div>
+    <h3>${esc(c.n)}</h3>
+    <div class="dchips" aria-label="Días de entrega">${DAYS.map(d=>`<span class="dchip${c.d.includes(d)?' on':''}" title="${DAYNAME[d]}">${d}</span>`).join('')}</div>
+    <dl class="kv"><dt>Domicilio</dt><dd>${esc(c.dom)||'—'}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd>${c.ven?`<dt>Vendedor</dt><dd>${esc(c.ven)}</dd>`:''}<dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
+    <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver en Google Maps</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
     <div id="clientSales" class="status">Consultando compras...</div>`;
   $('map').appendChild(card);L.DomEvent.disableClickPropagation(card);L.DomEvent.disableScrollPropagation(card);
-  card.querySelector('.x').onclick=()=>{S.sel=null;renderCard();drawPoints(visible())};
+  card.querySelector('.x').onclick=cerrarCard;
   cargarVentas(c, card.querySelector('#clientSales'));
   card.querySelector('#history').onclick=async()=>{
     const target=card.querySelector('#clientHistory');target.textContent='Consultando historial...';
@@ -183,42 +353,59 @@ async function cargarVentas(c, el) {
 }
 
 // ---------- controles ----------
+function setDay(v){ S.day=v; S.sel=null; renderCard(); savePrefs(); if(S.D){render();centrarSeleccion()} }
 function seg(el, opts, key) {
-  el.innerHTML = opts.map(([v,l]) => `<button data-v="${esc(v)}" aria-pressed="${S[key]===v}">${esc(l)}</button>`).join('');
-  el.querySelectorAll('button').forEach(b => b.onclick = () => { S[key] = b.dataset.v; S.sel=null; renderCard(); if(S.D){render();centrarSeleccion()} });
+  el.innerHTML = opts.map(([v,l,n,t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${S[key]===v}"${t?` title="${esc(t)}"`:''}><span>${esc(l)}</span>${n!=null?`<small>${n}</small>`:''}</button>`).join('');
+  el.querySelectorAll('button').forEach(b => b.onclick = () => {
+    if (key === 'day') return setDay(b.dataset.v);
+    S[key] = b.dataset.v; S.sel=null; renderCard(); savePrefs(); if(S.D){render(); if(key==='suc')centrarSeleccion()}
+  });
 }
 function render() {
   const sucs = [...new Set(S.D.plan.depositos.map(d => d.nombre))];
   if(S.D.clientes.some(c=>c.suc==='SIN ASIGNAR'))sucs.push('SIN ASIGNAR');
+  if(S.suc!=='TODAS'&&!sucs.includes(S.suc))S.suc='TODAS';
   seg($('sucSeg'), [['TODAS','Todas'], ...sucs.map(s => [s, s.charAt(0)+s.slice(1).toLowerCase()])], 'suc');
-  seg($('daySeg'), [['TODOS','Semana'], ...DAYS.map(d => [d,DAYNAME[d]])], 'day');
-  seg($('verSeg'), [['dias','Días'], ['estado','Estado'], ['venta','Venta']], 'ver');
+  const base = RutasVista.filtrar(S.D.clientes, {suc:S.suc, day:'TODOS', q:S.q}, c => !c.an);
+  seg($('daySeg'), [['TODOS','Semana',null,'Toda la semana (tecla 0)'], ...DAYS.map((d,i) => [d, DAYSHORT[d], base.filter(c=>c.d.includes(d)).length, `${DAYNAME[d]} · clientes activos (tecla ${i+1})`])], 'day');
+  seg($('verSeg'), Object.entries(VER).map(([k,l]) => [k,l]), 'ver');
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
-  const geo = v.filter(isGeo).length;
-  $('sub').textContent = `${v.length} clientes en vista · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}${S.day!=='TODOS'?' · '+DAYNAME[S.day]:''}`;
+  const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
+  $('sub').textContent = `${S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x===t));
   ['loc','dia','pen','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== t.id); });
-let qt; $('q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render();
+let qt; $('q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; if(!S.D)return; render();
   const v = visible().filter(isGeo); if (S.q && v.length && v.length < 40) map.fitBounds(v.map(c => [c.lat,c.lng]), {padding:[50,50], maxZoom:15}); }, 200); });
 
+document.addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.target.closest?.('input,select,textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
+  if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
+  if (e.key === 'Escape' && S.sel) { cerrarCard(); return; }
+  const i = '0123456'.indexOf(e.key);
+  if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS');
+});
+
 let loadRequest=0;
-async function load(keepCard) {
+async function load() {
   const request=++loadRequest;
+  loading.hidden=false;
   try {
     const params=new URLSearchParams({activos:$('activeClients').value,dias_asignados:$('assignedDays').value});
     const [data, ventas] = await Promise.all([api('/datos?'+params), api('/ventas/comportamiento').catch(() => null)]);
     if(request!==loadRequest)return;
     S.D=data; S.V=ventas && ventas.comprobantes ? ventas : null;
     byId = new Map(S.D.clientes.map(c => [c.id, c]));
-    
+    asignarColores(S.D.clientes);
     render(); renderCard();
     if(!mapPositioned){const points=visible().filter(c=>isGeo(c)&&!c.far);if(points.length){map.fitBounds(points.map(c=>[c.lat,c.lng]),{padding:[30,30],maxZoom:13});mapPositioned=true}}
-    if(!S.D.clientes.length)$('sub').textContent='No hay clientes cargados para visualizar.';
-  } catch (e) { if(request===loadRequest)$('sub').textContent = 'No se pudieron cargar los datos: ' + e.message; }
+    if(!S.D.clientes.length)$('sub').textContent='No hay clientes cargados. Actualizá el maestro e importá los días desde Importaciones de datos.';
+  } catch (e) { if(request===loadRequest){$('sub').textContent = 'No se pudieron cargar los datos: ' + e.message; toast('No se pudieron cargar los datos', true)} }
+  finally { if(request===loadRequest)loading.hidden=true; }
 }
 $('refreshView').onclick=()=>load();
 for(const id of ['activeClients','assignedDays'])$(id).onchange=()=>{S.sel=null;S.flt=null;renderCard();load()};
