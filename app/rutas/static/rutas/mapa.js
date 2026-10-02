@@ -18,7 +18,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
 const venta = c => S.V && S.V.clientes[c.id];
@@ -35,8 +35,9 @@ try {
   if (typeof p.zonas === 'boolean') S.zonas = p.zonas;
   if (typeof p.ctx === 'boolean') S.ctx = p.ctx;
   if ([30, 60, 90].includes(p.periodo)) S.periodo = p.periodo;
+  if (typeof p.panel === 'boolean') S.panel = p.panel;
 } catch {}
-function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo})); } catch {} }
+function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo, panel:S.panel})); } catch {} }
 
 let byId = new Map();
 let mapPositioned = false;
@@ -204,6 +205,21 @@ const Tools = L.Control.extend({options:{position:'topright'}, onAdd(){
   return d;
 }});
 const tools = new Tools().addTo(map);
+const PanelBtn = L.Control.extend({options:{position:'topleft'}, onAdd(){
+  const b = L.DomUtil.create('button', 'panel-toggle');
+  b.type = 'button'; L.DomEvent.disableClickPropagation(b);
+  b.onclick = () => setPanel(!S.panel);
+  return b;
+}});
+const panelBtn = new PanelBtn().addTo(map);
+function setPanel(v, init) {
+  S.panel = v; $('main').classList.toggle('sin-panel', !v); $('aside').hidden = !v;
+  const b = panelBtn.getContainer();
+  b.textContent = v ? '◀' : '▶ Panel'; b.title = (v ? 'Ocultar' : 'Mostrar') + ' el panel lateral (tecla P)';
+  b.setAttribute('aria-expanded', v);
+  if (!init) { savePrefs(); setTimeout(() => map.invalidateSize({pan:false}), 60); }
+}
+setPanel(S.panel, true);
 function renderTools(){
   const el = tools.getContainer(), dia = S.day !== 'TODOS';
   for (const k of ['zonas','ctx']) { const b = el.querySelector(`[data-t="${k}"]`); b.setAttribute('aria-pressed', S[k]); b.disabled = !dia; }
@@ -294,7 +310,7 @@ function renderExp(){
   $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p>
    <p class="note">Al elegir un día, cada localidad con entregas se sombrea con su color y muestra cuántos clientes tiene. Tocá la etiqueta para acercarte.</p>
    <p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p>
-   <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd></dl>
+   <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd><dt><kbd>P</kbd></dt><dd>Ocultar o mostrar este panel</dd></dl>
    <p class="status">${S.D.ultima_sync?'Última actualización: '+esc(S.D.ultima_sync.origen)+' · '+esc((S.D.ultima_sync.fin||'').replace('T',' ').slice(0,16)):'Sin actualización registrada.'}</p>`;
 }
 function renderVen() {
@@ -393,8 +409,8 @@ async function cargarVentas(c, el) {
 
 // ---------- controles ----------
 function setDay(v){ S.day=v; S.sel=null; renderCard(); savePrefs(); if(S.D){render();centrarSeleccion()} }
-function seg(el, opts, key) {
-  el.innerHTML = opts.map(([v,l,n,t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${S[key]===v}"${t?` title="${esc(t)}"`:''}><span>${esc(l)}</span>${n!=null?`<small>${n}</small>`:''}</button>`).join('');
+function seg(el, opts, key, label) {
+  el.innerHTML = (label ? `<span class="seg-lbl" aria-hidden="true">${esc(label)}</span>` : '') + opts.map(([v,l,n,t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${S[key]===v}"${t?` title="${esc(t)}"`:''}><span>${esc(l)}</span>${n!=null?`<small>${n}</small>`:''}</button>`).join('');
   el.querySelectorAll('button').forEach(b => b.onclick = () => {
     if (key === 'day') return setDay(b.dataset.v);
     S[key] = b.dataset.v; S.sel=null; renderCard(); savePrefs(); if(S.D){render(); if(key==='suc')centrarSeleccion()}
@@ -404,10 +420,10 @@ function render() {
   const sucs = [...new Set(S.D.plan.depositos.map(d => d.nombre))];
   if(S.D.clientes.some(c=>c.suc==='SIN ASIGNAR'))sucs.push('SIN ASIGNAR');
   if(S.suc!=='TODAS'&&!sucs.includes(S.suc))S.suc='TODAS';
-  seg($('sucSeg'), [['TODAS','Todas'], ...sucs.map(s => [s, s.charAt(0)+s.slice(1).toLowerCase()])], 'suc');
+  seg($('sucSeg'), [['TODAS','Todas'], ...sucs.map(s => [s, s.charAt(0)+s.slice(1).toLowerCase()])], 'suc', 'Suc.');
   const base = RutasVista.filtrar(S.D.clientes, {suc:S.suc, day:'TODOS', q:S.q}, c => !c.an);
   seg($('daySeg'), [['TODOS','Semana',null,'Toda la semana (tecla 0)'], ...DAYS.map((d,i) => [d, DAYSHORT[d], base.filter(c=>c.d.includes(d)).length, `${DAYNAME[d]} · clientes activos (tecla ${i+1})`])], 'day');
-  seg($('verSeg'), Object.entries(VER).map(([k,l]) => [k,l]), 'ver');
+  seg($('verSeg'), Object.entries(VER).map(([k,l]) => [k,l]), 'ver', 'Color');
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
   renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
@@ -424,6 +440,7 @@ document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest?.('input,select,textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
   if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
+  if (e.key === 'p' || e.key === 'P') { setPanel(!S.panel); return; }
   if (e.key === 'Escape' && S.sel) { cerrarCard(); return; }
   const i = '0123456'.indexOf(e.key);
   if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS');
@@ -448,7 +465,8 @@ async function load() {
   } catch (e) { if(request===loadRequest){$('sub').textContent = 'No se pudieron cargar los datos: ' + e.message; toast('No se pudieron cargar los datos', true)} }
   finally { if(request===loadRequest)loading.hidden=true; }
 }
-$('refreshView').onclick=()=>load();
+$('refreshView').onclick=()=>{document.querySelector('.more').open=false;load()};
+document.addEventListener('click', e => { const m = document.querySelector('.more'); if (m.open && !m.contains(e.target)) m.open = false; });
 for(const id of ['activeClients','assignedDays'])$(id).onchange=()=>{S.sel=null;S.flt=null;renderCard();load()};
 load();
 })();
