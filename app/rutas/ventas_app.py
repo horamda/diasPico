@@ -3,8 +3,9 @@
 Mismas reglas que Drop Size y Días Pico:
   * se excluyen remitos (REMIT) y comodatos (COMOD);
   * bultos y HL cuentan solo artículos de tipo mercadería (sin envases ni esqueletos);
-  * un pedido es un comprobante (detalle_documento) y una entrega, un día con comprobantes del cliente.
-RMCYO cuenta como pedido y volumen; no tiene importe, así que no suma venta en $.
+  * una compra es un día con comprobantes del cliente: varios comprobantes el mismo día son UNA compra.
+    La cantidad de comprobantes queda como dato secundario.
+RMCYO cuenta como compra y volumen; no tiene importe, así que no suma venta en $.
 """
 import statistics as st
 import time
@@ -116,7 +117,7 @@ def comprobantes(desde, hasta, cliente=None):
 def _metricas(ds, dias, hasta):
     fechas = sorted({d['fecha'] for d in ds})
     gaps = [(b - a).days for a, b in zip(fechas, fechas[1:])]
-    ventas = [d for d in ds if d['tipo'] in DOC_VENTA]
+    dias_venta = {d['fecha'] for d in ds if d['tipo'] in DOC_VENTA}
     bultos, hl = sum(d['bultos'] for d in ds), sum(d['hl'] for d in ds)
     neto, rech = sum(d['neto'] for d in ds), sum(d['rech'] for d in ds)
     mitad = hasta - timedelta(days=dias // 2)
@@ -124,10 +125,10 @@ def _metricas(ds, dias, hasta):
     ant = sum(d['bultos'] for d in ds if d['fecha'] <= mitad)
     motivos = Counter(d['motivo'] for d in ds if d['motivo'] and d['rech'] > 0)
     return {
-        'pedidos': len({d['doc'] for d in ds}),
-        'compras': len(fechas),                      # entregas: días con comprobantes
+        'compras': len(fechas),                      # días con comprobantes: 1 compra por día
+        'comprobantes': len({d['doc'] for d in ds}),
         'bultos': round(bultos, 1), 'hl': round(hl, 2), 'neto': round(neto),
-        'ticket': round(neto / len(ventas)) if ventas else 0,
+        'ticket': round(neto / len(dias_venta)) if dias_venta else 0,   # venta neta por compra
         'drop': round(bultos / len(fechas), 1) if fechas else 0,
         'drop_hl': round(hl / len(fechas), 2) if fechas else 0,
         'bultos_sem': round(bultos / (dias / 7), 1),
@@ -137,7 +138,7 @@ def _metricas(ds, dias, hasta):
         'dias_sin': (hasta - fechas[-1]).days if fechas else None,
         'frec': round(st.median(gaps), 1) if gaps else None,
         'ent': dict(Counter(WD[f.weekday()] for f in fechas)),
-        'bees': round(sum(1 for d in ds if d['origen'] == 'BEES') / len(ds), 2) if ds else 0,
+        'bees': round(len({d['fecha'] for d in ds if d['origen'] == 'BEES'}) / len(fechas), 2) if fechas else 0,
         'tend': round((rec - ant) / ant, 2) if ant > 0 else None,
     }
 
@@ -170,7 +171,7 @@ def _calcular(desde, hasta, dias):
 
 
 def detalle_cliente(cid, dias=90, hasta=None):
-    """Serie semanal, últimos pedidos y artículos más comprados del cliente."""
+    """Serie semanal, últimas compras (una por día) y artículos más comprados del cliente."""
     if not disponible():
         return {'desde': None, 'hasta': None, 'semanas': [], 'ultimos': [], 'articulos': []}
     desde, hasta = _ventana(dias, hasta)
@@ -178,16 +179,26 @@ def detalle_cliente(cid, dias=90, hasta=None):
     lunes0 = desde - timedelta(days=desde.weekday())
     semanas, d = [], lunes0
     while d <= hasta:
-        semanas.append({'desde': d.isoformat(), 'bultos': 0.0, 'hl': 0.0, 'neto': 0, 'pedidos': 0})
+        semanas.append({'desde': d.isoformat(), 'bultos': 0.0, 'hl': 0.0, 'neto': 0, 'compras': set()})
         d += timedelta(days=7)
+    # Una compra por día: se agrupan los comprobantes del mismo día.
+    por_dia = {}
     for x in ds:
         s = semanas[(x['fecha'] - lunes0).days // 7]
-        s['bultos'] += x['bultos']; s['hl'] += x['hl']; s['neto'] += x['neto']; s['pedidos'] += 1
+        s['bultos'] += x['bultos']; s['hl'] += x['hl']; s['neto'] += x['neto']; s['compras'].add(x['fecha'])
+        c = por_dia.setdefault(x['fecha'], {'fecha': x['fecha'].isoformat(), 'docs': [], 'tipos': set(), 'origenes': set(),
+                                            'bultos': 0.0, 'hl': 0.0, 'neto': 0.0, 'rech': 0.0, 'motivos': set()})
+        c['docs'].append(x['doc']); c['tipos'].add(x['tipo']); c['origenes'].add(x['origen'])
+        c['bultos'] += x['bultos']; c['hl'] += x['hl']; c['neto'] += x['neto']; c['rech'] += x['rech']
+        if x['motivo'] and x['rech'] > 0:
+            c['motivos'].add(x['motivo'])
     for s in semanas:
-        s['bultos'], s['hl'], s['neto'] = round(s['bultos'], 1), round(s['hl'], 2), round(s['neto'])
-    ultimos = [{'fecha': x['fecha'].isoformat(), 'doc': x['doc'], 'tipo': x['tipo'], 'origen': x['origen'],
-                'bultos': round(x['bultos'], 1), 'hl': round(x['hl'], 2), 'neto': round(x['neto']),
-                'rech': round(x['rech'], 1), 'motivo': x['motivo'] if x['rech'] > 0 else None} for x in reversed(ds[-10:])]
+        s['bultos'], s['hl'], s['neto'], s['compras'] = round(s['bultos'], 1), round(s['hl'], 2), round(s['neto']), len(s['compras'])
+    ultimos = [{'fecha': c['fecha'], 'comprobantes': len(c['docs']), 'docs': c['docs'],
+                'tipo': '+'.join(sorted(c['tipos'])), 'origen': ', '.join(sorted(o for o in c['origenes'] if o)),
+                'bultos': round(c['bultos'], 1), 'hl': round(c['hl'], 2), 'neto': round(c['neto']),
+                'rech': round(c['rech'], 1), 'motivo': ', '.join(sorted(c['motivos'])) or None}
+               for c in sorted(por_dia.values(), key=lambda c: c['fecha'], reverse=True)[:10]]
     arts = Session().execute(text(SQL_ARTICULOS), _params(desde, hasta, cliente=str(cid))).mappings()
     return {'desde': desde.isoformat(), 'hasta': hasta.isoformat(), 'semanas': semanas, 'ultimos': ultimos,
             'articulos': [{'articulo': a['articulo'], 'bultos': round(float(a['bultos'] or 0), 1),

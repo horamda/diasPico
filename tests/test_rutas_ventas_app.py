@@ -51,11 +51,11 @@ def test_reglas_de_volumen_y_pedidos(ctx):
         linea(123, 14, 5, art=1, bultos=20, hl=2, neto=2000, rech=5, motivo='CERRADO'),
     ])
     c = ventas_app.comportamiento(60, HASTA)['clientes'][123]
-    assert (c['pedidos'], c['compras']) == (4, 3)
+    assert (c['compras'], c['comprobantes']) == (3, 4)
     assert (c['bultos'], c['hl'], c['neto']) == (40, 4, 3600)
-    assert c['ticket'] == 3600 / 3 and c['drop'] == round(40 / 3, 1)
+    assert c['ticket'] == 3600 / 2 and c['drop'] == round(40 / 3, 1)   # 2 días con factura o preventa
     assert c['rech'] == 5 and c['rech_pct'] == round(5 / 40, 3) and c['motivos'] == {'CERRADO': 1}
-    assert c['frec'] == 7 and c['dias_sin'] == 0 and c['estado'] == 'activo' and c['bees'] == .75
+    assert c['frec'] == 7 and c['dias_sin'] == 0 and c['estado'] == 'activo' and c['bees'] == 1
     assert c['bultos_sem'] == round(40 / (60 / 7), 1)
 
 
@@ -81,13 +81,25 @@ def test_endpoints_ficha_y_mapa(ctx):
     c = ctx.test_client()
     r = c.get('/rutas/api/ventas/comportamiento?dias=60').json
     assert r['fuente'] == 'ventas_detalle' and r['hasta'] == HASTA.isoformat()
-    assert r['clientes']['123']['pedidos'] == 5 and r['clientes']['123']['bultos'] == 40 and 'ent' not in r['clientes']['123']
+    assert r['clientes']['123']['compras'] == 4 and r['clientes']['123']['comprobantes'] == 5 and r['clientes']['123']['bultos'] == 40 and 'ent' not in r['clientes']['123']
     r = c.get('/rutas/api/clientes/123/ventas?dias=30').json
     assert r['dias'] == 30 and r['metricas']['compras'] == 4 and r['metricas']['drop'] == 10
     ref = r['referencia']
     assert (ref['localidad'], ref['clientes'], ref['drop'], ref['frec']) == ('DOLORES', 2, 20, 7)
     assert ref['bultos_sem'] == pytest.approx((40 + 60) / (30 / 7) / 2, abs=.1)
     assert [a['articulo'] for a in r['articulos']] == ['QUILMES 1L']
-    assert len(r['ultimos']) == 5 and r['ultimos'][0]['fecha'] == HASTA.isoformat()
-    assert sum(s['bultos'] for s in r['semanas']) == 40 and sum(s['pedidos'] for s in r['semanas']) == 5
+    assert len(r['ultimos']) == 4 and r['ultimos'][0]['fecha'] == HASTA.isoformat() and r['ultimos'][0]['comprobantes'] == 2
+    assert sum(s['bultos'] for s in r['semanas']) == 40 and sum(s['compras'] for s in r['semanas']) == 4
     assert c.get('/rutas/api/clientes/999/ventas').json['metricas'] is None
+
+
+def test_varios_comprobantes_el_mismo_dia_son_una_compra(ctx):
+    cargar([linea(7, 0, 1, bultos=10, neto=1000), linea(7, 0, 2, bultos=5, neto=500),
+            linea(7, 0, 3, bultos=1, neto=0, tipo='RMCYO'), linea(7, 7, 4, bultos=6, neto=600)])
+    c = ventas_app.comportamiento(60, HASTA)['clientes'][7]
+    assert (c['compras'], c['comprobantes']) == (2, 4)
+    assert c['drop'] == 11 and c['ticket'] == 1050 and c['frec'] == 7
+    d = ventas_app.detalle_cliente(7, 60, HASTA)
+    assert [(u['fecha'], u['comprobantes'], u['bultos'], u['tipo']) for u in d['ultimos']] == [
+        (HASTA.isoformat(), 3, 16, 'FCVTA+RMCYO'), ((HASTA - timedelta(days=7)).isoformat(), 1, 6, 'FCVTA')]
+    assert sum(s['compras'] for s in d['semanas']) == 2

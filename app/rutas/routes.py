@@ -227,7 +227,7 @@ def _dias_param(default):
     return dias
 
 
-_RESUMEN_VENTA = ('pedidos', 'compras', 'neto', 'ticket', 'bultos', 'hl', 'drop', 'bultos_sem', 'rech_pct',
+_RESUMEN_VENTA = ('compras', 'comprobantes', 'neto', 'ticket', 'bultos', 'hl', 'drop', 'bultos_sem', 'rech_pct',
                   'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado')
 
 

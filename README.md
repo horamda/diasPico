@@ -177,17 +177,18 @@ que usan Días Pico y Drop Size, con sus mismas reglas (`app/rutas/ventas_app.py
 
 - Se excluyen remitos (REMIT) y comodatos (COMOD).
 - Bultos y HL cuentan solo artículos de tipo mercadería (sin envases ni esqueletos).
-- Un **pedido** es un comprobante (`detalle_documento`); una **entrega**, un día con comprobantes del cliente.
-  RMCYO cuenta como pedido y volumen, sin importe.
+- Una **compra** es un día con comprobantes del cliente: varios comprobantes el mismo día cuentan como
+  una sola compra (frecuencia, promedio por compra, ticket y estados se calculan por día). La cantidad
+  de comprobantes se muestra aparte. RMCYO cuenta como compra y volumen, sin importe.
 - La ventana termina en la última fecha cargada en `ventas_detalle`. Los resultados quedan en memoria
   10 minutos.
 
 En el mapa, **Color por: Volumen** pinta y agranda los puntos según bultos por semana (quintiles), y al
 elegir un día cada localidad muestra la **carga estimada** (suma del promedio de bultos por entrega de
-sus clientes). La ficha del cliente tiene el panel **Pedidos y volumen** (30, 60 o 90 días): pedidos,
-entregas, frecuencia, bultos y HL, promedio por entrega comparado con su localidad, venta neta, rechazo
-y motivos, días de la semana en que recibe frente a sus días asignados, bultos por semana, últimos
-pedidos y artículos más comprados. Estados: **inactivo** con más de 45 días sin comprar; **en riesgo**
+sus clientes). La ficha del cliente tiene el panel **Compras y volumen** (30, 60 o 90 días): compras,
+comprobantes, frecuencia, bultos y HL, promedio por compra comparado con su localidad, venta neta, rechazo
+y motivos, días de la semana en que recibe frente a sus días asignados, bultos por semana, últimas
+compras y artículos más comprados. Estados: **inactivo** con más de 45 días sin comprar; **en riesgo**
 con más de 2,5 veces su frecuencia habitual (mínimo 21 días). ABC por venta neta (80 / 15 / 5).
 
 Opcional: `flask --app "app:create_app()" rutas sync-ventas` carga comprobantes desde la API de ChessERP

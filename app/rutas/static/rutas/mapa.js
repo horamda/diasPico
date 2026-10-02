@@ -140,7 +140,7 @@ function drawPoints(list) {
     const rad = S.ver === 'vol' && S.V ? 3.5 + 1.6 * Math.max(0, volNivel(c)) : (sd?6:5);
     const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
       color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
-    const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.pedidos)} pedidos · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
+    const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.compras)} compras · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
     m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
@@ -308,7 +308,7 @@ function renderVen() {
   const top = act.filter(venta).sort((a, b) => venta(b).bultos - venta(a).bultos).slice(0, 15);
   const tag = c => { const v = venta(c); return v ? `<span class="pill">${num(v.bultos_sem,1)} b/sem</span><span class="pill">${v.dias_sin} d</span>` : ''; };
   el.innerHTML = `<p class="status">Ventas importadas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} (60 días) · sin remitos ni comodatos · volumen de mercadería</p>
-   <div class="vtot"><div><b>${num(tot('pedidos'))}</b><span>pedidos</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
+   <div class="vtot"><div title="Una compra por cliente y día · ${num(tot('comprobantes'))} comprobantes"><b>${num(tot('compras'))}</b><span>compras</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
    <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
    <p class="note">En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días). Inactivo: más de 45 días.</p>
    <h2>Mayor volumen</h2><div class="list">${top.map(c => itemHTML(c, `<span class="pill">${num(venta(c).bultos)} b</span>`)).join('') || '<p class="note">Sin datos.</p>'}</div>
@@ -337,7 +337,7 @@ function renderCard(){
     <div class="dchips" aria-label="Días de entrega">${DAYS.map(d=>`<span class="dchip${c.d.includes(d)?' on':''}" title="${DAYNAME[d]}">${d}</span>`).join('')}</div>
     <dl class="kv"><dt>Domicilio</dt><dd>${esc(c.dom)||'—'}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd>${c.ven?`<dt>Vendedor</dt><dd>${esc(c.ven)}</dd>`:''}<dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
     <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver en Google Maps</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
-    <section id="clientSales" class="pv" aria-live="polite"><p class="status">Consultando pedidos...</p></section>`;
+    <section id="clientSales" class="pv" aria-live="polite"><p class="status">Consultando compras...</p></section>`;
   $('map').appendChild(card);L.DomEvent.disableClickPropagation(card);L.DomEvent.disableScrollPropagation(card);
   card.querySelector('.x').onclick=cerrarCard;
   cargarVentas(c, card.querySelector('#clientSales'));
@@ -349,16 +349,16 @@ function renderCard(){
 
 async function cargarVentas(c, el) {
   const dias = PERIODOS.includes(S.periodo) ? S.periodo : 60;
-  el.innerHTML = '<p class="status"><span class="spinner"></span> Consultando pedidos...</p>';
+  el.innerHTML = '<p class="status"><span class="spinner"></span> Consultando compras...</p>';
   let r;
   try { r = await api(`/clientes/${c.id}/ventas?dias=${dias}`); }
-  catch (e) { if (el.isConnected) el.innerHTML = `<p class="status">No se pudieron consultar los pedidos: ${esc(e.message)}</p>`; return; }
+  catch (e) { if (el.isConnected) el.innerHTML = `<p class="status">No se pudieron consultar las compras: ${esc(e.message)}</p>`; return; }
   if (!el.isConnected) return;
   const selector = `<div class="seg seg-sm" role="group" aria-label="Período">${PERIODOS.map(p => `<button type="button" data-p="${p}" aria-pressed="${p===dias}">${p} d</button>`).join('')}</div>`;
-  const head = `<div class="pv-head"><h2>Pedidos y volumen</h2>${selector}</div>`;
+  const head = `<div class="pv-head"><h2>Compras y volumen</h2>${selector}</div>`;
   const m = r.metricas;
   if (!m) {
-    el.innerHTML = head + `<p class="empty">Sin pedidos entre el ${esc(r.desde || '—')} y el ${esc(r.hasta || '—')}.</p>`;
+    el.innerHTML = head + `<p class="empty">Sin compras entre el ${esc(r.desde || '—')} y el ${esc(r.hasta || '—')}.</p>`;
   } else {
     const ref = r.referencia, cls = {activo:'ok', riesgo:'warn', inactivo:'bad'}[m.estado] || '';
     const vsRef = ref && ref.drop ? Math.round((m.drop / ref.drop - 1) * 100) : null;
@@ -369,22 +369,22 @@ async function cargarVentas(c, el) {
       return `<div class="wd${asig.includes(d)?' asig':''}" title="${n} entregas (${pct}%)${asig.includes(d)?' · día asignado':''}"><i style="height:${Math.max(pct, 3)}%"></i><b>${pct}%</b><span>${d}</span></div>`; }).join('');
     const maxB = Math.max(1, ...r.semanas.map(s => s.bultos)), W = r.semanas.length;
     const spark = `<svg class="spark" viewBox="0 0 ${W * 10} 44" preserveAspectRatio="none" role="img" aria-label="Bultos por semana">${r.semanas.map((s, i) =>
-      `<rect x="${i * 10 + 1}" y="${44 - Math.max(1, s.bultos / maxB * 42)}" width="8" height="${Math.max(1, s.bultos / maxB * 42)}" rx="1.5"><title>Semana del ${s.desde}: ${num(s.bultos,1)} bultos · ${num(s.hl,2)} HL · ${s.pedidos} pedidos</title></rect>`).join('')}</svg>`;
+      `<rect x="${i * 10 + 1}" y="${44 - Math.max(1, s.bultos / maxB * 42)}" width="8" height="${Math.max(1, s.bultos / maxB * 42)}" rx="1.5"><title>Semana del ${s.desde}: ${num(s.bultos,1)} bultos · ${num(s.hl,2)} HL · ${s.compras} compras</title></rect>`).join('')}</svg>`;
     const kpi = (t, v, sub, k='') => `<div class="pv-kpi ${k}"><span>${t}</span><b>${v}</b>${sub?`<small>${sub}</small>`:''}</div>`;
     el.innerHTML = head + `<p class="status">${esc(r.desde)} al ${esc(r.hasta)} · ventas importadas, sin remitos ni comodatos</p>
-      <div class="pv-tags"><span class="pill ${cls}">${ESTADO[m.estado]}</span><span class="pill" title="Clasificación ABC por venta neta">ABC ${esc(m.abc)}</span>${tend!=null?`<span class="pill ${tend<-15?'warn':''}" title="Bultos de la segunda mitad del período contra la primera">${tend>0?'▲':'▼'} ${Math.abs(tend)}%</span>`:''}<span class="pill" title="Pedidos que entraron por BEES">BEES ${Math.round(m.bees * 100)}%</span></div>
+      <div class="pv-tags"><span class="pill ${cls}">${ESTADO[m.estado]}</span><span class="pill" title="Clasificación ABC por venta neta">ABC ${esc(m.abc)}</span>${tend!=null?`<span class="pill ${tend<-15?'warn':''}" title="Bultos de la segunda mitad del período contra la primera">${tend>0?'▲':'▼'} ${Math.abs(tend)}%</span>`:''}<span class="pill" title="Compras con al menos un pedido por BEES">BEES ${Math.round(m.bees * 100)}%</span></div>
       <div class="pv-kpis">
-        ${kpi('Pedidos', num(m.pedidos), `${num(m.compras)} entregas`)}
+        ${kpi('Compras', num(m.compras), m.comprobantes > m.compras ? `${num(m.comprobantes)} comprobantes` : 'un comprobante por día')}
         ${kpi('Frecuencia', m.frec != null ? `cada ${num(m.frec,1)} d` : '—', `última hace ${m.dias_sin} d`, m.estado === 'activo' ? '' : cls)}
         ${kpi('Bultos', num(m.bultos), `${num(m.hl,1)} HL · ${num(m.bultos_sem,1)}/sem`)}
-        ${kpi('Por entrega', `${num(m.drop,1)} b`, ref ? `${vsRef>0?'+':''}${vsRef}% vs ${esc(ref.localidad)} (${num(ref.drop,1)})` : `${num(m.drop_hl,2)} HL`)}
+        ${kpi('Por compra', `${num(m.drop,1)} b`, ref ? `${vsRef>0?'+':''}${vsRef}% vs ${esc(ref.localidad)} (${num(ref.drop,1)})` : `${num(m.drop_hl,2)} HL`)}
         ${kpi('Venta neta', money(m.neto), `ticket ${money(m.ticket)}`)}
         ${kpi('Rechazo', `${num(m.rech_pct * 100, 1)}%`, `${num(m.rech,1)} bultos`, m.rech_pct > .05 ? 'bad' : '')}
       </div>
       <h3>Días en que recibe</h3><div class="wdays">${barras}</div>
       <p class="note">${r.sugerencia ? `${Math.round(r.sugerencia.en_dia * 100)}% de sus entregas cae en sus días asignados (${asig || 'sin días'}). Recibe más: ${esc(r.sugerencia.dias) || '—'}.` : 'Pocas entregas para comparar con los días asignados.'}</p>
       <h3>Bultos por semana</h3>${spark}
-      ${r.ultimos.length ? `<h3>Últimos pedidos</h3><div class="tw"><table><thead><tr><th>Fecha</th><th>Tipo</th><th>Bultos</th><th>HL</th><th>Neto</th><th>Rech.</th></tr></thead><tbody>${r.ultimos.slice(0, 8).map(u => `<tr title="${esc(u.doc)} · ${esc(u.origen)}${u.motivo ? ' · ' + esc(u.motivo) : ''}"><td>${esc(u.fecha.slice(5).split('-').reverse().join('/'))}</td><td>${esc(u.tipo)}</td><td>${num(u.bultos,1)}</td><td>${num(u.hl,2)}</td><td>${money(u.neto)}</td><td class="${u.rech ? 'bad' : 'z'}">${u.rech ? num(u.rech,1) : '·'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${r.ultimos.length ? `<h3>Últimas compras</h3><div class="tw"><table><thead><tr><th>Fecha</th><th>Comprob.</th><th>Bultos</th><th>HL</th><th>Neto</th><th>Rech.</th></tr></thead><tbody>${r.ultimos.slice(0, 8).map(u => `<tr title="${esc(u.docs.join(', '))} · ${esc(u.origen)}${u.motivo ? ' · ' + esc(u.motivo) : ''}"><td>${esc(u.fecha.slice(5).split('-').reverse().join('/'))}</td><td>${u.comprobantes > 1 ? `${u.comprobantes} · ` : ''}${esc(u.tipo)}</td><td>${num(u.bultos,1)}</td><td>${num(u.hl,2)}</td><td>${money(u.neto)}</td><td class="${u.rech ? 'bad' : 'z'}">${u.rech ? num(u.rech,1) : '·'}</td></tr>`).join('')}</tbody></table></div>` : ''}
       ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${num(a.bultos,1)} b</b></li>`).join('')}</ol>` : ''}
       ${Object.keys(m.motivos || {}).length ? `<p class="note">Motivos de rechazo: ${Object.entries(m.motivos).map(([k, n]) => `${esc(k)} (${n})`).join(', ')}</p>` : ''}`;
   }
