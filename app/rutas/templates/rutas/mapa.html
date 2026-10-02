@@ -18,7 +18,10 @@
   </div>
   <div class="hctl">
     <div class="seg" id="sucSeg" role="group" aria-label="Sucursal que entrega"></div>
-    <div class="seg seg-days" id="daySeg" role="group" aria-label="Día de entrega"></div>
+    <div class="days-wrap">
+      <div class="seg seg-days" id="daySeg" role="group" aria-label="Día de entrega"></div>
+      <button type="button" class="btn btn-comp" id="compBtn" aria-pressed="false" title="Elegir varios días y ver si sus zonas se superponen en cada localidad (también Ctrl+clic en un día)">Comparar</button>
+    </div>
     <div class="seg" id="verSeg" role="group" aria-label="Color de los puntos"></div>
     <input type="search" id="q" placeholder="Buscar cliente   /" aria-label="Buscar cliente, número o calle" autocomplete="off">
     <details class="more">
