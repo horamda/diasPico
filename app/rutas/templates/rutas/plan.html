@@ -1,0 +1,14 @@
+﻿<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Recorridos · Rutas de entrega</title><link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}"><style>html,body{height:auto}</style></head>
+<body><header><h1>Recorridos y localidades<small>Solo consulta</small></h1><nav class="topnav"><a href="{{ url_for('portal.portal_home') }}">Portal</a><a href="{{ url_for('rutas.mapa') }}">Mapa</a></nav></header>
+<main class="wrap"><p class="note">Cobertura semanal registrada por vehículo. Los recorridos son orientativos y las localidades compartidas cuentan sus clientes en cada vehículo.</p><p id="loadStatus" role="status"></p><section id="vehs" class="vgrid"></section><section class="panel"><h2>Localidades y sucursales</h2><div class="tw"><table><thead><tr><th>Localidad</th><th>Sale de</th></tr></thead><tbody id="locs"></tbody></table></div></section><section class="panel"><h2>Depósitos</h2><div id="deps"></div></section></main>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+(async()=>{try{
+ const res=await fetch({{ url_for('rutas.api_datos') | tojson }});if(!res.ok)throw Error('No se pudieron consultar los recorridos. Revisá tu sesión.');const d=await res.json();
+ document.getElementById('vehs').innerHTML=d.plan.vehiculos.map(v=>`<article class="vcard"><h2>${esc(v.nombre)}</h2><p>${esc(v.deposito)} · ${esc(v.patente||'Sin patente')}</p>${Object.entries(v.plan).map(([dia,locs])=>`<p><strong>${esc(dia)}</strong>: ${locs.map(esc).join(' → ')}</p>`).join('')||'<p>Sin recorrido registrado.</p>'}</article>`).join('');
+ document.getElementById('locs').innerHTML=d.plan.localidades.map(l=>`<tr><td>${esc(l.nombre)}</td><td>${esc(l.deposito||'Sin asignar')}</td></tr>`).join('');
+ document.getElementById('deps').innerHTML=d.plan.depositos.map(d=>`<p><strong>${esc(d.nombre)}</strong> · ${esc(d.direccion||'Sin dirección registrada')}</p>`).join('');
+ document.getElementById('loadStatus').textContent=d.plan.vehiculos.length?'':'No hay recorridos registrados.';
+}catch(e){document.getElementById('loadStatus').textContent=e.message}})();
+</script></body></html>

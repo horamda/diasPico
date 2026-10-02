@@ -54,6 +54,10 @@ def create_app(env: str | None = None) -> Flask:
     # No bloqueamos el arranque con conexiones a Railway.
 
     register_blueprints(app)
+    from app.rutas import init_rutas
+    with app.app_context():
+        app.config['RUTAS_ENGINE'] = db.engine
+        init_rutas(app)
 
     def _guard():
         if session.get('portal_user_id'):

@@ -14,6 +14,14 @@ _TABLES_LOCK = Lock()
 
 _DEFAULT_MODULES = (
     {
+        'codigo': 'rutas_entrega',
+        'titulo': 'Rutas de entrega',
+        'descripcion': 'Consulta del mapa de clientes, días de entrega y recorridos por vehículo.',
+        'ruta': '/rutas/',
+        'image_url': '',
+        'orden': 29,
+    },
+    {
         'codigo': 'importaciones_datos',
         'titulo': 'Importaciones de datos',
         'descripcion': 'Carga centralizada de archivos, maestros y sincronizaciones externas.',

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Importar días de entrega · Portal</title>
+  <link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
+  <style>html,body{height:auto}.import-form{display:flex;flex-wrap:wrap;gap:16px;align-items:end}.import-form label{display:grid;gap:8px}.import-summary{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.import-table{overflow:auto;max-height:60vh}.import-table table{min-width:700px;width:100%}.import-table th{position:sticky;top:0;background:var(--panel)}#importStatus{white-space:pre-wrap}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}</style>
+</head>
+<body>
+<header><h1>Importar días de entrega<small>Relacionar el CSV con los códigos de cliente</small></h1>
+  <nav class="topnav"><a href="/importaciones-datos">Importaciones de datos</a><a href="{{ url_for('portal.portal_home') }}">Portal</a><a href="{{ url_for('rutas.mapa') }}">Mapa</a><a href="{{ url_for('rutas.plan_page') }}">Camiones y localidades</a></nav>
+</header>
+<main class="wrap">
+  <section class="panel">
+    <p>Actualizá los clientes desde el maestro antes de analizar el archivo. Esta importación modifica únicamente los días de entrega; conserva notas, coordenadas y sucursales.</p>
+    <p class="note">Formato: CLIENTE y LUNES a SABADO. Un 1 indica visita ese día; vacío o 0, sin visita. Las columnas de BEES se ignoran. Los clientes inactivos según el maestro de Rutas y los registros con errores se excluyen.</p>
+    <p><button type="button" class="btn" id="refreshImportMaster">Actualizar clientes desde maestro</button></p>
+    <form id="importForm" class="import-form">
+      <label for="importFile">Archivo CSV (hasta 5 MB)<input id="importFile" type="file" accept=".csv,text/csv" required></label>
+      <label for="importMode">Qué actualizar<select id="importMode"><option value="vacios">Completar solo clientes sin días</option><option value="reemplazar">Reemplazar también días existentes</option></select></label>
+      <button class="btn primary" id="previewButton" type="submit">Analizar archivo</button>
+    </form>
+    <p class="note">Reemplazar también puede quitar días si la fila del archivo está vacía. Revisá los valores actuales y propuestos antes de confirmar.</p>
+  </section>
+  <p id="importStatus" role="status" aria-live="polite"></p>
+  <section id="importPreview" class="panel" hidden>
+    <h2>Vista previa</h2><div id="importSummary" class="import-summary"></div>
+    <div class="actions"><label for="importFilter">Mostrar <select id="importFilter"><option value="todos">Todos</option><option value="cambios">Cambios a aplicar</option><option value="excluidos">Excluidos y conservados</option></select></label><button class="btn" id="previousPage" type="button">Anterior</button><span id="importPage"></span><button class="btn" id="nextPage" type="button">Siguiente</button></div>
+    <div class="import-table"><table><thead><tr><th>Fila</th><th>Cliente</th><th>Nombre</th><th>Días actuales</th><th>Días del archivo</th><th>Resultado</th></tr></thead><tbody id="importRows"></tbody></table></div>
+    <div class="actions"><button class="btn primary" id="confirmImport" type="button" disabled>Confirmar importación</button><a class="btn" href="{{ url_for('rutas.mapa') }}">Volver al mapa</a></div>
+  </section>
+</main>
+<script>window.RUTAS_IMPORT = {maestro: {{ url_for('rutas_importaciones.actualizar_maestro') | tojson }}, preview: {{ url_for('rutas_importaciones.importar_dias_preview') | tojson }}, confirmar: {{ url_for('rutas_importaciones.importar_dias_confirmar') | tojson }}};</script>
+<script src="{{ url_for('rutas.static', filename='rutas/importar_dias.js') }}"></script>
+</body></html>

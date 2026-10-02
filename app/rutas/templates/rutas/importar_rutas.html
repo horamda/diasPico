@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Importar rutas armadas · Portal</title>
+<link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
+<style>html,body{height:auto}.actions{display:flex;flex-wrap:wrap;gap:14px;align-items:end;margin:14px 0}.actions label{display:grid;gap:8px}.route-table{overflow:auto;max-height:60vh}.route-table table{min-width:750px;width:100%}.route-table th{position:sticky;top:0;background:var(--panel)}#routeStatus{white-space:pre-wrap}</style></head>
+<body><header><h1>Importar rutas armadas<small>Recorridos por camión y día</small></h1><nav class="topnav"><a href="/importaciones-datos">Importaciones de datos</a><a href="{{ url_for('rutas.plan_page') }}">Ver recorridos</a></nav></header>
+<main class="wrap"><section class="panel">
+<p>Una fila por parada: <strong>SUCURSAL; VEHICULO; DIA; LOCALIDAD; ORDEN</strong>. Los días admitidos son LUNES a SABADO (o LU a SA). El orden debe ser un número entero positivo.</p>
+<p>Los vehículos nuevos se crean al confirmar. Los días de entrega de los clientes, las ubicaciones y las notas se conservan.</p>
+<a class="btn" href="{{ url_for('rutas_importaciones.plantilla_rutas') }}">Descargar plantilla CSV de ejemplo</a>
+<p class="note">Reemplazá las filas de ejemplo por tus recorridos. Las localidades deben corresponder a la sucursal indicada. Si hay errores, se deben corregir antes de confirmar.</p>
+<form id="routeForm" class="actions"><label for="routeFile">CSV (hasta 5 MB)<input id="routeFile" type="file" accept=".csv,text/csv" required></label><label for="routeMode">Recorridos existentes<select id="routeMode"><option value="vacios">Conservar; cargar solo días sin recorrido</option><option value="reemplazar">Reemplazar vehículo y día incluidos en el CSV</option></select></label><button class="btn primary" type="submit" id="routeAnalyze">Analizar archivo</button></form>
+<p class="note">Cada recorrido del CSV debe contener todas las paradas de ese vehículo y día. Los días y vehículos ausentes del archivo no se modifican.</p></section>
+<p id="routeStatus" role="status" aria-live="polite"></p>
+<section id="routePreview" class="panel" hidden><h2>Vista previa</h2><p id="routeSummary"></p><div id="routeErrors"></div>
+<div class="actions"><button class="btn" id="routePrev" type="button">Anterior</button><span id="routePage"></span><button class="btn" id="routeNext" type="button">Siguiente</button></div>
+<div class="route-table"><table><thead><tr><th>Filas</th><th>Sucursal</th><th>Vehículo</th><th>Día</th><th>Recorrido actual</th><th>Recorrido del CSV</th><th>Resultado</th></tr></thead><tbody id="routeRows"></tbody></table></div>
+<div class="actions"><button class="btn primary" id="routeConfirm" type="button" disabled>Confirmar importación</button><a class="btn" href="{{ url_for('rutas.plan_page') }}">Ver recorridos</a></div></section></main>
+<script>window.RUTAS_REC={preview:{{ url_for('rutas_importaciones.importar_rutas_preview')|tojson }},confirmar:{{ url_for('rutas_importaciones.importar_rutas_confirmar')|tojson }}};</script>
+<script src="{{ url_for('rutas.static', filename='rutas/importar_rutas.js') }}"></script></body></html>

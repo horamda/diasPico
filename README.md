@@ -153,3 +153,89 @@ POST /api/segmentacion/recalcular
 ```
 
 `venta-dia` acepta `periodo_tipo=todo|mes|anio|semana|rango` y devuelve comparativos ISO semana a semana para el año seleccionado.
+
+
+## Rutas de entrega
+
+Módulo integrado en `/rutas/` (mapa) y `/rutas/plan` (consulta de recorridos), con código en `app/rutas/`.
+
+- Reiniciar la aplicación tras desplegar. La tarjeta se registra en el portal; los administradores la ven y pueden asignar el módulo a otros usuarios desde la administración de permisos.
+- Rutas es solo de consulta: filtros, mapa, fichas e historial. No expone endpoints para editar clientes, ubicaciones, vehículos, localidades o recorridos.
+- Se crean las localidades y depósitos del maestro. Las localidades de varias sucursales quedan sin asignar. Los vehículos y recorridos existentes se muestran sin edición; no se importa automáticamente la semilla del proyecto original.
+- Los días de visita comercial no son días de entrega: los clientes nuevos empiezan sin días. Actualizar conserva los días, notas, coordenadas corregidas y asignaciones logísticas existentes.
+- El historial de cada cliente está en su ficha del mapa. Registra usuario, fecha, campo y valores anterior/nuevo.
+- Las tablas `rt_*` se crean al primer acceso autorizado a la API, usando el motor de la aplicación. El arranque no conecta a la base para crearlas. La base debe permitir crear tablas.
+- El módulo actual admite códigos numéricos de cliente hasta 2147483647. La actualización informa los códigos omitidos; no combina identificadores que colisionan al convertirlos a número.
+- La carga por camión representa cobertura por localidad, no asignación individual. Los trazos son orientativos, no rutas por calles. BEES y sincronización directa con Chess quedan para la segunda etapa y no tienen endpoints habilitados.
+
+Validación: `python -m pytest tests/test_rutas_entrega.py -q`.
+
+### Importar días desde CSV
+
+Desde **Importaciones de datos → Días de entrega** (`/importaciones/rutas/dias`), actualizar los clientes desde el maestro, seleccionar el CSV y **Analizar archivo**. Esta pantalla exige permiso de Importaciones de datos, independiente del acceso de lectura a Rutas.
+El formato usa exclusivamente `CLIENTE` y `LUNES` a `SABADO`: un `1` indica visita
+ese día; vacío o `0`, sin visita. Se normalizan espacios y tildes del encabezado.
+Las columnas Mon–Sun de BEES, coordenadas, sucursales y anulado del CSV no se usan
+para modificar el maestro.
+
+La opción predeterminada completa días vacíos. **Reemplazar también días existentes**
+permite modificar o quitar días según el archivo. La vista previa muestra cada fila
+y excluye duplicados, códigos desconocidos, días inválidos y clientes inactivos en Rutas.
+Actualizar el maestro antes de importar para trabajar con el estado vigente.
+
+**Confirmar** aplica únicamente los cambios revisados, en una transacción. Si algún
+cliente fue modificado desde el análisis, exige una nueva vista previa sin guardar
+parcialmente. La vista previa vence a los 30 minutos y está ligada al usuario.
+Reintentar la misma confirmación no duplica cambios. Los días se guardan en
+`rt_cliente_entrega`, la auditoría en `rt_cambio_log` y el archivo/hash/resumen de
+cada importación en `rt_importacion_dias`. El CSV original no se almacena.
+
+Validación: `python -m pytest tests/test_rutas_importar_dias.py tests/test_rutas_entrega.py -q`.
+
+En Rutas, un cliente activo debe permanecer activo en el maestro, tener `anulado = NO` y `fuerza_venta_1_dias_visita` no vacío y distinto de `DOM` (ignorando espacios extremos y mayúsculas). Esta condición se actualiza al sincronizar desde el maestro y determina también qué clientes admite la importación de días. Los días de visita se usan como filtro de actividad, no como días de entrega.
+
+
+En el mapa de Rutas, el día seleccionado se combina con sucursal, búsqueda,
+actividad y días asignados. Los puntos, tarjetas, tabla por localidad, pendientes
+y cobertura por camión se recalculan sobre la misma selección. Seleccionar un día
+centra el mapa en los clientes con coordenadas; los que carecen de ubicación siguen
+contando en tarjetas y pendientes.
+
+La relación operativa localidad–sucursal está definida en `app/rutas/localidades.py`
+según la tabla de logística. Se aplica también a datos ya cargados, tiene prioridad
+sobre la sucursal comercial del maestro y se persiste al actualizarlo. Normaliza
+tildes y espacios repetidos. Incluye Casa Central, Chascomús y Dolores; las localidades
+no incluidas conservan la asignación existente. No cambia coordenadas ni días.
+
+### Importar rutas armadas por vehículo
+
+En **Importaciones de datos → Rutas armadas por camión**, abrir
+`/importaciones/rutas/recorridos`, descargar la plantilla CSV y reemplazar los ejemplos.
+Una fila representa una localidad en un recorrido:
+
+```csv
+SUCURSAL;VEHICULO;DIA;LOCALIDAD;ORDEN
+CHASCOMUS;CAMION 1;LUNES;CASTELLI;1
+CHASCOMUS;CAMION 1;LUNES;LEZAMA;2
+DOLORES;CAMION 2;MARTES;MAIPU;1
+```
+
+Admite días completos de lunes a sábado o LU/MA/MI/JU/VI/SA, UTF-8 o Windows-1252,
+y separadores punto y coma, coma o tabulación. También acepta CAMION como encabezado
+de VEHICULO. Normaliza espacios y tildes para identificar localidades y vehículos.
+
+**Analizar archivo** muestra los recorridos actuales y propuestos. Por defecto conserva
+los ya existentes; la opción de reemplazo modifica solo los vehículos y días presentes
+en el archivo. Cada grupo debe traer su recorrido completo, con localidades y órdenes
+sin repetir. Una localidad debe pertenecer a la sucursal indicada. Cualquier error
+bloquea la confirmación de todo el archivo. Los vehículos nuevos se crean al confirmar;
+los inactivos se rechazan y no se reactivan automáticamente.
+
+La confirmación es transaccional, detecta vistas previas desactualizadas y tolera
+reintentos sin duplicar importaciones. Guarda recorridos en `rt_plan_ruta`, vehículos
+en `rt_vehiculo`, auditoría en `rt_cambio_log` y el resumen/hash del lote en
+`rt_importacion_rutas`. No modifica los días de entrega de los clientes ni coordenadas.
+Rutas sigue siendo solo de consulta. Reiniciar la app tras desplegar este cambio;
+la nueva tabla de importaciones se crea en el primer acceso autorizado a la API.
+
+Pruebas: `python -m pytest tests/test_rutas_importar_recorridos.py -q`.
