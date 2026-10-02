@@ -8,7 +8,12 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'dias', V:null};
+const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
+const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
+const venta = c => S.V && S.V.clientes[c.id];
+const estadoDe = c => venta(c)?.estado || 'sin_compras';
+const money = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR');
 let byId = new Map();
 let mapPositioned=false;
 const isGeo = c => c.lat != null && c.lng != null;
@@ -18,7 +23,9 @@ const FLT = {
   fuera: c => !c.pl && !c.an, cambia: c => !c.an && c.d !== c.de, pend: c => c.pend && !c.an,
 };
 const FLT_LABEL = {sindias:'sin días de entrega', singeo:'sin geolocalizar', far:'ubicación a revisar',
-  anulado:'inactivos con días asignados', cambia:'días distintos al ERP', pend:'pendientes de subir a BEES'};
+  anulado:'inactivos con días asignados', cambia:'días distintos al ERP', pend:'pendientes de subir a BEES',
+  riesgo:'en riesgo de dejar de comprar', inactivo:'sin comprar hace más de 45 días', sin_compras:'sin compras en el período'};
+for (const e of ['riesgo','inactivo','sin_compras']) FLT[e] = c => !c.an && estadoDe(c) === e;
 
 function toast(msg, err){ const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.textContent=msg;
   document.body.appendChild(t); setTimeout(()=>t.remove(), 3500); }
@@ -45,13 +52,19 @@ function drawPoints(list) {
   list.forEach(c => {
     if (!isGeo(c)) return;
     const sd = sinDias(c), sel = S.sel === c.id;
-    const fill = c.an ? '#9a9f9b' : sd ? tok('--bad') : (PCOL[c.d] || '#8d8a5c');
+    const fill = colorDe(c, sd);
     const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:(sd?6:5), weight: sel?3:(c.far?2.5:1),
       color: sel ? tok('--ink') : (c.far ? tok('--warn') : 'rgba(0,0,0,.45)'), fillColor: fill, fillOpacity: c.an?.5:.9});
-    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}`);
+    const vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${venta(c)?' · '+venta(c).abc+' · '+money(venta(c).neto):''}` : '';
+    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
   });
+}
+function colorDe(c, sd) {
+  if (S.ver === 'estado' && S.V) return {activo:tok('--ok'), riesgo:tok('--warn'), inactivo:tok('--bad'), sin_compras:'#9a9f9b'}[estadoDe(c)];
+  if (S.ver === 'venta' && S.V) return ABC_COL[venta(c)?.abc || '-'];
+  return c.an ? '#9a9f9b' : sd ? tok('--bad') : (PCOL[c.d] || '#8d8a5c');
 }
 // ---------- paneles ----------
 function scope(){return visible()}
@@ -84,7 +97,7 @@ function renderDia() {
   const days = S.day==='TODOS' ? DAYS : [S.day];
   $('p-dia').innerHTML = days.map(d => {
     const clients=scope().filter(c=>c.d.includes(d));
-    return `<h2>${DAYNAME[d]} ? ${clients.length} clientes</h2><div class="list">${clients.map(c=>itemHTML(c,`<span class="pill">${esc(c.suc)}</span>`)).join('')||'<p class="note">No hay clientes para los filtros seleccionados.</p>'}</div>`;
+    return `<h2>${DAYNAME[d]} · ${clients.length} clientes</h2><div class="list">${clients.map(c=>itemHTML(c,`<span class="pill">${esc(c.suc)}</span>`)).join('')||'<p class="note">No hay clientes para los filtros seleccionados.</p>'}</div>`;
   }).join('');
   bindItems($('p-dia'));
 }
@@ -105,6 +118,25 @@ function renderExp(){
   $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p><p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p><p class="note">Los recorridos conectan localidades en línea recta. La carga por vehículo es una estimación de cobertura.</p><p class="status">${S.D.ultima_sync?'Última actualización del maestro: '+esc(S.D.ultima_sync.fin):'Sin actualización registrada.'}</p>`;
 }
 
+function renderVen() {
+  const el = $('p-ven');
+  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="note">No hay ventas cargadas. Se cargan con <code>flask rutas sync-ventas</code>.</p>'; return; }
+  const act = scope().filter(c => !c.an), cnt = e => act.filter(c => estadoDe(c) === e).length;
+  const abc = l => act.filter(c => venta(c)?.abc === l).length;
+  const neto = act.reduce((t, c) => t + (venta(c)?.neto || 0), 0);
+  const kp = [['',cnt('activo'),'activos',null],['warn',cnt('riesgo'),'en riesgo','riesgo'],
+    ['bad',cnt('inactivo'),'inactivos (+45 días)','inactivo'],['',cnt('sin_compras'),'sin compras','sin_compras']];
+  const lista = (e, n) => act.filter(c => estadoDe(c) === e).sort((a, b) => (venta(b)?.neto || 0) - (venta(a)?.neto || 0)).slice(0, n);
+  const tag = c => { const v = venta(c); return v ? `<span class="pill">${v.abc}</span><span class="pill">${v.dias_sin} d</span>` : ''; };
+  el.innerHTML = `<p class="status">Del ${esc(S.V.desde)} al ${esc(S.V.hasta)} · ${S.V.comprobantes} comprobantes · venta neta de la vista ${money(neto)}</p>
+   <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
+   <p class="note">ABC por venta neta: <b>${abc('A')}</b> A · <b>${abc('B')}</b> B · <b>${abc('C')}</b> C. En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días).</p>
+   <h2>En riesgo · mayor venta primero</h2><div class="list">${lista('riesgo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>
+   <h2>Inactivos · mayor venta primero</h2><div class="list">${lista('inactivo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>`;
+  el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
+  bindItems(el);
+}
+
 // ---------- ficha de consulta ----------
 let card=null;
 function select(id,fly){
@@ -119,13 +151,35 @@ function renderCard(){
   const gm=isGeo(c)?`https://www.google.com/maps?q=${c.lat},${c.lng}`:`https://www.google.com/maps/search/${encodeURIComponent(c.dom+', '+c.loc+', Buenos Aires')}`;
   card.innerHTML=`<button class="x" aria-label="Cerrar">×</button><h3>${esc(c.n)}</h3>
     <dl class="kv"><dt>Cliente</dt><dd>${c.id}</dd><dt>Domicilio</dt><dd>${esc(c.dom)}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Estado</dt><dd>${c.an?'Inactivo':'Activo'}</dd><dt>Días de entrega</dt><dd>${DAYS.filter(d=>c.d.includes(d)).map(d=>DAYNAME[d]).join(', ')||'Sin días asignados'}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd><dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
-    <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver ubicación</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>`;
+    <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver ubicación</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
+    <div id="clientSales" class="status">Consultando compras...</div>`;
   $('map').appendChild(card);L.DomEvent.disableClickPropagation(card);L.DomEvent.disableScrollPropagation(card);
   card.querySelector('.x').onclick=()=>{S.sel=null;renderCard();drawPoints(visible())};
+  cargarVentas(c, card.querySelector('#clientSales'));
   card.querySelector('#history').onclick=async()=>{
     const target=card.querySelector('#clientHistory');target.textContent='Consultando historial...';
     try{const rows=await api('/clientes/'+c.id+'/historial');target.innerHTML=rows.length?rows.map(r=>`<p><strong>${esc(r.campo)}</strong>: ${esc(r.antes??'—')} → ${esc(r.despues??'—')}<br><small>${esc(r.usuario||'Sin usuario')} · ${esc(r.fecha)}</small></p>`).join(''):'Sin cambios registrados.'}catch(e){target.textContent=e.message}
   };
+}
+
+async function cargarVentas(c, el) {
+  try {
+    const r = await api('/clientes/' + c.id + '/ventas');
+    if (!el.isConnected) return;
+    const m = r.metricas;
+    if (!m) { el.innerHTML = '<h2>Comportamiento de compra</h2><p class="note">Sin compras en los últimos 60 días.</p>'; return; }
+    const cls = {activo:'ok', riesgo:'warn', inactivo:'bad'}[m.estado] || '';
+    const tend = m.tend == null ? '—' : (m.tend > 0 ? '+' : '') + Math.round(m.tend * 100) + '%';
+    const sug = r.sugerencia ? `<dt>Recibe más</dt><dd>${esc(r.sugerencia.dias) || '—'} · ${Math.round(r.sugerencia.en_dia * 100)}% de sus entregas cae en sus días asignados</dd>` : '';
+    el.innerHTML = `<h2>Comportamiento de compra <span class="pill ${cls}">${ESTADO[m.estado]}</span> <span class="pill">${esc(m.abc)}</span></h2>
+      <dl class="kv"><dt>Compras (60 días)</dt><dd>${m.compras} · cada ${m.frec ?? '—'} días</dd>
+      <dt>Última compra</dt><dd>${esc(m.ultima)} · hace ${m.dias_sin} días</dd>
+      <dt>Venta neta</dt><dd>${money(m.neto)} · ticket ${money(m.ticket)}${m.bultos != null ? ' · ' + m.bultos + ' bultos' : ''}</dd>
+      <dt>Notas de crédito</dt><dd>${m.nc_n} · ${money(m.nc)}${m.fallidas ? ' · ' + m.fallidas + ' entregas fallidas' : ''}</dd>
+      <dt>Tendencia</dt><dd>${tend} · BEES ${Math.round(m.bees * 100)}%</dd>${sug}</dl>
+      ${r.ultimos.length ? `<table><thead><tr><th>Fecha</th><th>Doc</th><th>Neto</th><th>Origen</th></tr></thead><tbody>${r.ultimos.slice(0, 6).map(u => `<tr><td>${esc(u.fecha)}</td><td class="${u.nc ? 'bad' : ''}">${esc(u.doc)}</td><td>${money(u.neto)}</td><td>${esc(u.origen || '')}${u.rechazo ? ' · ' + esc(u.rechazo) : ''}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${r.articulos.length ? `<p class="note">Más comprado: ${r.articulos.slice(0, 5).map(a => esc(a.articulo) + ' (' + a.bultos + ')').join(', ')}</p>` : ''}`;
+  } catch (e) { if (el.isConnected) el.textContent = 'No se pudieron consultar las compras: ' + e.message; }
 }
 
 // ---------- controles ----------
@@ -138,15 +192,16 @@ function render() {
   if(S.D.clientes.some(c=>c.suc==='SIN ASIGNAR'))sucs.push('SIN ASIGNAR');
   seg($('sucSeg'), [['TODAS','Todas'], ...sucs.map(s => [s, s.charAt(0)+s.slice(1).toLowerCase()])], 'suc');
   seg($('daySeg'), [['TODOS','Semana'], ...DAYS.map(d => [d,DAYNAME[d]])], 'day');
+  seg($('verSeg'), [['dias','Días'], ['estado','Estado'], ['venta','Venta']], 'ver');
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length;
   $('sub').textContent = `${v.length} clientes en vista · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}${S.day!=='TODOS'?' · '+DAYNAME[S.day]:''}`;
 }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x===t));
-  ['loc','dia','pen','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== t.id); });
+  ['loc','dia','pen','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== t.id); });
 let qt; $('q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; render();
   const v = visible().filter(isGeo); if (S.q && v.length && v.length < 40) map.fitBounds(v.map(c => [c.lat,c.lng]), {padding:[50,50], maxZoom:15}); }, 200); });
 
@@ -155,9 +210,9 @@ async function load(keepCard) {
   const request=++loadRequest;
   try {
     const params=new URLSearchParams({activos:$('activeClients').value,dias_asignados:$('assignedDays').value});
-    const data=await api('/datos?'+params);
+    const [data, ventas] = await Promise.all([api('/datos?'+params), api('/ventas/comportamiento').catch(() => null)]);
     if(request!==loadRequest)return;
-    S.D=data;
+    S.D=data; S.V=ventas && ventas.comprobantes ? ventas : null;
     byId = new Map(S.D.clientes.map(c => [c.id, c]));
     
     render(); renderCard();
