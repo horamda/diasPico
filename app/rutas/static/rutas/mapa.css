@@ -131,3 +131,15 @@ textarea.nota{width:100%;min-height:52px;border:1px solid var(--line);border-rad
 
 .card{max-height:min(70vh,680px);overflow:auto}
 @media(max-width:420px){.vgrid{grid-template-columns:minmax(0,1fr)}.topnav{flex-wrap:wrap}}
+
+/* Estado de los importadores */
+.import-status{display:flex;gap:10px;align-items:flex-start;margin:14px 0;padding:10px 14px;border:1px solid var(--line);border-left:4px solid var(--muted);border-radius:8px;background:var(--panel);font-size:14px;white-space:pre-wrap}
+.import-status .ico{flex:none;display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;font:700 12px/1 var(--f-mono);color:#fff;background:var(--muted)}
+.import-status.busy{border-left-color:var(--accent)} .import-status.busy .ico{background:none}
+.import-status.ok{border-left-color:var(--ok);background:color-mix(in srgb,var(--ok) 9%,var(--panel))} .import-status.ok .ico{background:var(--ok)}
+.import-status.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 11%,var(--panel))} .import-status.warn .ico{background:var(--warn);color:#1a1200}
+.import-status.err{border-left-color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,var(--panel))} .import-status.err .ico{background:var(--bad)}
+.spinner{width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spinner{animation-duration:2.4s}}
+.toast.ok{background:var(--ok);color:#fff} .toast.warn{background:var(--warn);color:#1a1200}

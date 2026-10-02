@@ -121,3 +121,22 @@ def test_one_marks_exact_weekday(index,expected):
     cells=['']*6;cells[index]='1'
     row=leer_csv(content('123;'+';'.join(cells)+'\n'))[0]
     assert row['dias']==expected and not row['error']
+
+
+def test_large_file_confirms_in_blocks(app):
+    import time
+    from app.rutas.db import create_all
+    from app.rutas.maestro import actualizar_desde_maestro
+    rows = [dict(cliente=str(1000 + i), descripcion=f'Cliente {i}', localidad='DOLORES', sucursal='2', anulado='NO',
+                 coord_x='-57.68', coord_y='-36.31', fuerza_venta_1_dias_visita='MAR,VIE') for i in range(2500)]
+    csv = (HEADER + ''.join(f'{1000 + i};;1;;;1;\n' for i in range(2500))).encode()
+    with app.app_context():
+        create_all()
+        actualizar_desde_maestro('operador', (rows, {'2': 'DOLORES'}))
+        t0 = time.perf_counter()
+        result = preparar(csv, 'grande.csv', '1', actor='operador')
+        assert result['resumen']['asignar'] == 2500
+        assert confirmar(result['token'], '1')['resumen']['cambios'] == 2500
+        assert time.perf_counter() - t0 < 15
+        assert Session().query(ClienteEntrega).filter_by(dias='MAVI').count() == 2500
+        assert Session().query(CambioLog).count() == 2500

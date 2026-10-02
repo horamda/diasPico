@@ -140,11 +140,15 @@ def confirmar(token, usuario):
         if saved:
             return {'ok': True, 'ya_aplicada': True, 'resumen': json.loads(saved.resumen)}
         # Lock and re-read both client and delivery records before comparing the preview.
+        # In blocks so large files stay within database parameter limits.
         ids = sorted(r['id'] for r in payload['changes'])
-        clients = {c.id_cliente: c for c in s.query(Cliente).filter(Cliente.id_cliente.in_(ids))
-                   .order_by(Cliente.id_cliente).with_for_update(of=Cliente).populate_existing()}
-        deliveries = {e.id_cliente: e for e in s.query(ClienteEntrega).filter(ClienteEntrega.id_cliente.in_(ids))
-                      .order_by(ClienteEntrega.id_cliente).with_for_update().populate_existing()}
+        clients, deliveries = {}, {}
+        for i in range(0, len(ids), 1000):
+            part = ids[i:i + 1000]
+            clients.update((c.id_cliente, c) for c in s.query(Cliente).filter(Cliente.id_cliente.in_(part))
+                           .order_by(Cliente.id_cliente).with_for_update(of=Cliente).populate_existing())
+            deliveries.update((e.id_cliente, e) for e in s.query(ClienteEntrega).filter(ClienteEntrega.id_cliente.in_(part))
+                              .order_by(ClienteEntrega.id_cliente).with_for_update().populate_existing())
         for change in payload['changes']:
             c, e = clients.get(change['id']), deliveries.get(change['id'])
             if c is None or c.anulado or estado(e) != change['antes']:

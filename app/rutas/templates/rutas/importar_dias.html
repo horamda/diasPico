@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Importar días de entrega · Portal</title>
   <link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
-  <style>html,body{height:auto}.import-form{display:flex;flex-wrap:wrap;gap:16px;align-items:end}.import-form label{display:grid;gap:8px}.import-summary{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.import-table{overflow:auto;max-height:60vh}.import-table table{min-width:700px;width:100%}.import-table th{position:sticky;top:0;background:var(--panel)}#importStatus{white-space:pre-wrap}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}</style>
+  <style>html,body{height:auto}.import-form{display:flex;flex-wrap:wrap;gap:16px;align-items:end}.import-form label{display:grid;gap:8px}.import-summary{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}.import-table{overflow:auto;max-height:60vh}.import-table table{min-width:700px;width:100%}.import-table th{position:sticky;top:0;background:var(--panel)}.actions{display:flex;flex-wrap:wrap;gap:12px;margin:14px 0}</style>
 </head>
 <body>
 <header><h1>Importar días de entrega<small>Relacionar el CSV con los códigos de cliente</small></h1>
@@ -31,5 +31,6 @@
   </section>
 </main>
 <script>window.RUTAS_IMPORT = {maestro: {{ url_for('rutas_importaciones.actualizar_maestro') | tojson }}, preview: {{ url_for('rutas_importaciones.importar_dias_preview') | tojson }}, confirmar: {{ url_for('rutas_importaciones.importar_dias_confirmar') | tojson }}};</script>
+<script src="{{ url_for('rutas.static', filename='rutas/importar_ui.js') }}"></script>
 <script src="{{ url_for('rutas.static', filename='rutas/importar_dias.js') }}"></script>
 </body></html>
