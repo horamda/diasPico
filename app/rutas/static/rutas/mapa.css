@@ -353,3 +353,27 @@ input[type=search]{width:180px;min-height:30px}
 .rec-matriz tbody tr{cursor:default}
 .rec-matriz tfoot td{font-weight:700;background:var(--bg);text-align:center}
 .rec-matriz tfoot td:first-child{text-align:left}
+
+/* --- Tablas legibles en el panel y panel de ancho ajustable --- */
+/* El panel es una columna flexible: sin esto las tablas se encogían a lo alto con scroll interno. */
+.pane>*{flex-shrink:0}
+@media (min-width:821px){
+  .main{grid-template-columns:var(--panel-w,360px) minmax(0,1fr)}
+  .main.sin-panel{grid-template-columns:minmax(0,1fr)}
+  .main.ancho{grid-template-columns:minmax(0,1fr) 0}
+}
+@media (min-width:821px) and (max-width:1100px){.main{grid-template-columns:var(--panel-w,320px) minmax(0,1fr)}}
+aside{position:relative}
+.resizer{position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;z-index:20;touch-action:none}
+.resizer::after{content:"";position:absolute;top:50%;right:1px;width:3px;height:36px;margin-top:-18px;border-radius:2px;background:var(--line)}
+.resizer:hover::after,.resizer.drag::after,.resizer:focus-visible::after{background:var(--accent);height:64px;margin-top:-32px}
+.resizer:focus-visible{outline:none}
+.main.ancho .resizer{display:none}
+@media (max-width:820px){.resizer{display:none}}
+.pane table{font-size:12px}
+.pane th,.pane td{padding:4px 5px}
+.pane .tw{overflow-x:auto;overflow-y:visible;border:1px solid var(--line);border-radius:6px}
+.pane .tw th:first-child,.pane .tw td:first-child{position:sticky;left:0;z-index:1;background:var(--panel);max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.pane .tw thead th:first-child{z-index:2}
+.pane .tw tr.suc td:first-child{background:var(--bg);max-width:none}
+.pane .tw tbody tr:hover td:first-child{background:var(--chip)}

@@ -21,7 +21,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true, comp:false, cdias:[], compStats:[]};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true, panelW:0, comp:false, cdias:[], compStats:[]};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
 const venta = c => S.V && S.V.clientes[c.id];
@@ -39,10 +39,11 @@ try {
   if (typeof p.ctx === 'boolean') S.ctx = p.ctx;
   if ([30, 60, 90].includes(p.periodo)) S.periodo = p.periodo;
   if (typeof p.panel === 'boolean') S.panel = p.panel;
+  if (Number.isFinite(p.panelW)) S.panelW = p.panelW;
   if (typeof p.comp === 'boolean') S.comp = p.comp;
   if (Array.isArray(p.cdias)) S.cdias = DAYS.filter(d => p.cdias.includes(d));
 } catch {}
-function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo, panel:S.panel, comp:S.comp, cdias:S.cdias})); } catch {} }
+function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo, panel:S.panel, panelW:S.panelW, comp:S.comp, cdias:S.cdias})); } catch {} }
 
 let byId = new Map();
 let mapPositioned = false;
@@ -327,6 +328,31 @@ function setPanel(v, init) {
   if (!init) { savePrefs(); setTimeout(() => map.invalidateSize({pan:false}), 60); }
 }
 setPanel(S.panel, true);
+const PANEL_MIN = 300;
+const panelMax = () => Math.max(PANEL_MIN, Math.min(960, innerWidth * .7));
+function setAncho(w, guardar) {
+  S.panelW = w ? Math.round(Math.min(panelMax(), Math.max(PANEL_MIN, w))) : 0;
+  if (S.panelW) $('main').style.setProperty('--panel-w', S.panelW + 'px'); else $('main').style.removeProperty('--panel-w');
+  $('resizer').setAttribute('aria-valuenow', S.panelW || $('aside').offsetWidth);
+  if (guardar) { savePrefs(); map.invalidateSize({pan:false}); }
+}
+setAncho(S.panelW);
+(() => {
+  const r = $('resizer');
+  r.addEventListener('pointerdown', e => {
+    e.preventDefault(); r.setPointerCapture(e.pointerId); r.classList.add('drag');
+    const x0 = $('aside').getBoundingClientRect().left;
+    const mover = ev => setAncho(ev.clientX - x0);
+    const soltar = () => { r.classList.remove('drag'); r.removeEventListener('pointermove', mover); setAncho(S.panelW, true); };
+    r.addEventListener('pointermove', mover);
+    r.addEventListener('pointerup', soltar, {once:true});
+  });
+  r.addEventListener('dblclick', () => setAncho(0, true));
+  r.addEventListener('keydown', e => {
+    const paso = e.key === 'ArrowRight' ? 40 : e.key === 'ArrowLeft' ? -40 : 0;
+    if (paso) { e.preventDefault(); setAncho((S.panelW || $('aside').offsetWidth) + paso, true); }
+  });
+})();
 function renderTools(){
   const el = tools.getContainer(), dia = conDia();
   for (const k of ['zonas','ctx']) { const b = el.querySelector(`[data-t="${k}"]`); b.setAttribute('aria-pressed', S[k]); b.disabled = !dia; }
@@ -405,8 +431,8 @@ function tablaComparar() {
   const filas = S.compStats.filter(r => r.unicos);
   return `<div><h2>Superposición · ${S.cdias.map(d => DAYSHORT[d]).join(' + ')}</h2>
     <p class="note">Clientes con un solo día de los comparados que quedan dentro de la zona de otro día de su misma localidad. Quienes tienen varios de estos días no cuentan.</p></div>
-    ${filas.length ? `<div class="tw"><table><thead><tr><th>Localidad</th>${S.cdias.map(d => `<th><i class="sw" style="background:${DAY_COL[d]}"></i>${d}</th>`).join('')}<th title="Clientes de un día dentro de la zona de otro">En zona ajena</th><th>%</th></tr></thead><tbody>
-    ${filas.map(r => `<tr data-loc="${esc(r.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${S.cdias.map(d => `<td class="${r.n[d]?'':'z'}">${r.n[d]||'·'}</td>`).join('')}<td>${r.ajenos} de ${r.unicos}</td><td class="${r.pct>=40?'bad':r.pct>=15?'warn':''}">${r.pct}%</td></tr>`).join('')}</tbody></table></div>`
+    ${filas.length ? `<div class="tw"><table><thead><tr><th>Localidad</th>${S.cdias.map(d => `<th><i class="sw" style="background:${DAY_COL[d]}"></i>${d}</th>`).join('')}<th title="Clientes de un solo día que quedan dentro de la zona de otro día">Ajenos</th><th>%</th></tr></thead><tbody>
+    ${filas.map(r => `<tr data-loc="${esc(r.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${S.cdias.map(d => `<td class="${r.n[d]?'':'z'}">${r.n[d]||'·'}</td>`).join('')}<td title="${r.ajenos} de ${r.unicos} clientes de un solo día">${r.ajenos}/${r.unicos}</td><td class="${r.pct>=40?'bad':r.pct>=15?'warn':''}">${r.pct}%</td></tr>`).join('')}</tbody></table></div>`
     : '<p class="empty">No hay localidades con clientes de estos días.</p>'}`;
 }
 function renderDia() {
