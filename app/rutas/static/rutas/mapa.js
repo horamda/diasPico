@@ -103,6 +103,44 @@ map.createPane('zonas').style.zIndex = 350;
 const zonaLayer = L.layerGroup().addTo(map);
 const ctxLayer = L.layerGroup().addTo(map);
 const ptLayer = L.layerGroup().addTo(map);
+
+// Alfiler: cabeza redonda de color sobre una aguja cuya punta marca la ubicación exacta.
+// Se dibuja en el mismo canvas que los círculos, así miles de clientes siguen siendo livianos.
+const PIN_ZOOM = 11;            // desde la vista de ciudad; más lejos, puntos chicos
+const PIN_ALTO = 2.4;           // alto de la aguja, en radios de la cabeza
+const Pin = L.CircleMarker.extend({
+  _cabeza() { return L.point(this._point.x, this._point.y - this._radius * PIN_ALTO); },
+  _updateBounds() {
+    const r = this._radius, w = this._clickTolerance(), p = this._point;
+    this._pxBounds = new L.Bounds([p.x - r - w, p.y - r * PIN_ALTO - r - w], [p.x + r + w, p.y + w]);
+  },
+  _containsPoint(pt) {
+    const c = this._cabeza(), w = this._clickTolerance();
+    return pt.distanceTo(c) <= this._radius + w || (Math.abs(pt.x - c.x) <= 3 + w && pt.y >= c.y && pt.y <= this._point.y + w);
+  },
+  _updatePath() {
+    const r = this._renderer;
+    if (!(r instanceof L.Canvas)) return r._updateCircle(this);   // SVG: se ve como círculo
+    if (!r._drawing || this._empty()) return;
+    const ctx = r._ctx, p = this._point, hr = Math.max(this._radius, 2), c = this._cabeza();
+    ctx.save();
+    // sombra en el piso y aguja
+    ctx.globalAlpha = .25; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(p.x + 1.5, p.y, hr * .55, hr * .22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = this.options.fillOpacity < .6 ? .5 : .9; ctx.strokeStyle = '#3f464c';
+    ctx.lineWidth = Math.max(1.3, hr / 3.6); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    ctx.restore();
+    // cabeza
+    ctx.beginPath(); ctx.arc(c.x, c.y, hr, 0, Math.PI * 2, false);
+    r._fillStroke(ctx, this);
+    // brillo
+    ctx.save(); ctx.globalAlpha = this.options.fillOpacity * .6; ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(c.x - hr * .35, c.y - hr * .35, hr * .3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  },
+});
+let modoPin = false;
 const tagLayer = L.layerGroup().addTo(map);
 
 const loading = document.createElement('div');
@@ -112,6 +150,7 @@ $('map').appendChild(loading);
 const compActivo = () => S.comp && S.cdias.length > 0;
 const diasDe = c => S.cdias.filter(d => c.d.includes(d));   // días comparados que tiene el cliente
 const conDia = () => S.day !== 'TODOS' || compActivo();
+map.on('zoomend', () => { if (S.D && (map.getZoom() >= PIN_ZOOM) !== modoPin) drawPoints(visible()); });
 function visible(){
   const extra = c => (!S.flt || FLT[S.flt](c)) && (!compActivo() || diasDe(c).length > 0);
   return RutasVista.filtrar(S.D.clientes, compActivo() ? {...S, day:'TODOS'} : S, extra);
@@ -146,15 +185,19 @@ function drawPoints(list) {
       ctxLayer.addLayer(L.circleMarker([c.lat,c.lng], {radius:3, weight:0, fillColor:'#7a817c', fillOpacity:.28, interactive:false}));
     });
   }
-  list.forEach(c => {
+  modoPin = map.getZoom() >= PIN_ZOOM;
+  // Los alfileres del sur se dibujan encima de los del norte, como se apoyan sobre un plano.
+  (modoPin ? [...list].sort((a, b) => (b.lat ?? 0) - (a.lat ?? 0) || (S.sel === a.id) - (S.sel === b.id)) : list).forEach(c => {
     if (!isGeo(c)) return;
     const sd = sinDias(c), sel = S.sel === c.id;
     const borde = sel ? tok('--ink') : c.far ? tok('--warn') : (S.ver === 'loc' && sd && !c.an) ? tok('--bad') : 'rgba(0,0,0,.45)';
-    const rad = S.ver === 'vol' && S.V ? 3.5 + 1.6 * Math.max(0, volNivel(c)) : (sd?6:5);
-    const m = L.circleMarker([c.lat,c.lng], {radius: sel?9:rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
+    const rad = S.ver === 'vol' && S.V ? 3.5 + 1.6 * Math.max(0, volNivel(c)) : modoPin ? (sd?7:6.5) : (sd?6:5);
+    const Marca = modoPin ? Pin : L.CircleMarker;
+    const m = new Marca([c.lat,c.lng], {radius: sel?(modoPin?10:9):rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
       color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
     const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.compras)} compras · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
-    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`);
+    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`,
+      modoPin ? {direction:'top', offset:[0, -(sel?10:rad) * (PIN_ALTO + 1)]} : {});
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
   });
