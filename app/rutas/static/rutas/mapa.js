@@ -743,7 +743,12 @@ function ponerRef(r) {
   render(); renderCard(); elegirTab('t-cer');
   setTimeout(() => { map.invalidateSize({pan:false}); encuadrarRef(); }, 80);
 }
-function quitarRef(silencioso) { if (!S.ref) return; S.ref = null; if (!silencioso) render(); }
+function quitarRef(silencioso) {
+  if (!S.ref) return;
+  if (S.ref.id && S.sel === S.ref.id) { S.sel = null; renderCard(); }
+  S.ref = null;
+  if (!silencioso) { $('q').value = ''; render(); }
+}
 function renderCer() {
   const tab = $('t-cer'), el = $('p-cer');
   tab.hidden = !S.ref;
@@ -861,8 +866,11 @@ function elegirOpcion(o) {
 }
 qIn.addEventListener('input', () => {
   if (qIn.value.trim()) return abrirDrop(opcionesBusqueda(qIn.value));
+  // Buscador vacío: vuelve a la vista normal (sin filtro, sin punto de referencia ni ficha).
   cerrarDrop();
-  if (S.q) { S.q = ''; if (S.D) render(); }
+  if (!S.q && !S.ref) return;
+  S.q = ''; S.ref = null; S.sel = null; renderCard();
+  if (S.D) render();
 });
 qIn.addEventListener('keydown', e => {
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
