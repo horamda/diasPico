@@ -23,7 +23,11 @@
       <button type="button" class="btn btn-comp" id="compBtn" aria-pressed="false" title="Elegir varios días y ver si sus zonas se superponen en cada localidad (también Ctrl+clic en un día)">Comparar</button>
     </div>
     <div class="seg" id="verSeg" role="group" aria-label="Color de los puntos"></div>
-    <input type="search" id="q" placeholder="Buscar cliente   /" aria-label="Buscar cliente, número o calle" autocomplete="off">
+    <div class="buscar">
+      <input type="search" id="q" placeholder="Cliente o dirección   /" aria-label="Buscar cliente o dirección (calle altura, localidad)" autocomplete="off"
+             role="combobox" aria-expanded="false" aria-controls="qDrop" aria-autocomplete="list">
+      <div class="qdrop" id="qDrop" role="listbox" aria-label="Resultados de la búsqueda" hidden></div>
+    </div>
     <details class="more">
       <summary class="btn" aria-label="Menú y filtros" title="Menú y filtros">☰</summary>
       <div class="more-body">
@@ -47,6 +51,7 @@
     <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Ancho del panel" aria-valuemin="300" tabindex="0"
          title="Arrastrá para cambiar el ancho del panel · doble clic: ancho original"></div>
     <div class="tabs" role="tablist">
+      <button class="tab" role="tab" id="t-cer" aria-selected="false" title="Clientes cerca del punto buscado y sus días de entrega" hidden>Cerca</button>
       <button class="tab" role="tab" id="t-loc" aria-selected="true">Localidades</button>
       <button class="tab" role="tab" id="t-dia" aria-selected="false">Clientes</button>
       <button class="tab" role="tab" id="t-pen" aria-selected="false">Pendientes<span class="n" id="penN"></span></button>
@@ -54,6 +59,7 @@
       <button class="tab" role="tab" id="t-ven" aria-selected="false">Ventas</button>
       <button class="tab" role="tab" id="t-exp" aria-selected="false" title="Ayuda">?</button>
     </div>
+    <div class="pane" id="p-cer" hidden></div>
     <div class="pane" id="p-loc"></div>
     <div class="pane" id="p-dia" hidden></div>
     <div class="pane" id="p-pen" hidden></div>

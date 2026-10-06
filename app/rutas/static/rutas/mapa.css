@@ -377,3 +377,52 @@ aside{position:relative}
 .pane .tw thead th:first-child{z-index:2}
 .pane .tw tr.suc td:first-child{background:var(--bg);max-width:none}
 .pane .tw tbody tr:hover td:first-child{background:var(--chip)}
+
+/* --- Buscador de clientes y direcciones --- */
+.buscar{position:relative;display:flex}
+.qdrop{position:absolute;right:0;top:calc(100% + 6px);z-index:1200;width:min(440px,calc(100vw - 32px));max-height:min(60vh,460px);overflow:auto;padding:4px;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18)}
+.qdrop[hidden]{display:none}
+.qopt{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;padding:7px 8px;border:0;border-radius:6px;background:none;text-align:left;cursor:pointer}
+.qopt[aria-selected="true"]{background:var(--chip)}
+.qopt .id{font:600 12px var(--f-mono);color:var(--muted)}
+.qopt .ico{width:22px;text-align:center;font-size:16px;color:var(--accent)}
+.qopt .nm{min-width:0;font-weight:500;overflow:hidden;text-overflow:ellipsis}
+.qopt .nm em{font-style:normal;color:var(--muted)}
+.qopt small{display:block;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qopt+.qopt{margin-top:1px}
+@media (max-width:820px){.buscar{flex:1 1 140px}.buscar input[type=search]{width:100%}.qdrop{right:auto;left:0}}
+
+/* Días como chips de color (mismos colores que Comparar) */
+.dlbl{display:inline-flex;gap:2px;vertical-align:middle}
+.dlbl i{font:700 10px/1 var(--f-display);font-style:normal;letter-spacing:.04em;color:#fff;border-radius:3px;padding:2px 3px}
+.dlbl i.sd{background:var(--bad)}
+.dlbl-wrap{background:none;border:0}
+.dlbl-wrap .dlbl{position:absolute;transform:translate(-50%,4px);padding:1px;border-radius:4px;background:var(--panel);box-shadow:0 1px 4px rgba(0,0,0,.3);white-space:nowrap;pointer-events:none}
+.item .sub .dlbl{margin-right:6px}
+
+/* Marcador del punto de referencia */
+.ref-wrap{background:none;border:0}
+.ref-wrap svg{display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4))}
+.ref-pulso{position:absolute;left:15px;top:41px;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;border:3px solid var(--accent);animation:refPulso 1.8s ease-out infinite;pointer-events:none}
+@keyframes refPulso{from{transform:scale(.5);opacity:.9}to{transform:scale(3.2);opacity:0}}
+@media (prefers-reduced-motion:reduce){.ref-pulso{animation:none;opacity:.5;transform:scale(1.6)}}
+
+/* Solapa Cerca */
+#t-cer{color:var(--accent)}
+.cer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.cer-head>div{display:grid;gap:3px;min-width:0}
+.cer-head b{font:700 18px/1.15 var(--f-display);overflow-wrap:anywhere}
+.cer-head small{font-size:11.5px;color:var(--muted);overflow-wrap:anywhere}
+.cer-propio{margin:0;display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)}
+.cer-propio .dlbl i{font-size:12px;padding:3px 5px}
+.cer-aviso{margin:0;padding:8px 10px;border-radius:8px;border:1px solid var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent);font-size:12.5px}
+.cer-radio{display:flex;align-items:center;gap:8px}
+.cer-radio>span{font:600 11px var(--f-display);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cer-dias{display:flex;gap:6px;align-items:flex-end;height:84px}
+.cer-dias .cd{flex:1;display:grid;grid-template-rows:1fr auto auto;justify-items:center;height:100%;min-width:0}
+.cer-dias .cd i{align-self:end;width:72%;border-radius:4px 4px 0 0}
+.cer-dias .cd b{font:600 12px var(--f-mono)}
+.cer-dias .cd span{font:700 11px var(--f-display);letter-spacing:.05em;color:var(--muted)}
+.cer-dias .cd.z b{color:var(--line)}
+.cer-otras{display:grid;gap:6px}
+.cer-otras .btn{text-align:left;font-size:12px;white-space:normal}

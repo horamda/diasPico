@@ -13,6 +13,7 @@ let VOL_Q = [];
 const volNivel = c => { const v = venta(c); if (!v || !v.bultos) return -1; let i = 0; while (i < VOL_Q.length && v.bultos_sem > VOL_Q[i]) i++; return i; };
 const num = (n, d = 0) => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: d});
 const PERIODOS = [30, 60, 90];
+const RADIOS = [300, 500, 1000, 2000];   // metros alrededor del punto buscado
 // Comparar días: un color por día de entrega.
 const DAY_COL = {LU:'#2563eb', MA:'#16a34a', MI:'#9333ea', JU:'#ea580c', VI:'#0891b2', SA:'#db2777'};
 const VARIOS_COL = '#374151';
@@ -21,7 +22,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 
-const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true, panelW:0, comp:false, cdias:[], compStats:[]};
+const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true, panelW:0, comp:false, cdias:[], compStats:[], ref:null, radio:500};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
 const venta = c => S.V && S.V.clientes[c.id];
@@ -42,8 +43,9 @@ try {
   if (Number.isFinite(p.panelW)) S.panelW = p.panelW;
   if (typeof p.comp === 'boolean') S.comp = p.comp;
   if (Array.isArray(p.cdias)) S.cdias = DAYS.filter(d => p.cdias.includes(d));
+  if (RADIOS.includes(p.radio)) S.radio = p.radio;
 } catch {}
-function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo, panel:S.panel, panelW:S.panelW, comp:S.comp, cdias:S.cdias})); } catch {} }
+function savePrefs(){ try { localStorage.setItem(PREF, JSON.stringify({suc:S.suc, day:S.day, ver:S.ver, zonas:S.zonas, ctx:S.ctx, periodo:S.periodo, panel:S.panel, panelW:S.panelW, comp:S.comp, cdias:S.cdias, radio:S.radio})); } catch {} }
 
 let byId = new Map();
 let mapPositioned = false;
@@ -143,6 +145,7 @@ const Pin = L.CircleMarker.extend({
 });
 let modoPin = false;
 const tagLayer = L.layerGroup().addTo(map);
+const refLayer = L.layerGroup().addTo(map);
 
 const loading = document.createElement('div');
 loading.className = 'map-loading'; loading.innerHTML = '<span class="spinner"></span>Cargando clientes…';
@@ -151,7 +154,7 @@ $('map').appendChild(loading);
 const compActivo = () => S.comp && S.cdias.length > 0;
 const diasDe = c => S.cdias.filter(d => c.d.includes(d));   // días comparados que tiene el cliente
 const conDia = () => S.day !== 'TODOS' || compActivo();
-map.on('zoomend', () => { if (S.D && (map.getZoom() >= PIN_ZOOM) !== modoPin) drawPoints(visible()); });
+map.on('zoomend', () => { if (S.D && (map.getZoom() >= PIN_ZOOM) !== modoPin) drawPoints(visible()); else drawRef(); });
 function visible(){
   const extra = c => (!S.flt || FLT[S.flt](c)) && (!compActivo() || diasDe(c).length > 0);
   return RutasVista.filtrar(S.D.clientes, compActivo() ? {...S, day:'TODOS'} : S, extra);
@@ -203,6 +206,7 @@ function drawPoints(list) {
     ptLayer.addLayer(m);
   });
   drawZonas(list);
+  drawRef();
 }
 
 // Envolvente convexa (monotone chain) de [lat,lng], ampliada `pad` grados (~400 m) para que los puntos queden adentro.
@@ -444,7 +448,7 @@ function renderDia() {
   bindItems($('p-dia'));
 }
 function itemHTML(c, tag) { return `<div class="item" data-id="${c.id}" tabindex="0"><span class="id">${c.id}</span><span class="nm">${esc(c.n)}</span>${tag}<span class="sub"><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${esc(c.dom)||'sin domicilio'}${c.ven?' · '+esc(c.ven):''}</span></div>`; }
-function bindItems(el) { el.querySelectorAll('.item').forEach(x => { x.onclick = () => select(+x.dataset.id, true);
+function bindItems(el) { el.querySelectorAll('.item[data-id]').forEach(x => { x.onclick = () => select(+x.dataset.id, true);
   x.onkeydown = e => { if (e.key === 'Enter') select(+x.dataset.id, true); }; }); }
 function renderPen() {
   const sc = scope(), sd = sc.filter(sinDias), sg = sc.filter(FLT.singeo), fr = sc.filter(FLT.far), an = sc.filter(FLT.anulado);
@@ -461,7 +465,7 @@ function renderExp(){
   $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p>
    <p class="note">Al elegir un día, cada localidad con entregas se sombrea con su color y muestra cuántos clientes tiene. Tocá la etiqueta para acercarte.</p>
    <p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p>
-   <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd><dt><kbd>P</kbd></dt><dd>Ocultar o mostrar este panel</dd><dt><kbd>Ctrl</kbd>+clic</dt><dd>Sumar un día para comparar zonas</dd></dl>
+   <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente o dirección</dd><dt>Clic derecho</dt><dd>Ver qué días tienen los clientes cercanos a ese punto</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd><dt><kbd>P</kbd></dt><dd>Ocultar o mostrar este panel</dd><dt><kbd>Ctrl</kbd>+clic</dt><dd>Sumar un día para comparar zonas</dd></dl>
    <p class="status">${S.D.ultima_sync?'Última actualización: '+esc(S.D.ultima_sync.origen)+' · '+esc((S.D.ultima_sync.fin||'').replace('T',' ').slice(0,16)):'Sin actualización registrada.'}</p>`;
 }
 function renderVen() {
@@ -687,21 +691,191 @@ function render() {
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderLegend(v); renderTools();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderCer(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 function elegirTab(id) {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
-  ['loc','dia','pen','rec','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  ['cer','loc','dia','pen','rec','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
   const ancho = id === 't-rec', antes = $('main').classList.contains('ancho');
   $('main').classList.toggle('ancho', ancho);
   if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
 }
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => elegirTab(t.id));
-let qt; $('q').addEventListener('input', e => { clearTimeout(qt); qt = setTimeout(() => { S.q = e.target.value; if(!S.D)return; render();
-  const v = visible().filter(isGeo); if (S.q && v.length && v.length < 40) map.fitBounds(v.map(c => [c.lat,c.lng]), {padding:[50,50], maxZoom:15}); }, 200); });
+// ---------- punto de referencia: clientes cercanos a un cliente, una dirección o un punto del mapa ----------
+const diasChips = d => d ? DAYS.filter(x => d.includes(x)).map(x => `<i style="background:${DAY_COL[x]}">${x}</i>`).join('') : '<i class="sd">sin días</i>';
+const metros = m => m < 1000 ? `${Math.round(m / 10) * 10} m` : `${num(m / 1000, 1)} km`;
+// Clientes activos y bien ubicados dentro del radio, sin importar sucursal, día ni filtros.
+function cercanos() {
+  if (!S.ref || !S.D) return [];
+  const p = L.latLng(S.ref.lat, S.ref.lng);
+  return S.D.clientes.filter(c => isGeo(c) && !c.far && !c.an && c.id !== S.ref.id)
+    .map(c => ({c, m:p.distanceTo([c.lat, c.lng])})).filter(x => x.m <= S.radio).sort((a, b) => a.m - b.m);
+}
+const PIN_SVG = col => `<svg width="30" height="42" viewBox="0 0 30 42" aria-hidden="true"><path d="M15 40.5S2.5 24.6 2.5 15a12.5 12.5 0 0 1 25 0c0 9.6-12.5 25.5-12.5 25.5z" fill="${col}" stroke="#fff" stroke-width="2.5"/><circle cx="15" cy="15" r="5" fill="#fff"/></svg>`;
+function drawRef() {
+  refLayer.clearLayers();
+  if (!S.ref || !S.D) return;
+  const ll = [S.ref.lat, S.ref.lng];
+  refLayer.addLayer(L.circle(ll, {pane:'zonas', radius:S.radio, color:tok('--ink'), weight:1.5, opacity:.8, dashArray:'3 6', fillColor:tok('--ink'), fillOpacity:.04, interactive:false}));
+  // Con zoom de barrio, cada cliente cercano muestra sus días debajo del alfiler.
+  if (map.getZoom() >= 14) {
+    const cs = cercanos().slice(0, 150).map(x => x.c), rc = S.ref.id && byId.get(S.ref.id);
+    if (rc && isGeo(rc)) cs.push(rc);
+    cs.forEach(c => refLayer.addLayer(L.marker([c.lat, c.lng], {interactive:false, keyboard:false,
+      icon:L.divIcon({className:'dlbl-wrap', iconSize:null, html:`<span class="dlbl">${diasChips(c.d)}</span>`})})));
+  }
+  const fijo = S.ref.tipo === 'cliente';
+  const m = L.marker(ll, {draggable:!fijo, keyboard:false, zIndexOffset:1000, title:fijo ? S.ref.label : 'Arrastrá para ajustar la ubicación',
+    icon:L.divIcon({className:'ref-wrap', iconSize:[30, 42], iconAnchor:[15, 41], html:`<span class="ref-pulso"></span>${PIN_SVG(fijo ? tok('--accent') : tok('--bad'))}`})});
+  m.on('dragend', () => { const p = m.getLatLng(); S.ref = {...S.ref, lat:p.lat, lng:p.lng, exacta:true, ajustada:true}; render(); });
+  refLayer.addLayer(m);
+}
+function encuadrarRef() {
+  if (S.ref) map.flyToBounds(L.latLng(S.ref.lat, S.ref.lng).toBounds(S.radio * 2.2), {padding:[30, 30], maxZoom:17, duration:.6});
+}
+function ponerRef(r) {
+  S.ref = r; S.flt = null;
+  if (r.id) S.sel = r.id;
+  if (!S.panel) setPanel(true);
+  render(); renderCard(); elegirTab('t-cer');
+  setTimeout(() => { map.invalidateSize({pan:false}); encuadrarRef(); }, 80);
+}
+function quitarRef(silencioso) { if (!S.ref) return; S.ref = null; if (!silencioso) render(); }
+function renderCer() {
+  const tab = $('t-cer'), el = $('p-cer');
+  tab.hidden = !S.ref;
+  if (!S.ref) { el.innerHTML = ''; if (tab.getAttribute('aria-selected') === 'true') elegirTab('t-loc'); return; }
+  const r = S.ref, cs = cercanos(), n = cs.length, rc = r.id && byId.get(r.id);
+  const porDia = DAYS.map(d => [d, cs.filter(x => x.c.d.includes(d)).length]), max = Math.max(1, ...porDia.map(x => x[1]));
+  const top = [...porDia].sort((a, b) => b[1] - a[1])[0];
+  const combos = new Map(); cs.forEach(({c}) => combos.set(c.d || '', (combos.get(c.d || '') || 0) + 1));
+  el.innerHTML = `
+    <div class="cer-head"><div><h2>${{cliente:'Cerca del cliente', dir:'Cerca de la dirección', punto:'Cerca del punto marcado'}[r.tipo]}</h2>
+      <b>${esc(r.label)}</b>${r.sub ? `<small>${esc(r.sub)}</small>` : ''}</div>
+      <button class="btn" id="cerX" type="button" title="Quitar el punto de referencia (Esc)">Quitar</button></div>
+    ${rc ? `<p class="cer-propio">Días del cliente <span class="dlbl">${diasChips(rc.d)}</span></p>` : ''}
+    ${r.tipo === 'dir' && !r.exacta ? '<p class="cer-aviso">El mapa no tiene esa altura exacta: el marcador quedó sobre la calle o la localidad. Arrastralo hasta el lugar correcto.</p>'
+      : r.tipo !== 'cliente' && !r.ajustada ? '<p class="note">Si la ubicación no es exacta, arrastrá el marcador rojo.</p>' : ''}
+    <div class="cer-radio"><span>Radio</span><div class="seg seg-sm" role="group" aria-label="Radio alrededor del punto">${RADIOS.map(m => `<button type="button" data-r="${m}" aria-pressed="${m === S.radio}">${metros(m)}</button>`).join('')}</div></div>
+    <h2>${n} clientes activos a menos de ${metros(S.radio)}</h2>
+    ${n ? `<div class="cer-dias">${porDia.map(([d, k]) => `<div class="cd${k ? '' : ' z'}" title="${DAYNAME[d]}: ${k} de ${n} clientes cercanos"><i style="height:${k ? Math.max(k / max * 100, 6) : 0}%;background:${DAY_COL[d]}"></i><b>${k || '·'}</b><span>${d}</span></div>`).join('')}</div>
+      <p class="note">${top[1] ? `El día con más clientes en la zona es el <b>${DAYNAME[top[0]].toLowerCase()}</b> (${top[1]} de ${n}). ` : ''}Combinaciones: ${[...combos].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k || 'sin días'} <b>${v}</b>`).join(' · ')}</p>
+      <div class="list">${cs.map(({c, m}) => `<div class="item" data-id="${c.id}" tabindex="0"><span class="id">${c.id}</span><span class="nm">${esc(c.n)}</span><span class="pill">${metros(m)}</span><span class="sub"><span class="dlbl">${diasChips(c.d)}</span>${esc(c.dom) || 'sin domicilio'} · ${esc(c.loc)} · sale de ${esc(c.suc)}</span></div>`).join('')}</div>`
+    : `<p class="empty">No hay clientes activos geolocalizados a menos de ${metros(S.radio)}. Probá un radio mayor.</p>`}
+    ${r.otras?.length ? `<div class="cer-otras"><h2>¿No era acá? Otras coincidencias</h2>${r.otras.map((o, i) => `<button type="button" class="btn" data-o="${i}">${esc(o.nombre)}</button>`).join('')}</div>` : ''}`;
+  $('cerX').onclick = () => quitarRef();
+  el.querySelectorAll('[data-r]').forEach(b => b.onclick = () => { S.radio = +b.dataset.r; savePrefs(); render(); encuadrarRef(); });
+  el.querySelectorAll('[data-o]').forEach(b => b.onclick = () => {
+    const o = r.otras[+b.dataset.o], otras = r.otras.filter(x => x !== o).concat({lat:r.lat, lng:r.lng, nombre:r.sub, exacta:r.exacta});
+    ponerRef({...r, lat:o.lat, lng:o.lng, sub:o.nombre, exacta:o.exacta, ajustada:false, otras});
+  });
+  bindItems(el);
+}
+map.on('contextmenu', e => {
+  if (!S.D) return;
+  ponerRef({tipo:'punto', lat:e.latlng.lat, lng:e.latlng.lng, label:'Punto marcado en el mapa', sub:`${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`, exacta:true});
+});
+
+// Direcciones: OpenStreetMap (Nominatim), primero dentro de la zona donde hay clientes.
+function normalizarDireccion(t) {
+  if (t.includes(',')) return t;
+  // "Rivadavia 450 Dolores" -> "Rivadavia 450, Dolores" si termina en una localidad conocida.
+  const T = t.toUpperCase(), locs = [...new Set(S.D.clientes.map(c => c.loc).filter(Boolean))].sort((a, b) => b.length - a.length);
+  const l = locs.find(x => T.endsWith(' ' + x.toUpperCase()));
+  return l ? `${t.slice(0, t.length - l.length).trim()}, ${l}` : t;
+}
+async function nominatim(q, caja) {
+  const p = new URLSearchParams({format:'jsonv2', q, countrycodes:'ar', limit:'5', 'accept-language':'es'});
+  if (caja) { p.set('viewbox', [caja.getWest(), caja.getNorth(), caja.getEast(), caja.getSouth()].join(',')); p.set('bounded', '1'); }
+  const r = await fetch('https://nominatim.openstreetmap.org/search?' + p);
+  if (!r.ok) throw new Error('el servicio de mapas respondió ' + r.status);
+  return r.json();
+}
+async function ubicarDireccion(txt, cliente) {
+  const q = normalizarDireccion(txt.trim()), pts = S.D.clientes.filter(c => isGeo(c) && !c.far);
+  const caja = pts.length ? L.latLngBounds(pts.map(c => [c.lat, c.lng])).pad(.15) : null;
+  toast(`Buscando «${q}»…`);
+  let res;
+  try {
+    res = caja ? await nominatim(q, caja) : [];
+    if (!res.length) res = await nominatim(q + ', Buenos Aires');
+  } catch (e) { toast('No se pudo buscar la dirección: ' + e.message, true); return; }
+  if (!res.length) { toast(`No se encontró «${q}». Probá «Calle 123, Localidad» o hacé clic derecho en el mapa sobre el lugar.`, true); return; }
+  const exacta = x => ['house', 'building'].includes(x.addresstype) || x.type === 'house';
+  const [r, ...otras] = res;
+  ponerRef({tipo:'dir', id:cliente?.id, lat:+r.lat, lng:+r.lon, label:cliente ? `#${cliente.id} ${cliente.n}` : q, sub:r.display_name, exacta:exacta(r),
+    otras:otras.map(o => ({lat:+o.lat, lng:+o.lon, nombre:o.display_name, exacta:exacta(o)}))});
+}
+
+// ---------- buscador ----------
+const qIn = $('q'), qDrop = $('qDrop');
+let qOpts = [], qIdx = 0;
+function opcionesBusqueda(txt) {
+  const t = txt.trim();
+  if (!t || !S.D) return [];
+  const peso = c => String(c.id) === t ? 0 : String(c.id).startsWith(t) ? 1 : 2;
+  const hits = RutasVista.filtrar(S.D.clientes, {q:t}).sort((a, b) => peso(a) - peso(b) || !!a.an - !!b.an || String(a.n ?? '').localeCompare(String(b.n ?? '')));
+  const ops = hits.slice(0, 8).map(c => ({k:'cli', c}));
+  if (!/^\d+$/.test(t) && t.length >= 3) ops.push({k:'dir', t});
+  if (hits.length > 1) ops.push({k:'flt', t, n:hits.length});
+  return ops;
+}
+function abrirDrop(ops) {
+  qOpts = ops;
+  qDrop.hidden = !ops.length; qIn.setAttribute('aria-expanded', ops.length > 0);
+  qDrop.innerHTML = ops.map((o, i) => {
+    const a = `role="option" id="qo${i}" data-i="${i}"`;
+    if (o.k === 'cli') { const c = o.c;
+      return `<button type="button" class="qopt" ${a}><span class="id">${c.id}</span><span class="nm">${esc(c.n)}${c.an ? ' <em>· inactivo</em>' : ''}<small>${esc(c.dom) || 'sin domicilio'} · ${esc(c.loc)}${isGeo(c) ? '' : ' · sin coordenadas'}</small></span><span class="dlbl">${diasChips(c.d)}</span></button>`; }
+    if (o.k === 'dir') return `<button type="button" class="qopt" ${a}><span class="ico" aria-hidden="true">⌖</span><span class="nm">Ubicar la dirección «${esc(o.t)}»<small>Marca el lugar y muestra los días de entrega de los clientes cercanos</small></span></button>`;
+    return `<button type="button" class="qopt" ${a}><span class="ico" aria-hidden="true">≡</span><span class="nm">Filtrar los ${o.n} clientes que contienen «${esc(o.t)}»<small>Oculta el resto de los clientes</small></span></button>`;
+  }).join('');
+  qDrop.querySelectorAll('.qopt').forEach(b => { b.onmousedown = e => e.preventDefault(); b.onclick = () => elegirOpcion(qOpts[+b.dataset.i]); });
+  marcarOpcion(0);
+}
+function marcarOpcion(i) {
+  qIdx = i;
+  qDrop.querySelectorAll('.qopt').forEach((b, j) => b.setAttribute('aria-selected', j === i));
+  const b = $('qo' + i);
+  if (b) { b.scrollIntoView({block:'nearest'}); qIn.setAttribute('aria-activedescendant', b.id); } else qIn.removeAttribute('aria-activedescendant');
+}
+function cerrarDrop() { qDrop.hidden = true; qIn.setAttribute('aria-expanded', false); qIn.removeAttribute('aria-activedescendant'); }
+function elegirOpcion(o) {
+  if (!o) return;
+  cerrarDrop();
+  if (o.k === 'flt') {
+    S.q = o.t; quitarRef(true); render();
+    const v = visible().filter(isGeo);
+    if (v.length) map.fitBounds(v.map(c => [c.lat, c.lng]), {padding:[50, 50], maxZoom:15});
+    return;
+  }
+  S.q = '';
+  if (o.k === 'dir') return ubicarDireccion(o.t);
+  const c = o.c;
+  if (isGeo(c) && !c.far) return ponerRef({tipo:'cliente', id:c.id, lat:c.lat, lng:c.lng, label:`#${c.id} ${c.n}`, sub:`${c.dom || 'sin domicilio'} · ${c.loc}`});
+  toast(`#${c.id} no tiene una ubicación confiable: se busca su domicilio.`);
+  ubicarDireccion(`${c.dom}, ${c.loc}`, c);
+}
+qIn.addEventListener('input', () => {
+  if (qIn.value.trim()) return abrirDrop(opcionesBusqueda(qIn.value));
+  cerrarDrop();
+  if (S.q) { S.q = ''; if (S.D) render(); }
+});
+qIn.addEventListener('keydown', e => {
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (qDrop.hidden) abrirDrop(opcionesBusqueda(qIn.value));
+    else if (qOpts.length) marcarOpcion((qIdx + (e.key === 'ArrowDown' ? 1 : -1) + qOpts.length) % qOpts.length);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    elegirOpcion(qDrop.hidden ? opcionesBusqueda(qIn.value)[0] : qOpts[qIdx]);
+  } else if (e.key === 'Escape' && !qDrop.hidden) { e.stopPropagation(); cerrarDrop(); }
+});
+qIn.addEventListener('focus', () => { if (qIn.value.trim()) abrirDrop(opcionesBusqueda(qIn.value)); });
+qIn.addEventListener('blur', () => setTimeout(cerrarDrop, 150));
 
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -709,6 +883,7 @@ document.addEventListener('keydown', e => {
   if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
   if (e.key === 'p' || e.key === 'P') { setPanel(!S.panel); return; }
   if (e.key === 'Escape' && S.sel) { cerrarCard(); return; }
+  if (e.key === 'Escape' && S.ref) { quitarRef(); return; }
   const i = '0123456'.indexOf(e.key);
   if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS');
 });
