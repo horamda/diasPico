@@ -1665,7 +1665,7 @@ function mostrarEstadoFrescura(data,targetId){
   el.classList.toggle('ok',isOk);
   el.classList.toggle('alert',!isOk);
   const stockDate=data.fecha_stock;
-  const motivo=failed?String(data.auto_sync.error||'').trim():'';
+  const motivo=failed?String(data.auto_sync.error||'').trim().replace(/\.+$/,''):'';
   el.textContent=failed
     ? `No se pudo actualizar${motivo?': '+(motivo.length>140?motivo.slice(0,140)+'…':motivo):''}. ${stockDate?'Mostrando stock del '+fechaCorta(stockDate):'Sin stock sincronizado'}`
     : `Frescura: ${stockDate?fechaCorta(stockDate):'sin datos'}${isOk?' · actualizada':' · desactualizada'}`;
