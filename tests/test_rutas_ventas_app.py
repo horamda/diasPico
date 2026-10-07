@@ -81,7 +81,7 @@ def test_endpoints_ficha_y_mapa(ctx):
     c = ctx.test_client()
     r = c.get('/rutas/api/ventas/comportamiento?dias=60').json
     assert r['fuente'] == 'ventas_detalle' and r['hasta'] == HASTA.isoformat()
-    assert r['clientes']['123']['compras'] == 4 and r['clientes']['123']['comprobantes'] == 5 and r['clientes']['123']['bultos'] == 40 and 'ent' not in r['clientes']['123']
+    assert r['clientes']['123']['compras'] == 4 and r['clientes']['123']['comprobantes'] == 5 and r['clientes']['123']['bultos'] == 40 and sum(r['clientes']['123']['ent'].values()) == 4
     r = c.get('/rutas/api/clientes/123/ventas?dias=30').json
     assert r['dias'] == 30 and r['metricas']['compras'] == 4 and r['metricas']['drop'] == 10
     ref = r['referencia']

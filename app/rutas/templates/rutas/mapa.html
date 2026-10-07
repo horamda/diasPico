@@ -56,6 +56,7 @@
       <button class="tab" role="tab" id="t-dia" aria-selected="false">Clientes</button>
       <button class="tab" role="tab" id="t-pen" aria-selected="false">Pendientes<span class="n" id="penN"></span></button>
       <button class="tab" role="tab" id="t-rec" aria-selected="false" title="Recorridos por camión y clientes por día y localidad">Recorridos</button>
+      <button class="tab" role="tab" id="t-rev" aria-selected="false" title="Revisión de días de entrega: análisis e informe">Revisión</button>
       <button class="tab" role="tab" id="t-ven" aria-selected="false">Ventas</button>
       <button class="tab" role="tab" id="t-exp" aria-selected="false" title="Ayuda">?</button>
     </div>
@@ -64,6 +65,7 @@
     <div class="pane" id="p-dia" hidden></div>
     <div class="pane" id="p-pen" hidden></div>
     <div class="pane" id="p-rec" hidden></div>
+    <div class="pane" id="p-rev" hidden></div>
     <div class="pane" id="p-ven" hidden></div>
     <div class="pane" id="p-exp" hidden></div>
   </aside>
@@ -78,6 +80,7 @@ window.RUTAS = {
 };
 </script>
 <script src="{{ url_for('rutas.static', filename='rutas/vista.js') }}"></script>
+<script src="{{ url_for('rutas.static', filename='rutas/revision.js') }}"></script>
 <script src="{{ url_for('rutas.static', filename='rutas/mapa.js') }}"></script>
 </body>
 </html>

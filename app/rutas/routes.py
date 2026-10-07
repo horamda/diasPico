@@ -228,7 +228,7 @@ def _dias_param(default):
 
 
 _RESUMEN_VENTA = ('compras', 'comprobantes', 'neto', 'ticket', 'bultos', 'hl', 'drop', 'bultos_sem', 'rech_pct',
-                  'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado')
+                  'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado', 'ent')
 
 
 @bp.get("/api/ventas/comportamiento")

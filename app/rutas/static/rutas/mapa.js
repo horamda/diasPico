@@ -556,6 +556,131 @@ function renderRec() {
   $('recCsv').onclick = () => descargarCsv(vehs, carga, filasM);
 }
 let matrizIdx = new Map();
+// ---------- revisión de días: análisis a pedido, CSV e informe imprimible ----------
+const REV_MOTIVO = {fuera:'Factura fuera de su día', aislado:'Distinto a sus vecinos', sindias:'Sin días', frecuencia:'2 días y compra poco'};
+const REV = {res:null, dias:90, busy:false, motivo:'', loc:'', limite:150};
+async function generarRevision() {
+  if (REV.busy || !S.D) return;
+  REV.busy = true; renderRev();
+  try {
+    const ventas = await api(`/ventas/comportamiento?dias=${REV.dias}`);
+    if (!ventas.comprobantes) throw new Error('no hay ventas importadas en el período');
+    REV.res = RutasRevision.analizar(S.D.clientes, ventas, {suc:S.suc});
+    REV.motivo = ''; REV.loc = ''; REV.limite = 150;
+  } catch (e) { toast('No se pudo generar el análisis: ' + e.message, true); }
+  finally { REV.busy = false; renderRev(); }
+}
+const pct = x => x == null ? '—' : Math.round(x * 100) + '%';
+const revClientes = () => REV.res.clientes.filter(r => (!REV.motivo || r.motivos.includes(REV.motivo)) && (!REV.loc || r.loc === REV.loc));
+function revDiasCelda(f, d) {
+  const r = f.reales[d], a = f.asig[d], max = Math.max(1, ...RutasRevision.DAYS.map(x => f.reales[x]));
+  const cls = f.sinDias < f.clientes && !a && r >= Math.max(3, .25 * max) ? 'falta' : a >= 5 && r < Math.max(3, .2 * max) ? 'flojo' : '';
+  return `<td class="heat rv-d ${cls}" style="--h:${Math.round(r / max * 100)}%" title="${DAYNAME[d]}: ${a} clientes asignados · ~${r.toFixed(1)} entregas por semana">${r >= .5 ? Math.round(r) : '·'}<small>${a ? a + ' asig.' : 'sin asig.'}</small></td>`;
+}
+function renderRev() {
+  const el = $('p-rev'), R = REV.res;
+  const otraSuc = R && R.suc !== S.suc;
+  const head = `<div class="rec-head"><div><h2>Revisión de días de entrega</h2>
+      <p class="note">Compara los días asignados con los días en que cada cliente realmente factura y con los días de sus vecinos. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
+    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período de ventas">${[60, 90, 180].map(d => `<button type="button" data-rd="${d}" aria-pressed="${REV.dias === d}">${d} d</button>`).join('')}</div>
+      <button class="btn primary" id="revGen" type="button" ${REV.busy ? 'disabled' : ''}>${REV.busy ? 'Analizando…' : R ? 'Volver a generar' : 'Generar análisis'}</button>
+      ${R ? '<button class="btn" id="revCsv" type="button">Descargar CSV</button><button class="btn" id="revInf" type="button">Informe para imprimir</button>' : ''}
+      <button class="btn" id="revVolver" type="button">Volver al mapa</button></div></div>`;
+  if (!R) {
+    el.innerHTML = head + `<div class="empty rec-empty"><b>Todavía no se generó el análisis.</b><p>Elegí el período de ventas y tocá <b>Generar análisis</b>. Se evalúan los clientes activos de la sucursal elegida.</p></div>`;
+  } else {
+    const s = R.resumen, lista = revClientes(), locs = [...new Set(R.clientes.map(r => r.loc))].sort();
+    const kp = [['', s.activos, 'clientes activos', ''], ['', pct(s.acierto), `factura en su día (${s.evaluadosAcierto} con 4+ compras)`, ''],
+      ['bad', s.sinDias, 'sin días', 'sindias'], ['bad', s.fuera, 'factura fuera de su día', 'fuera'],
+      ['warn', s.aislados, 'distinto a sus vecinos', 'aislado'], ['warn', s.frecuencia, '2 días y compra < cada 2 semanas', 'frecuencia']];
+    let filas = '', suc = '';
+    for (const f of R.localidades) {
+      if (f.suc !== suc) { filas += `<tr class="suc"><td colspan="11">Sale de ${esc(f.suc)}</td></tr>`; suc = f.suc; }
+      filas += `<tr data-rloc="${esc(f.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(f.loc)}"></i>${esc(f.loc)}</td><td>${f.clientes}</td><td class="${f.sinDias ? 'bad' : 'z'}">${f.sinDias || '·'}</td>
+        ${RutasRevision.DAYS.map(d => revDiasCelda(f, d)).join('')}<td class="${f.acierto != null && f.acierto < .6 ? 'warn' : ''}">${pct(f.acierto)}</td>
+        <td class="rv-notas">${f.notas.map(n => `<span class="pill ${n.t}" title="${esc(n.d)}">${esc(n.m)}</span>`).join('') || '<span class="z">Sin observaciones</span>'}</td></tr>`;
+    }
+    const chips = d => d ? `<span class="dlbl">${diasChips(d)}</span>` : '<span class="z">—</span>';
+    const filasC = lista.slice(0, REV.limite).map(r => `<tr data-rid="${r.id}" tabindex="0" title="Ver en el mapa con sus vecinos"><td class="mono">${r.id}</td><td class="rv-nom">${esc(r.n)}<small>${esc(r.dom) || ''}</small></td><td>${esc(r.loc)}</td>
+      <td>${chips(r.actual)}</td><td>${r.sugerido ? chips(r.sugerido) : '<span class="z">—</span>'}</td><td>${chips(r.factura)}</td><td>${chips(r.vecinos)}</td>
+      <td class="${r.acierto != null && r.acierto < .5 ? 'bad' : ''}">${pct(r.acierto)}</td><td>${r.compras}</td><td class="rv-mot">${r.motivos.map(m => `<span class="pill">${REV_MOTIVO[m]}</span>`).join('')}</td></tr>`).join('');
+    el.innerHTML = head + `
+      <p class="status">${otraSuc ? `<b class="warn-t">Generado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a generar para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(R.generado.slice(0, 16).replace('T', ' '))}</p>
+      <div class="kpis rv-kpis">${kp.map(([c, n, l, f]) => `<button class="kpi ${c}" ${f ? `data-rm="${f}" aria-pressed="${REV.motivo === f}"` : 'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
+      <div><h2>Por localidad · entregas reales por semana</h2><p class="note">Cada celda: clientes entregados por semana ese día según la facturación, y debajo cuántos tienen ese día asignado. <span class="rv-ley falta">Rojo</span>: se entrega sin clientes asignados. <span class="rv-ley flojo">Rayado</span>: día asignado casi sin entregas. Tocá una localidad para filtrar los clientes.</p></div>
+      <div class="tw"><table class="rec-matriz rv-loc"><thead><tr><th>Localidad</th><th>Clientes</th><th>Sin días</th>${RutasRevision.DAYS.map(d => `<th>${DIASLARGO[d]}</th>`).join('')}<th title="Promedio de compras en sus días asignados">En su día</th><th>Observaciones</th></tr></thead><tbody>${filas}</tbody></table></div>
+      <div class="rv-fil"><h2>Clientes a revisar · ${lista.length}</h2>
+        <label>Localidad <select id="revLoc"><option value="">Todas</option>${locs.map(l => `<option ${l === REV.loc ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        ${REV.motivo ? `<span class="pill">${REV_MOTIVO[REV.motivo]} <a href="#" id="revClrM" aria-label="Quitar filtro">×</a></span>` : ''}</div>
+      <p class="note">Sugerido: el patrón que mejor cubre los días en que factura, priorizando los que ya usan sus vecinos y su localidad. Si compra poco, se propone quedarse con el día que más usa. Tocá un cliente para verlo en el mapa con sus vecinos.</p>
+      ${lista.length ? `<div class="tw"><table class="rv-cli"><thead><tr><th>Cliente</th><th>Nombre</th><th>Localidad</th><th>Actual</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th>En su día</th><th>Compras</th><th>Motivo</th></tr></thead><tbody>${filasC}</tbody></table></div>
+        ${lista.length > REV.limite ? `<button class="btn" id="revMas" type="button">Mostrar ${Math.min(300, lista.length - REV.limite)} más (quedan ${lista.length - REV.limite})</button>` : ''}`
+      : '<p class="empty">No hay clientes para este filtro.</p>'}`;
+  }
+  el.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { REV.dias = +b.dataset.rd; renderRev(); });
+  $('revGen').onclick = generarRevision;
+  $('revVolver').onclick = () => elegirTab('t-loc');
+  if (!R) return;
+  $('revCsv').onclick = csvRevision;
+  $('revInf').onclick = informeRevision;
+  el.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { REV.motivo = REV.motivo === b.dataset.rm ? '' : b.dataset.rm; REV.limite = 150; renderRev(); });
+  el.querySelectorAll('tr[data-rloc]').forEach(tr => { const f = () => { REV.loc = REV.loc === tr.dataset.rloc ? '' : tr.dataset.rloc; REV.limite = 150; renderRev(); };
+    tr.onclick = f; tr.onkeydown = e => { if (e.key === 'Enter') f(); }; });
+  $('revLoc').onchange = e => { REV.loc = e.target.value; REV.limite = 150; renderRev(); };
+  const cm = $('revClrM'); if (cm) cm.onclick = e => { e.preventDefault(); REV.motivo = ''; renderRev(); };
+  const mas = $('revMas'); if (mas) mas.onclick = () => { REV.limite += 300; renderRev(); };
+  el.querySelectorAll('tr[data-rid]').forEach(tr => { const f = () => verClienteRevision(+tr.dataset.rid);
+    tr.onclick = f; tr.onkeydown = e => { if (e.key === 'Enter') f(); }; });
+}
+function verClienteRevision(id) {
+  const c = byId.get(id); if (!c) return;
+  if (isGeo(c) && !c.far) ponerRef({tipo:'cliente', id:c.id, lat:c.lat, lng:c.lng, label:`#${c.id} ${c.n}`, sub:`${c.dom || 'sin domicilio'} · ${c.loc}`});
+  else { toast(`#${c.id} no tiene una ubicación confiable: se busca su domicilio.`); ubicarDireccion(`${c.dom}, ${c.loc}`, c); }
+}
+function csvRevision() {
+  const R = REV.res, q = v => /[;"\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_ACTUALES', 'DIAS_SUGERIDOS', 'FACTURA_EN', 'VECINOS', 'EN_SU_DIA_%', 'COMPRAS', 'COMPRAS_POR_SEMANA', 'MOTIVOS'].join(';')];
+  for (const r of revClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.actual, r.sugerido, r.factura, r.vecinos, r.acierto == null ? '' : Math.round(r.acierto * 100),
+    r.compras, r.compSem.toFixed(2).replace('.', ','), r.motivos.map(m => REV_MOTIVO[m]).join(' / ')].map(q).join(';'));
+  lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'SIN_DIAS', ...RutasRevision.DAYS.map(d => 'ENTREGAS_SEM_' + d), ...RutasRevision.DAYS.map(d => 'ASIGNADOS_' + d), 'EN_SU_DIA_%', 'SUPERPOSICION_%', 'OBSERVACIONES'].join(';'));
+  for (const f of R.localidades) lineas.push([f.suc, f.loc, f.clientes, f.sinDias, ...RutasRevision.DAYS.map(d => f.reales[d].toFixed(1).replace('.', ',')), ...RutasRevision.DAYS.map(d => f.asig[d]),
+    f.acierto == null ? '' : Math.round(f.acierto * 100), f.superp ? f.superp.pct : '', f.notas.map(n => n.m + (n.d ? ': ' + n.d : '')).join(' / ')].map(q).join(';'));
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`revision_dias_${new Date().toISOString().slice(0, 10)}.csv`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function informeRevision() {
+  const R = REV.res, s = R.resumen, D = RutasRevision.DAYS;
+  const alertas = R.localidades.filter(f => f.notas.length);
+  const top = R.clientes.filter(r => r.motivos.some(m => m === 'fuera' || m === 'aislado')).slice(0, 80);
+  // Días sugeridos por localidad para los clientes sin días (útil para cargar la planilla).
+  const sinDias = new Map();
+  R.clientes.filter(r => r.motivos.includes('sindias')).forEach(r => { const k = r.suc + ' · ' + r.loc, m = sinDias.get(k) || new Map(); m.set(r.sugerido || 'sin datos', (m.get(r.sugerido || 'sin datos') || 0) + 1); sinDias.set(k, m); });
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Revisión de días de entrega</title><style>
+    body{font:12px/1.45 system-ui,sans-serif;color:#1d2421;margin:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#5d6862}
+    p{margin:4px 0}.m{color:#5d6862}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border-bottom:1px solid #d5d9d2;padding:4px 5px;text-align:left;vertical-align:top}
+    th{font-size:10.5px;text-transform:uppercase;color:#5d6862}.n{text-align:right;font-variant-numeric:tabular-nums}.k{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+    .k div{border:1px solid #d5d9d2;border-radius:6px;padding:8px}.k b{display:block;font-size:20px}.bad{color:#c9362f}.warn{color:#b26b00}.falta{background:#fde2e0}
+    @media print{body{margin:10mm}button{display:none}tr{break-inside:avoid}}</style></head><body>
+    <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
+    <h1>Revisión de días de entrega</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
+    <div class="k"><div><b>${s.activos}</b>clientes activos</div><div><b>${pct(s.acierto)}</b>factura en su día asignado (${s.evaluadosAcierto} clientes con 4+ compras)</div><div><b class="bad">${s.sinDias}</b>sin días asignados</div>
+      <div><b class="bad">${s.fuera}</b>facturan menos de la mitad en su día</div><div><b class="warn">${s.aislados}</b>con días distintos a todos sus vecinos</div><div><b class="warn">${s.frecuencia}</b>con 2 días que compran menos de una vez cada 2 semanas</div></div>
+    <h2>Observaciones por localidad</h2>
+    ${alertas.length ? `<table><thead><tr><th>Sucursal</th><th>Localidad</th><th class="n">Clientes</th><th>Observación</th></tr></thead><tbody>${alertas.map(f => f.notas.map((n, i) => `<tr>${i ? '<td></td><td></td><td></td>' : `<td>${esc(f.suc)}</td><td><b>${esc(f.loc)}</b></td><td class="n">${f.clientes}</td>`}<td class="${n.t}"><b>${esc(n.m)}</b>${n.d ? ' — ' + esc(n.d) : ''}</td></tr>`).join('')).join('')}</tbody></table>` : '<p>Sin observaciones.</p>'}
+    <h2>Entregas reales por semana y clientes asignados</h2>
+    <table><thead><tr><th>Sucursal</th><th>Localidad</th>${D.map(d => `<th class="n">${d}</th>`).join('')}<th class="n">En su día</th><th class="n">Zonas superpuestas</th></tr></thead><tbody>
+    ${R.localidades.map(f => { const mx = Math.max(...D.map(d => f.reales[d])); return `<tr><td>${esc(f.suc)}</td><td>${esc(f.loc)}</td>${D.map(d => `<td class="n ${f.sinDias < f.clientes && !f.asig[d] && f.reales[d] >= Math.max(3, .25 * mx) ? 'falta' : ''}">${f.reales[d] >= .5 ? Math.round(f.reales[d]) : '·'} <span class="m">/ ${f.asig[d]}</span></td>`).join('')}<td class="n">${pct(f.acierto)}</td><td class="n">${f.superp ? f.superp.pct + '%' : '—'}</td></tr>`; }).join('')}</tbody></table>
+    <p class="m">Cada celda: entregas por semana según la facturación / clientes con ese día asignado. En rojo, días con entregas y sin clientes asignados.</p>
+    ${sinDias.size ? `<h2>Clientes sin días: días sugeridos según la facturación</h2><table><thead><tr><th>Localidad</th><th>Sugerencia (clientes)</th></tr></thead><tbody>${[...sinDias].sort((a, b) => [...b[1].values()].reduce((x, y) => x + y) - [...a[1].values()].reduce((x, y) => x + y)).map(([k, m]) => `<tr><td>${esc(k)}</td><td>${[...m].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p)}: <b>${n}</b>`).join(' · ')}</td></tr>`).join('')}</tbody></table>` : ''}
+    <h2>Clientes a revisar (factura fuera de su día o distinto a sus vecinos)${top.length === 80 ? ' · primeros 80' : ''}</h2>
+    ${top.length ? `<table><thead><tr><th>Cliente</th><th>Localidad</th><th>Actual</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th class="n">En su día</th><th class="n">Compras</th></tr></thead><tbody>${top.map(r => `<tr><td>#${r.id} ${esc(r.n)}</td><td>${esc(r.loc)}</td><td>${r.actual || '—'}</td><td><b>${r.sugerido || '—'}</b></td><td>${r.factura || '—'}</td><td>${r.vecinos || '—'}</td><td class="n">${pct(r.acierto)}</td><td class="n">${r.compras}</td></tr>`).join('')}</tbody></table>` : '<p>Ninguno.</p>'}
+    <p class="m" style="margin-top:18px">La fecha de factura se toma como día de entrega. Pedidos extra o urgentes pueden aparecer fuera del día asignado, por eso los porcentajes son una referencia. El listado completo está en el CSV.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('El navegador bloqueó la ventana del informe. Permití las ventanas emergentes para este sitio.', true); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
 function irARecorrido(dia, locs) {
   if (S.comp) { S.comp = false; S.cdias = []; }
   S.day = dia; S.sel = null; renderCard(); savePrefs(); elegirTab('t-loc'); render();
@@ -691,15 +816,15 @@ function render() {
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderCer(); renderLegend(v); renderTools();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderCer(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 function elegirTab(id) {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
-  ['cer','loc','dia','pen','rec','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
-  const ancho = id === 't-rec', antes = $('main').classList.contains('ancho');
+  ['cer','loc','dia','pen','rec','rev','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  const ancho = id === 't-rec' || id === 't-rev', antes = $('main').classList.contains('ancho');
   $('main').classList.toggle('ancho', ancho);
   if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
 }
