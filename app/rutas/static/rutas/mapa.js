@@ -200,7 +200,7 @@ function drawPoints(list) {
     const m = new Marca([c.lat,c.lng], {radius: sel?(modoPin?10:9):rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
       color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
     const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.compras)} compras · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
-    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · ${c.d || 'sin días'}${c.an?' · inactivo':''}${vt}`,
+    m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · entrega ${c.d || 'sin días'}${c.vis?` · visita ${c.vis}`:''}${c.an?' · inactivo':''}${vt}`,
       modoPin ? {direction:'top', offset:[0, -(sel?10:rad) * (PIN_ALTO + 1)]} : {});
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
@@ -464,7 +464,7 @@ function renderPen() {
 function renderExp(){
   $('p-exp').innerHTML=`<h2>Rutas de entrega · Solo consulta</h2><p>${scope().length} clientes · ${S.day==='TODOS'?'Semana':DAYNAME[S.day]} · ${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</p>
    <p class="note">Al elegir un día, cada localidad con entregas se sombrea con su color y muestra cuántos clientes tiene. Tocá la etiqueta para acercarte.</p>
-   <p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica visita ese día. Las columnas de BEES no se usan.</p>
+   <p class="note">Los días provienen del archivo importado: un 1 en LUNES a SÁBADO indica <b>entrega</b> ese día. Los días de <b>visita</b> del vendedor vienen del maestro de clientes (ERP) y se muestran aparte: en preventa la entrega es el día hábil siguiente a la visita.</p>
    <h2>Atajos de teclado</h2><dl class="kv"><dt><kbd>0</kbd>–<kbd>6</kbd></dt><dd>Semana, lunes a sábado</dd><dt><kbd>/</kbd></dt><dd>Buscar cliente o dirección</dd><dt>Clic derecho</dt><dd>Ver qué días tienen los clientes cercanos a ese punto</dd><dt><kbd>Esc</kbd></dt><dd>Cerrar la ficha</dd><dt><kbd>P</kbd></dt><dd>Ocultar o mostrar este panel</dd><dt><kbd>Ctrl</kbd>+clic</dt><dd>Sumar un día para comparar zonas</dd></dl>
    <p class="status">${S.D.ultima_sync?'Última actualización: '+esc(S.D.ultima_sync.origen)+' · '+esc((S.D.ultima_sync.fin||'').replace('T',' ').slice(0,16)):'Sin actualización registrada.'}</p>`;
 }
@@ -557,7 +557,7 @@ function renderRec() {
 }
 let matrizIdx = new Map();
 // ---------- revisión de días: análisis a pedido, CSV e informe imprimible ----------
-const REV_MOTIVO = {fuera:'Factura fuera de su día', aislado:'Distinto a sus vecinos', sindias:'Sin días', frecuencia:'2 días y compra poco'};
+const REV_MOTIVO = {visita:'Cargado = día de visita', fuera:'Factura fuera de su día', aislado:'Distinto a sus vecinos', sindias:'Sin días', frecuencia:'2 días y compra poco'};
 const REV = {res:null, dias:90, busy:false, motivo:'', loc:'', limite:150};
 async function generarRevision() {
   if (REV.busy || !S.D) return;
@@ -592,7 +592,7 @@ function renderRev() {
     const s = R.resumen, lista = revClientes(), locs = [...new Set(R.clientes.map(r => r.loc))].sort();
     const kp = [['', s.activos, 'clientes activos', ''], ['', pct(s.acierto), `factura en su día (${s.evaluadosAcierto} con 4+ compras)`, ''],
       ['bad', s.sinDias, 'sin días', 'sindias'], ['bad', s.fuera, 'factura fuera de su día', 'fuera'],
-      ['warn', s.aislados, 'distinto a sus vecinos', 'aislado'], ['warn', s.frecuencia, '2 días y compra < cada 2 semanas', 'frecuencia']];
+      ['bad', s.visita, 'cargado el día de visita, no de entrega', 'visita'], ['warn', s.aislados, 'distinto a sus vecinos', 'aislado'], ['warn', s.frecuencia, '2 días y compra < cada 2 semanas', 'frecuencia']];
     let filas = '', suc = '';
     for (const f of R.localidades) {
       if (f.suc !== suc) { filas += `<tr class="suc"><td colspan="11">Sale de ${esc(f.suc)}</td></tr>`; suc = f.suc; }
@@ -602,7 +602,7 @@ function renderRev() {
     }
     const chips = d => d ? `<span class="dlbl">${diasChips(d)}</span>` : '<span class="z">—</span>';
     const filasC = lista.slice(0, REV.limite).map(r => `<tr data-rid="${r.id}" tabindex="0" title="Ver en el mapa con sus vecinos"><td class="mono">${r.id}</td><td class="rv-nom">${esc(r.n)}<small>${esc(r.dom) || ''}</small></td><td>${esc(r.loc)}</td>
-      <td>${chips(r.actual)}</td><td>${r.sugerido ? chips(r.sugerido) : '<span class="z">—</span>'}</td><td>${chips(r.factura)}</td><td>${chips(r.vecinos)}</td>
+      <td>${chips(r.actual)}</td><td>${r.visita ? `<span class="dlbl vis">${r.visita.match(/../g).map(d => `<i>${d}</i>`).join('')}</span>` : '<span class="z">—</span>'}</td><td>${r.sugerido ? chips(r.sugerido) : '<span class="z">—</span>'}</td><td>${chips(r.factura)}</td><td>${chips(r.vecinos)}</td>
       <td class="${r.acierto != null && r.acierto < .5 ? 'bad' : ''}">${pct(r.acierto)}</td><td>${r.compras}</td><td class="rv-mot">${r.motivos.map(m => `<span class="pill">${REV_MOTIVO[m]}</span>`).join('')}</td></tr>`).join('');
     el.innerHTML = head + `
       <p class="status">${otraSuc ? `<b class="warn-t">Generado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a generar para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(R.generado.slice(0, 16).replace('T', ' '))}</p>
@@ -613,7 +613,7 @@ function renderRev() {
         <label>Localidad <select id="revLoc"><option value="">Todas</option>${locs.map(l => `<option ${l === REV.loc ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
         ${REV.motivo ? `<span class="pill">${REV_MOTIVO[REV.motivo]} <a href="#" id="revClrM" aria-label="Quitar filtro">×</a></span>` : ''}</div>
       <p class="note">Sugerido: el patrón que mejor cubre los días en que factura, priorizando los que ya usan sus vecinos y su localidad. Si compra poco, se propone quedarse con el día que más usa. Tocá un cliente para verlo en el mapa con sus vecinos.</p>
-      ${lista.length ? `<div class="tw"><table class="rv-cli"><thead><tr><th>Cliente</th><th>Nombre</th><th>Localidad</th><th>Actual</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th>En su día</th><th>Compras</th><th>Motivo</th></tr></thead><tbody>${filasC}</tbody></table></div>
+      ${lista.length ? `<div class="tw"><table class="rv-cli"><thead><tr><th>Cliente</th><th>Nombre</th><th>Localidad</th><th>Entrega actual</th><th title="Días de visita del vendedor (maestro ERP)">Visita</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th>En su día</th><th>Compras</th><th>Motivo</th></tr></thead><tbody>${filasC}</tbody></table></div>
         ${lista.length > REV.limite ? `<button class="btn" id="revMas" type="button">Mostrar ${Math.min(300, lista.length - REV.limite)} más (quedan ${lista.length - REV.limite})</button>` : ''}`
       : '<p class="empty">No hay clientes para este filtro.</p>'}`;
   }
@@ -639,8 +639,8 @@ function verClienteRevision(id) {
 }
 function csvRevision() {
   const R = REV.res, q = v => /[;"\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
-  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_ACTUALES', 'DIAS_SUGERIDOS', 'FACTURA_EN', 'VECINOS', 'EN_SU_DIA_%', 'COMPRAS', 'COMPRAS_POR_SEMANA', 'MOTIVOS'].join(';')];
-  for (const r of revClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.actual, r.sugerido, r.factura, r.vecinos, r.acierto == null ? '' : Math.round(r.acierto * 100),
+  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_ENTREGA_ACTUALES', 'DIAS_VISITA_VENDEDOR', 'DIAS_ENTREGA_SUGERIDOS', 'FACTURA_EN', 'VECINOS', 'EN_SU_DIA_%', 'COMPRAS', 'COMPRAS_POR_SEMANA', 'MOTIVOS'].join(';')];
+  for (const r of revClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.actual, r.visita, r.sugerido, r.factura, r.vecinos, r.acierto == null ? '' : Math.round(r.acierto * 100),
     r.compras, r.compSem.toFixed(2).replace('.', ','), r.motivos.map(m => REV_MOTIVO[m]).join(' / ')].map(q).join(';'));
   lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'SIN_DIAS', ...RutasRevision.DAYS.map(d => 'ENTREGAS_SEM_' + d), ...RutasRevision.DAYS.map(d => 'ASIGNADOS_' + d), 'EN_SU_DIA_%', 'SUPERPOSICION_%', 'OBSERVACIONES'].join(';'));
   for (const f of R.localidades) lineas.push([f.suc, f.loc, f.clientes, f.sinDias, ...RutasRevision.DAYS.map(d => f.reales[d].toFixed(1).replace('.', ',')), ...RutasRevision.DAYS.map(d => f.asig[d]),
@@ -652,7 +652,7 @@ function csvRevision() {
 function informeRevision() {
   const R = REV.res, s = R.resumen, D = RutasRevision.DAYS;
   const alertas = R.localidades.filter(f => f.notas.length);
-  const top = R.clientes.filter(r => r.motivos.some(m => m === 'fuera' || m === 'aislado')).slice(0, 80);
+  const top = R.clientes.filter(r => r.motivos.some(m => m === 'visita' || m === 'fuera' || m === 'aislado')).slice(0, 80);
   // Días sugeridos por localidad para los clientes sin días (útil para cargar la planilla).
   const sinDias = new Map();
   R.clientes.filter(r => r.motivos.includes('sindias')).forEach(r => { const k = r.suc + ' · ' + r.loc, m = sinDias.get(k) || new Map(); m.set(r.sugerido || 'sin datos', (m.get(r.sugerido || 'sin datos') || 0) + 1); sinDias.set(k, m); });
@@ -665,7 +665,7 @@ function informeRevision() {
     <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
     <h1>Revisión de días de entrega</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
     <div class="k"><div><b>${s.activos}</b>clientes activos</div><div><b>${pct(s.acierto)}</b>factura en su día asignado (${s.evaluadosAcierto} clientes con 4+ compras)</div><div><b class="bad">${s.sinDias}</b>sin días asignados</div>
-      <div><b class="bad">${s.fuera}</b>facturan menos de la mitad en su día</div><div><b class="warn">${s.aislados}</b>con días distintos a todos sus vecinos</div><div><b class="warn">${s.frecuencia}</b>con 2 días que compran menos de una vez cada 2 semanas</div></div>
+      <div><b class="bad">${s.fuera}</b>facturan menos de la mitad en su día</div><div><b class="warn">${s.aislados}</b>con días distintos a todos sus vecinos</div><div><b class="warn">${s.frecuencia}</b>con 2 días que compran menos de una vez cada 2 semanas</div><div><b class="bad">${s.visita}</b>con el día de visita cargado como día de entrega</div></div>
     <h2>Observaciones por localidad</h2>
     ${alertas.length ? `<table><thead><tr><th>Sucursal</th><th>Localidad</th><th class="n">Clientes</th><th>Observación</th></tr></thead><tbody>${alertas.map(f => f.notas.map((n, i) => `<tr>${i ? '<td></td><td></td><td></td>' : `<td>${esc(f.suc)}</td><td><b>${esc(f.loc)}</b></td><td class="n">${f.clientes}</td>`}<td class="${n.t}"><b>${esc(n.m)}</b>${n.d ? ' — ' + esc(n.d) : ''}</td></tr>`).join('')).join('')}</tbody></table>` : '<p>Sin observaciones.</p>'}
     <h2>Entregas reales por semana y clientes asignados</h2>
@@ -673,8 +673,8 @@ function informeRevision() {
     ${R.localidades.map(f => { const mx = Math.max(...D.map(d => f.reales[d])); return `<tr><td>${esc(f.suc)}</td><td>${esc(f.loc)}</td>${D.map(d => `<td class="n ${f.sinDias < f.clientes && !f.asig[d] && f.reales[d] >= Math.max(3, .25 * mx) ? 'falta' : ''}">${f.reales[d] >= .5 ? Math.round(f.reales[d]) : '·'} <span class="m">/ ${f.asig[d]}</span></td>`).join('')}<td class="n">${pct(f.acierto)}</td><td class="n">${f.superp ? f.superp.pct + '%' : '—'}</td></tr>`; }).join('')}</tbody></table>
     <p class="m">Cada celda: entregas por semana según la facturación / clientes con ese día asignado. En rojo, días con entregas y sin clientes asignados.</p>
     ${sinDias.size ? `<h2>Clientes sin días: días sugeridos según la facturación</h2><table><thead><tr><th>Localidad</th><th>Sugerencia (clientes)</th></tr></thead><tbody>${[...sinDias].sort((a, b) => [...b[1].values()].reduce((x, y) => x + y) - [...a[1].values()].reduce((x, y) => x + y)).map(([k, m]) => `<tr><td>${esc(k)}</td><td>${[...m].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p)}: <b>${n}</b>`).join(' · ')}</td></tr>`).join('')}</tbody></table>` : ''}
-    <h2>Clientes a revisar (factura fuera de su día o distinto a sus vecinos)${top.length === 80 ? ' · primeros 80' : ''}</h2>
-    ${top.length ? `<table><thead><tr><th>Cliente</th><th>Localidad</th><th>Actual</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th class="n">En su día</th><th class="n">Compras</th></tr></thead><tbody>${top.map(r => `<tr><td>#${r.id} ${esc(r.n)}</td><td>${esc(r.loc)}</td><td>${r.actual || '—'}</td><td><b>${r.sugerido || '—'}</b></td><td>${r.factura || '—'}</td><td>${r.vecinos || '—'}</td><td class="n">${pct(r.acierto)}</td><td class="n">${r.compras}</td></tr>`).join('')}</tbody></table>` : '<p>Ninguno.</p>'}
+    <h2>Clientes a revisar (día de visita cargado como entrega, factura fuera de su día o distinto a sus vecinos)${top.length === 80 ? ' · primeros 80' : ''}</h2>
+    ${top.length ? `<table><thead><tr><th>Cliente</th><th>Localidad</th><th>Entrega actual</th><th>Visita</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th class="n">En su día</th><th class="n">Compras</th></tr></thead><tbody>${top.map(r => `<tr><td>#${r.id} ${esc(r.n)}</td><td>${esc(r.loc)}</td><td>${r.actual || '—'}</td><td>${r.visita || '—'}</td><td><b>${r.sugerido || '—'}</b></td><td>${r.factura || '—'}</td><td>${r.vecinos || '—'}</td><td class="n">${pct(r.acierto)}</td><td class="n">${r.compras}</td></tr>`).join('')}</tbody></table>` : '<p>Ninguno.</p>'}
     <p class="m" style="margin-top:18px">La fecha de factura se toma como día de entrega. Pedidos extra o urgentes pueden aparecer fuera del día asignado, por eso los porcentajes son una referencia. El listado completo está en el CSV.</p>
     </body></html>`;
   const w = window.open('', '_blank');
@@ -704,6 +704,119 @@ function descargarCsv(vehs, carga, filasM) {
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+// ---------- efectividad de visita: visitas del maestro contra días con venta ----------
+const EFE = {res:null, dias:90, busy:false, filtro:'', loc:'', limite:150};
+const EFE_FILTRO = {cero:'Sin ninguna venta', bajo:'Menos de 25%'};
+const efeCls = x => x == null ? '' : x >= .6 ? 'ok' : x >= .4 ? 'warn' : 'bad';
+const efeBarra = x => x == null ? '—' : `<span class="ef-bar ${efeCls(x)}" style="--p:${Math.round(x * 100)}%"><b>${Math.round(x * 100)}%</b></span>`;
+async function generarEfectividad() {
+  if (EFE.busy || !S.D) return;
+  EFE.busy = true; renderEfe();
+  try {
+    const f = await api(`/ventas/fechas?dias=${EFE.dias}`);
+    if (!f.desde) throw new Error('no hay ventas importadas');
+    EFE.res = RutasEfectividad.analizar(S.D.clientes, f, {suc:S.suc});
+    EFE.filtro = ''; EFE.loc = ''; EFE.limite = 150;
+  } catch (e) { toast('No se pudo calcular la efectividad: ' + e.message, true); }
+  finally { EFE.busy = false; renderEfe(); }
+}
+const efeClientes = () => EFE.res.clientes.filter(r => (!EFE.loc || r.loc === EFE.loc)
+  && (EFE.filtro !== 'cero' || !r.efectivas) && (EFE.filtro !== 'bajo' || r.pct < .25));
+function renderEfe() {
+  const el = $('p-efe'), R = EFE.res;
+  const head = `<div class="rec-head"><div><h2>Efectividad de visita</h2>
+      <p class="note">De las visitas del vendedor, en cuántas hubo venta (por el vendedor o por BEES) antes de la visita siguiente. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
+    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período">${[30, 60, 90].map(d => `<button type="button" data-ed="${d}" aria-pressed="${EFE.dias === d}">${d} d</button>`).join('')}</div>
+      <button class="btn primary" id="efeGen" type="button" ${EFE.busy ? 'disabled' : ''}>${EFE.busy ? 'Calculando…' : R ? 'Volver a calcular' : 'Calcular efectividad'}</button>
+      ${R ? '<button class="btn" id="efeCsv" type="button">Descargar CSV</button><button class="btn" id="efeInf" type="button">Informe para imprimir</button>' : ''}
+      <button class="btn" id="efeVolver" type="button">Volver al mapa</button></div></div>`;
+  if (!R) {
+    el.innerHTML = head + `<div class="empty rec-empty"><b>Todavía no se calculó.</b><p>Se toman las visitas de todas las semanas según los días de visita del maestro (no hay registro de visitas reales) y se cruzan con los días en que el cliente compró.</p></div>`;
+  } else {
+    const s = R.resumen, lista = efeClientes(), locs = [...new Set(R.clientes.map(r => r.loc))].sort(), otraSuc = R.suc !== S.suc;
+    const kp = [['', s.clientes, 'clientes con visita', ''], ['', num(s.visitas), 'visitas en el período', ''], ['', num(s.efectivas), 'visitas con venta', ''],
+      [efeCls(s.pct), pct(s.pct), 'efectividad de visita', ''], ['', pct(s.semPct), 'semanas con compra', ''], ['', pct(s.bees), 'de las ventas por BEES', ''],
+      ['bad', s.ceros, 'sin ninguna venta', 'cero'], ['warn', s.bajos, 'con menos de 25%', 'bajo']];
+    let filas = '', suc = '';
+    for (const l of R.localidades) {
+      if (l.suc !== suc) { filas += `<tr class="suc"><td colspan="9">Sale de ${esc(l.suc)}</td></tr>`; suc = l.suc; }
+      filas += `<tr data-eloc="${esc(l.loc)}" tabindex="0" class="${EFE.loc === l.loc ? 'sel' : ''}"><td><i class="sw" style="background:${colorLoc(l.loc)}"></i>${esc(l.loc)}</td><td>${l.clientes}</td><td>${num(l.visitas)}</td><td>${num(l.efectivas)}</td>
+        <td class="ef-c">${efeBarra(l.pct)}</td><td>${pct(l.semPct)}</td><td>${pct(l.bees)}</td><td class="${l.ceros ? 'bad' : 'z'}">${l.ceros || '·'}</td><td class="${l.bajos ? 'warn' : 'z'}">${l.bajos || '·'}</td></tr>`;
+    }
+    const chips = d => d ? `<span class="dlbl">${diasChips(d)}</span>` : '<span class="z">—</span>';
+    const filasC = lista.slice(0, EFE.limite).map(r => `<tr data-eid="${r.id}" tabindex="0" title="Ver en el mapa"><td class="mono">${r.id}</td><td class="rv-nom">${esc(r.n)}<small>${esc(r.dom) || ''}</small></td><td>${esc(r.loc)}</td>
+      <td><span class="dlbl vis">${r.vis.match(/../g).map(d => `<i>${d}</i>`).join('')}</span></td><td>${chips(r.d)}</td><td>${r.visitas}</td><td>${r.efectivas}</td><td class="ef-c">${efeBarra(r.pct)}</td>
+      <td>${r.semCompra}/${r.semanas}</td><td>${pct(r.bees)}</td><td>${r.ultima ? esc(r.ultima.slice(5).split('-').reverse().join('/')) : '—'}</td></tr>`).join('');
+    el.innerHTML = head + `
+      <p class="status">${otraSuc ? `<b class="warn-t">Calculado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a calcular para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · visitas estimadas con los días de visita del maestro · el último ciclo incompleto no cuenta</p>
+      <div class="kpis rv-kpis">${kp.map(([c, n, l, f]) => `<button class="kpi ${c}" ${f ? `data-ef="${f}" aria-pressed="${EFE.filtro === f}"` : 'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
+      <div><h2>Por día de visita</h2></div>
+      <div class="ef-dias">${R.porDia.map(x => `<div class="ef-dia" title="${DAYNAME[x.dia]}: ${num(x.efectivas)} de ${num(x.visitas)} visitas con venta · ${x.clientes} clientes"><span>${DIASLARGO[x.dia]}</span>${efeBarra(x.pct)}<small>${num(x.efectivas)} de ${num(x.visitas)} · ${x.clientes} clientes</small></div>`).join('')}</div>
+      <div><h2>Por localidad</h2><p class="note">Efectividad: visitas con venta sobre visitas. Un cliente con dos visitas por semana que compra una vez por semana da 50%: por eso se muestra también el porcentaje de semanas con compra. Tocá una localidad para ver sus clientes.</p></div>
+      <div class="tw"><table class="ef-loc"><thead><tr><th>Localidad</th><th>Clientes</th><th>Visitas</th><th>Con venta</th><th>Efectividad</th><th>Semanas con compra</th><th>Por BEES</th><th title="Clientes sin ninguna venta en el período">Sin ventas</th><th title="Clientes con efectividad menor a 25%">&lt; 25%</th></tr></thead><tbody>${filas}</tbody></table></div>
+      <div class="rv-fil"><h2>Clientes · ${lista.length}</h2>
+        <label>Localidad <select id="efeLoc"><option value="">Todas</option>${locs.map(l => `<option ${l === EFE.loc ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+        ${EFE.filtro ? `<span class="pill">${EFE_FILTRO[EFE.filtro]} <a href="#" id="efeClr" aria-label="Quitar filtro">×</a></span>` : ''}</div>
+      <p class="note">Ordenados de menor a mayor efectividad. Tocá un cliente para verlo en el mapa con sus vecinos.</p>
+      ${lista.length ? `<div class="tw"><table class="rv-cli ef-cli"><thead><tr><th>Cliente</th><th>Nombre</th><th>Localidad</th><th>Visita</th><th>Entrega</th><th>Visitas</th><th>Con venta</th><th>Efectividad</th><th>Semanas con compra</th><th>Por BEES</th><th>Última</th></tr></thead><tbody>${filasC}</tbody></table></div>
+        ${lista.length > EFE.limite ? `<button class="btn" id="efeMas" type="button">Mostrar ${Math.min(300, lista.length - EFE.limite)} más (quedan ${lista.length - EFE.limite})</button>` : ''}`
+      : '<p class="empty">No hay clientes para este filtro.</p>'}`;
+  }
+  el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { EFE.dias = +b.dataset.ed; renderEfe(); });
+  $('efeGen').onclick = generarEfectividad;
+  $('efeVolver').onclick = () => elegirTab('t-loc');
+  if (!R) return;
+  $('efeCsv').onclick = csvEfectividad;
+  $('efeInf').onclick = informeEfectividad;
+  el.querySelectorAll('[data-ef]').forEach(b => b.onclick = () => { EFE.filtro = EFE.filtro === b.dataset.ef ? '' : b.dataset.ef; EFE.limite = 150; renderEfe(); });
+  el.querySelectorAll('tr[data-eloc]').forEach(tr => { const f = () => { EFE.loc = EFE.loc === tr.dataset.eloc ? '' : tr.dataset.eloc; EFE.limite = 150; renderEfe(); };
+    tr.onclick = f; tr.onkeydown = e => { if (e.key === 'Enter') f(); }; });
+  $('efeLoc').onchange = e => { EFE.loc = e.target.value; EFE.limite = 150; renderEfe(); };
+  const cl = $('efeClr'); if (cl) cl.onclick = e => { e.preventDefault(); EFE.filtro = ''; renderEfe(); };
+  const mas = $('efeMas'); if (mas) mas.onclick = () => { EFE.limite += 300; renderEfe(); };
+  el.querySelectorAll('tr[data-eid]').forEach(tr => { const f = () => verClienteRevision(+tr.dataset.eid);
+    tr.onclick = f; tr.onkeydown = e => { if (e.key === 'Enter') f(); }; });
+}
+function csvEfectividad() {
+  const R = EFE.res, q = v => /[;"\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
+  const p = x => x == null ? '' : Math.round(x * 100);
+  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_VISITA', 'DIAS_ENTREGA', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%', 'SEMANAS', 'SEMANAS_CON_COMPRA', 'DIAS_CON_VENTA', 'POR_BEES_%', 'ULTIMA_VENTA'].join(';')];
+  for (const r of efeClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.vis, r.d, r.visitas, r.efectivas, p(r.pct), r.semanas, r.semCompra, r.compras, p(r.bees), r.ultima || ''].map(q).join(';'));
+  lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%', 'SEMANAS_CON_COMPRA_%', 'POR_BEES_%', 'SIN_VENTAS', 'MENOS_25%'].join(';'));
+  for (const l of R.localidades) lineas.push([l.suc, l.loc, l.clientes, l.visitas, l.efectivas, p(l.pct), p(l.semPct), p(l.bees), l.ceros, l.bajos].map(q).join(';'));
+  lineas.push('', ['DIA_VISITA', 'CLIENTES', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%'].join(';'));
+  for (const x of R.porDia) lineas.push([DIASLARGO[x.dia], x.clientes, x.visitas, x.efectivas, p(x.pct)].map(q).join(';'));
+  const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`efectividad_visita_${new Date().toISOString().slice(0, 10)}.csv`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function informeEfectividad() {
+  const R = EFE.res, s = R.resumen;
+  const peores = R.clientes.filter(r => r.visitas >= 4).slice(0, 60);
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Efectividad de visita</title><style>
+    body{font:12px/1.45 system-ui,sans-serif;color:#1d2421;margin:24px}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:22px 0 6px;text-transform:uppercase;letter-spacing:.05em;color:#5d6862}
+    p{margin:4px 0}.m{color:#5d6862}table{border-collapse:collapse;width:100%;margin-top:6px}th,td{border-bottom:1px solid #d5d9d2;padding:4px 5px;text-align:left}
+    th{font-size:10.5px;text-transform:uppercase;color:#5d6862}.n{text-align:right;font-variant-numeric:tabular-nums}.k{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}
+    .k div{border:1px solid #d5d9d2;border-radius:6px;padding:8px}.k b{display:block;font-size:20px}.ok{color:#2e8b57}.warn{color:#b26b00}.bad{color:#c9362f}
+    @media print{body{margin:10mm}button{display:none}tr{break-inside:avoid}}</style></head><body>
+    <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
+    <h1>Efectividad de visita</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
+    <div class="k"><div><b class="${efeCls(s.pct)}">${pct(s.pct)}</b>efectividad de visita (${num(s.efectivas)} de ${num(s.visitas)} visitas con venta)</div><div><b>${pct(s.semPct)}</b>de las semanas con compra</div>
+      <div><b>${pct(s.bees)}</b>de las ventas entraron por BEES</div><div><b>${s.clientes}</b>clientes con visita · <span class="bad">${s.ceros} sin ventas</span> · <span class="warn">${s.bajos} bajo 25%</span></div></div>
+    <h2>Por día de visita</h2><table><thead><tr><th>Día</th><th class="n">Clientes</th><th class="n">Visitas</th><th class="n">Con venta</th><th class="n">Efectividad</th></tr></thead><tbody>
+    ${R.porDia.map(x => `<tr><td>${DIASLARGO[x.dia]}</td><td class="n">${x.clientes}</td><td class="n">${num(x.visitas)}</td><td class="n">${num(x.efectivas)}</td><td class="n ${efeCls(x.pct)}"><b>${pct(x.pct)}</b></td></tr>`).join('')}</tbody></table>
+    <h2>Por localidad</h2><table><thead><tr><th>Sucursal</th><th>Localidad</th><th class="n">Clientes</th><th class="n">Visitas</th><th class="n">Con venta</th><th class="n">Efectividad</th><th class="n">Semanas con compra</th><th class="n">Por BEES</th><th class="n">Sin ventas</th></tr></thead><tbody>
+    ${R.localidades.map(l => `<tr><td>${esc(l.suc)}</td><td>${esc(l.loc)}</td><td class="n">${l.clientes}</td><td class="n">${num(l.visitas)}</td><td class="n">${num(l.efectivas)}</td><td class="n ${efeCls(l.pct)}"><b>${pct(l.pct)}</b></td><td class="n">${pct(l.semPct)}</td><td class="n">${pct(l.bees)}</td><td class="n">${l.ceros || '·'}</td></tr>`).join('')}</tbody></table>
+    <h2>Clientes con menor efectividad${peores.length === 60 ? ' · primeros 60' : ''}</h2>
+    <table><thead><tr><th>Cliente</th><th>Localidad</th><th>Visita</th><th class="n">Visitas</th><th class="n">Con venta</th><th class="n">Efectividad</th><th class="n">Semanas con compra</th><th>Última venta</th></tr></thead><tbody>
+    ${peores.map(r => `<tr><td>#${r.id} ${esc(r.n)}</td><td>${esc(r.loc)}</td><td>${r.vis}</td><td class="n">${r.visitas}</td><td class="n">${r.efectivas}</td><td class="n ${efeCls(r.pct)}">${pct(r.pct)}</td><td class="n">${r.semCompra}/${r.semanas}</td><td>${r.ultima || '—'}</td></tr>`).join('')}</tbody></table>
+    <p class="m" style="margin-top:18px">No hay registro de visitas reales: se asume que el vendedor visitó todas las semanas en los días de visita del maestro de clientes. Una visita cuenta con venta si hubo una venta (del vendedor o por BEES) después de esa visita y hasta la siguiente. Un cliente con dos visitas por semana que compra una vez por semana da 50%. El listado completo está en el CSV.</p>
+    </body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { toast('El navegador bloqueó la ventana del informe. Permití las ventanas emergentes para este sitio.', true); return; }
+  w.document.open(); w.document.write(html); w.document.close();
+}
+
 // ---------- ficha de consulta ----------
 let card=null;
 function select(id,fly){
@@ -720,7 +833,8 @@ function renderCard(){
   card.innerHTML=`<button class="x" aria-label="Cerrar ficha (Esc)">×</button>
     <div class="card-head"><span class="mono">#${c.id}</span><span class="loc-chip" style="--c:${colorLoc(c.loc)}">${esc(c.loc)}</span>${c.an?'<span class="pill">Inactivo</span>':''}${c.far?'<span class="pill warn">Ubicación a revisar</span>':''}</div>
     <h3>${esc(c.n)}</h3>
-    <div class="dchips" aria-label="Días de entrega">${DAYS.map(d=>`<span class="dchip${c.d.includes(d)?' on':''}" title="${DAYNAME[d]}">${d}</span>`).join('')}</div>
+    <div class="drow"><span class="dlab">Entrega</span><div class="dchips" aria-label="Días de entrega">${DAYS.map(d=>`<span class="dchip${c.d.includes(d)?' on':''}" title="${DAYNAME[d]}">${d}</span>`).join('')}</div></div>
+    <div class="drow"><span class="dlab">Visita</span>${c.vis?`<div class="dchips vis" aria-label="Días de visita del vendedor">${[...DAYS,'DO'].filter(d=>c.vis.includes(d)).map(d=>`<span class="dchip on" title="${DAYNAME[d]||'Domingo'}: visita del vendedor">${d}</span>`).join('')}</div>`:'<span class="z">sin visita en el maestro</span>'}</div>
     <dl class="kv"><dt>Domicilio</dt><dd>${esc(c.dom)||'—'}, ${esc(c.loc)}</dd><dt>Sale de</dt><dd>${esc(c.suc)}</dd><dt>Horario</dt><dd>${esc(c.h)||'—'}</dd>${c.ven?`<dt>Vendedor</dt><dd>${esc(c.ven)}</dd>`:''}<dt>Nota</dt><dd>${esc(c.nota)||'—'}</dd></dl>
     <div class="row"><a class="btn" href="${gm}" target="_blank" rel="noopener">Ver en Google Maps</a><button class="btn" id="history">Historial</button></div><div id="clientHistory" role="status"></div>
     <section id="clientSales" class="pv" aria-live="polite"><p class="status">Consultando compras...</p></section>`;
@@ -816,15 +930,15 @@ function render() {
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderCer(); renderLegend(v); renderTools();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderEfe(); renderCer(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 function elegirTab(id) {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
-  ['cer','loc','dia','pen','rec','rev','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
-  const ancho = id === 't-rec' || id === 't-rev', antes = $('main').classList.contains('ancho');
+  ['cer','loc','dia','pen','rec','rev','efe','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  const ancho = ['t-rec', 't-rev', 't-efe'].includes(id), antes = $('main').classList.contains('ancho');
   $('main').classList.toggle('ancho', ancho);
   if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
 }

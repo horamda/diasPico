@@ -25,6 +25,12 @@ def normalizar(dias) -> str:
     return "".join(d for d in DIAS if d in partes)
 
 
+def desde_visita(valor) -> str:
+    """Días de visita del maestro ('MAR,VIE', 'DOM') -> 'MAVI', 'DO'. Son días del vendedor, no de entrega."""
+    partes = {_TXT.get(p.strip().upper(), "DO" if p.strip().upper() == "DOM" else "") for p in str(valor or "").split(",")}
+    return "".join(d for d in DIAS + ["DO"] if d in partes)
+
+
 def desde_chess(valor: str) -> str:
     if not valor:
         return ""

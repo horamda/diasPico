@@ -103,3 +103,11 @@ def test_varios_comprobantes_el_mismo_dia_son_una_compra(ctx):
     assert [(u['fecha'], u['comprobantes'], u['bultos'], u['tipo']) for u in d['ultimos']] == [
         (HASTA.isoformat(), 3, 16, 'FCVTA+RMCYO'), ((HASTA - timedelta(days=7)).isoformat(), 1, 6, 'FCVTA')]
     assert sum(s['compras'] for s in d['semanas']) == 2
+
+
+def test_fechas_compra_para_efectividad(ctx):
+    # Dos ventas el mismo día (una del vendedor) cuentan como un día no-BEES; los remitos no son venta.
+    cargar([linea(7, 0, 1), linea(7, 0, 2, origen='DISP.MOVIL'), linea(7, 7, 3), linea(7, 3, 4, tipo='REMIT')])
+    r = ctx.test_client().get('/rutas/api/ventas/fechas?dias=30').json
+    assert r['hasta'] == HASTA.isoformat()
+    assert r['clientes']['7'] == [[(HASTA - timedelta(days=7)).isoformat(), 1], [HASTA.isoformat(), 0]]

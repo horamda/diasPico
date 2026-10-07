@@ -53,3 +53,19 @@ test('filtra por sucursal',()=>{
  assert.equal(r.resumen.activos,0);
  assert.equal(r.clientes.length,0);
 });
+test('día de visita cargado como entrega: se marca y se sugiere el día siguiente',()=>{
+ const {trasVisita}=require('../app/rutas/static/rutas/revision.js');
+ assert.equal(trasVisita('VI'),'SA');
+ assert.equal(trasVisita('MISA'),'LUJU');
+ assert.equal(trasVisita('DO'),'');
+ const cs=[1,2,3].map(i=>cli(50+i,'LAVALLE','LU',-36.4+i*.001,-56.9,{vis:'LU'}));
+ cs.push(cli(60,'NUEVO','',-36.5,-56.8,{vis:'MI'}));
+ const r=analizar(cs,{dias:70,clientes:{51:ent({MA:6}),52:ent({MA:5,LU:1}),53:ent({MA:7})}});
+ assert.match(r.localidades.find(f=>f.loc==='LAVALLE').notas[0].m,/Cargado el día de visita/);
+ const c=r.clientes.find(x=>x.id===51);
+ assert.ok(c.motivos.includes('visita'));
+ assert.equal(c.visita,'LU');
+ assert.equal(c.sugerido,'MA');
+ assert.equal(r.clientes.find(x=>x.id===60).sugerido,'JU','sin compras: visita + 1 día');
+ assert.equal(r.resumen.visita,3);
+});

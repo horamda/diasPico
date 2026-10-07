@@ -241,6 +241,14 @@ def api_comportamiento():
     return jsonify(dict(res, clientes=clientes))
 
 
+@bp.get("/api/ventas/fechas")
+@protegido
+def api_fechas_compra():
+    """Fechas con venta por cliente, para la efectividad de visita."""
+    from .ventas_app import fechas_compra
+    return jsonify(fechas_compra(_dias_param(90)))
+
+
 @bp.get("/api/clientes/<int:cid>/ventas")
 @protegido
 def api_ventas_cliente(cid):

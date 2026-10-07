@@ -27,9 +27,20 @@ def _valida(lat, lng):
     return lat is not None and lng is not None and -41.5 < lat < -33 and -63.5 < lng < -56
 
 
+def _dias_visita(s):
+    """Días de visita del vendedor desde el maestro (clientes.fuerza_venta_1_dias_visita).
+    Se leen aparte y nunca reemplazan a los días de entrega."""
+    from sqlalchemy import text
+    if s.bind.dialect.name != 'postgresql' or not s.execute(text("SELECT to_regclass('public.clientes')")).scalar():
+        return {}
+    rows = s.execute(text("SELECT TRIM(cliente) AS id, fuerza_venta_1_dias_visita AS v FROM clientes"))
+    return {int(r.id): D.desde_visita(r.v) for r in rows if (r.id or '').isdecimal()}
+
+
 def clientes_vista(incluir_anulados=True):
     """Lista de dicts lista para el mapa, con la ubicación/días efectivos y banderas de alerta."""
     s = Session()
+    visita = _dias_visita(s)
     locs = {normalizar_nombre(l.nombre): l for l in s.query(Localidad)}
     out = []
     for c in s.query(Cliente).all():
@@ -44,7 +55,7 @@ def clientes_vista(incluir_anulados=True):
             "id": c.id_cliente, "n": c.fantasia or c.razon_social or "", "rs": c.razon_social or "",
             "dom": c.domicilio or "", "loc": nombre_localidad or "SIN LOCALIDAD",
             "suc": sucursal_entrega(nombre_localidad, loc.deposito.nombre if loc and loc.deposito else None),
-            "d": D.normalizar(e.dias) if e else "", "de": c.dias_erp or "",
+            "d": D.normalizar(e.dias) if e else "", "de": c.dias_erp or "", "vis": visita.get(c.id_cliente, ""),
             "an": c.anulado, "ven": c.vendedor or "", "rv": c.ruta_venta or "",
             "h": c.horario or "", "pl": bool(e and e.en_planilla),
             "lat": lat if _valida(lat, lng) else None, "lng": lng if _valida(lat, lng) else None,

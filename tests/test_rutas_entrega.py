@@ -237,3 +237,8 @@ def test_mapping_applies_to_previously_loaded_clients_without_refresh(app):
     data=app.test_client().get('/rutas/api/datos').json
     assert data['clientes'][0]['suc']=='CHASCOMUS'
     assert next(l for l in data['plan']['localidades'] if l['nombre']=='CASTELLI')['deposito']=='CHASCOMUS'
+
+
+def test_dias_de_visita_del_maestro():
+    from app.rutas import dias as D
+    assert [D.desde_visita(v) for v in ('MAR,VIE', 'JUE', 'DOM', 'MIE,SAB', '', None)] == ['MAVI', 'JU', 'DO', 'MISA', '', '']

@@ -163,3 +163,38 @@ def test_normalize_uses_requested_date_over_api_days():
          'dias': 999, 'estado': 'OK'}, fecha_stock='05-09-2026')
     assert row['dias_frescura_restantes'] == 26
     assert row['estado_frescura'] == 'CRITICO'
+
+
+def test_falla_antes_de_abrir_el_registro_queda_registrada(monkeypatch):
+    """Sin usuario/clave de la API la sincronizacion falla antes del log: igual debe quedar registrada."""
+    app = Flask(__name__)
+    cursor = _FakeCursor()
+    monkeypatch.setattr(frescura_svc, 'pg_conn', lambda: _fake_pg_conn(cursor))
+    monkeypatch.setattr(frescura_svc, '_ensure_tables', lambda: None)
+    with app.app_context():
+        try:
+            frescura_svc.sync_frescura_from_api(fecha_stock=date(2026, 10, 7))
+        except frescura_svc.FrescuraApiError as exc:
+            assert 'FRESCURA_API_USER' in str(exc)
+        else:
+            raise AssertionError('debia fallar sin configuracion')
+    inserts = [p for sql, p in cursor.calls if 'INSERT INTO frescura_sync_log' in sql and "'error'" in sql]
+    assert len(inserts) == 1 and 'FRESCURA_API_USER' in inserts[0]['err']
+
+
+def test_falla_ya_registrada_no_se_duplica(monkeypatch):
+    app = Flask(__name__)
+    cursor = _FakeCursor()
+    monkeypatch.setattr(frescura_svc, 'pg_conn', lambda: _fake_pg_conn(cursor))
+
+    def falla(_):
+        exc = frescura_svc.FrescuraApiError('API de frescura error 500: caida', 500)
+        exc.registrado = True
+        raise exc
+    monkeypatch.setattr(frescura_svc, '_sync_frescura_from_api', falla)
+    with app.app_context():
+        try:
+            frescura_svc.sync_frescura_from_api()
+        except frescura_svc.FrescuraApiError:
+            pass
+    assert not [sql for sql, _ in cursor.calls if "VALUES ('error'" in sql]

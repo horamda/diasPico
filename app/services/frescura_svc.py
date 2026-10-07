@@ -1551,13 +1551,35 @@ def get_last_sync() -> dict[str, Any] | None:
 
 
 def sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> dict[str, Any]:
-    # Transaction-scoped lock shared by every worker and synchronization entry point.
-    with pg_conn() as lock_conn:
-        with lock_conn.cursor() as cur:
-            cur.execute("SELECT pg_try_advisory_xact_lock(746281903)")
-            if not cur.fetchone()[0]:
-                raise FrescuraApiError('Hay una actualizacion de Frescura en curso. Reintenta cuando finalice.', 409)
-        return _sync_frescura_from_api(fecha_stock)
+    try:
+        # Transaction-scoped lock shared by every worker and synchronization entry point.
+        with pg_conn() as lock_conn:
+            with lock_conn.cursor() as cur:
+                cur.execute("SELECT pg_try_advisory_xact_lock(746281903)")
+                if not cur.fetchone()[0]:
+                    raise FrescuraApiError('Hay una actualizacion de Frescura en curso. Reintenta cuando finalice.', 409)
+            return _sync_frescura_from_api(fecha_stock)
+    except Exception as exc:
+        # Fallas previas a abrir el registro (configuracion, base, tablas): dejarlas registradas para diagnosticar.
+        if not getattr(exc, 'registrado', False) and getattr(exc, 'status_code', None) != 409:
+            _registrar_fallo_sync(exc, fecha_stock)
+        raise
+
+
+def _registrar_fallo_sync(exc: Exception, fecha_stock: Any) -> None:
+    try:
+        with pg_conn() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO frescura_sync_log (estado, finished_at, source_url, error_message, payload_json)
+                    VALUES ('error', NOW(), '', %(err)s, %(payload_json)s)
+                    """,
+                    {'err': f'{type(exc).__name__}: {exc}'[:2000],
+                     'payload_json': psycopg2.extras.Json({'etapa': 'antes_de_consultar_api', 'fecha_stock': str(fecha_stock or '')})},
+                )
+    except Exception:
+        current_app.logger.exception('No se pudo registrar la falla de sincronizacion de Frescura')
 
 
 def _sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) -> dict[str, Any]:
@@ -1794,6 +1816,7 @@ def _sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) ->
                             }),
                         },
                     )
+            exc.registrado = True
         raise
     except Exception as exc:
         if log_id is not None:
@@ -1819,6 +1842,7 @@ def _sync_frescura_from_api(fecha_stock: date | datetime | str | None = None) ->
                             }),
                         },
                     )
+            exc.registrado = True
         raise
 
 

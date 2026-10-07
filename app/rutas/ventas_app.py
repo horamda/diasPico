@@ -170,6 +170,25 @@ def _calcular(desde, hasta, dias):
             'clientes': out, 'fuente': 'ventas_detalle'}
 
 
+def fechas_compra(dias=90, hasta=None):
+    """Días con venta (factura o pedido) de cada cliente, para medir la efectividad de visita.
+    Cada día va como [fecha, 1 si todas las ventas de ese día entraron por BEES]."""
+    if not disponible():
+        return {'desde': None, 'hasta': None, 'dias': dias, 'clientes': {}}
+    desde, hasta = _ventana(dias, hasta)
+
+    def calcular():
+        por = defaultdict(dict)
+        for d in comprobantes(desde, hasta):
+            if d['tipo'] not in DOC_VENTA:
+                continue
+            f = d['fecha'].isoformat()
+            por[d['cliente']][f] = por[d['cliente']].get(f, True) and d['origen'] == 'BEES'
+        return {'desde': desde.isoformat(), 'hasta': hasta.isoformat(), 'dias': dias,
+                'clientes': {cid: [[f, int(b)] for f, b in sorted(fs.items())] for cid, fs in por.items()}}
+    return _memo(('fechas', dias, hasta), calcular)
+
+
 def detalle_cliente(cid, dias=90, hasta=None):
     """Serie semanal, últimas compras (una por día) y artículos más comprados del cliente."""
     if not disponible():

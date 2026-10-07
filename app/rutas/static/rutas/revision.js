@@ -8,6 +8,11 @@
   const km = (a, b) => Math.hypot((a.lat - b.lat) * 111.32, (a.lng - b.lng) * 111.32 * Math.cos(a.lat * Math.PI / 180));
   const pares = d => { const s = new Set(); for (let i = 0; i < (d || '').length; i += 2) s.add(d.slice(i, i + 2)); return s; };
   const ordenar = ds => DAYS.filter(d => ds.includes(d)).join('');
+  // Preventa: el camión entrega el día hábil siguiente a la visita del vendedor.
+  const SIG = {LU:'MA', MA:'MI', MI:'JU', JU:'VI', VI:'SA', SA:'LU'};
+  const trasVisita = vis => ordenar([...pares(vis)].filter(d => SIG[d]).map(d => SIG[d]));
+  // Días cargados que son exactamente días de visita y ninguno el día siguiente.
+  const esVisita = (d, vis) => !!d && !!vis && [...pares(d)].every(x => vis.includes(x)) && ![...pares(d)].some(x => trasVisita(vis).includes(x));
 
   // Envolvente convexa sin margen y punto dentro de polígono, sobre [lat,lng].
   function hull(pts) {
@@ -95,9 +100,15 @@
       const flojos = DAYS.filter(d => asig[d] >= 5 && reales[d] < Math.max(3, .2 * maxReal));
       const aciertoLoc = conAcierto ? sumaAcierto / conAcierto : null;
       const conDias = cs.filter(c => c.d).length;
+      const conVisita = cs.filter(c => c.d && trasVisita(c.vis));
+      const cargoVisita = conVisita.filter(c => esVisita(c.d, c.vis));
+      const notaVisita = conVisita.length >= 3 && cargoVisita.length >= .6 * conVisita.length
+        ? {t:'bad', m:`Cargado el día de visita del vendedor (${cargoVisita.length} de ${conVisita.length})`,
+           d:`La entrega sería el día siguiente a la visita: ${[...new Set(cargoVisita.map(c => trasVisita(c.vis)))].join(', ')}.`} : null;
       if (!conDias) notas.push({t:'bad', m:'Sin días cargados', d:`Días con entregas: ${DAYS.filter(d => reales[d] >= Math.max(1, .25 * maxReal)).join(', ') || '—'}`});
       else {
         const diasCamion = DAYS.filter(d => asig[d]);
+        if (notaVisita) notas.push(notaVisita);
         if (diasCamion.length === 1 && aciertoLoc != null && aciertoLoc < .5 && sinAsignar.length)
           notas.push({t:'bad', m:`Día cargado ${diasCamion[0]}, se entrega ${sinAsignar.join(' y ')}`, d:'La planilla parece tener el día equivocado para toda la localidad.'});
         else {
@@ -118,6 +129,8 @@
         if (c.d && i.acierto != null && i.compras >= MIN_COMPRAS && i.acierto < .5) motivos.push('fuera');
         if (i.aislado) motivos.push('aislado');
         if (c.d && c.d.length >= 4 && i.compras && i.compSem < .5) motivos.push('frecuencia');
+        if (esVisita(c.d, c.vis)) motivos.push('visita');
+        const entVisita = trasVisita(c.vis);
         if (!motivos.length) continue;
         // Sugerencia: el patrón que mejor cubre los días en que factura. Cada día de más resta, y los
         // patrones que ya usan sus vecinos o su localidad tienen preferencia.
@@ -125,13 +138,19 @@
         const tot = Object.values(i.ent).reduce((a, b) => a + b, 0);
         if (i.compras >= MIN_COMPRAS && tot) {
           const locales = new Set([i.vecinos, ...patronLoc.map(p => p[0])].filter(Boolean));
-          const cands = new Set([...locales, ...PATRONES, ...DAYS]);
+          const cands = new Set([...locales, ...PATRONES, ...DAYS, ...(entVisita ? [entVisita] : [])]);
           let mejor = -1;
           for (const p of cands) {
             const cubre = DAYS.filter(d => p.includes(d)).reduce((t, d) => t + (i.ent[d] || 0), 0) / tot;
-            const s = cubre - .1 * (p.length / 2 - 1) + (locales.has(p) ? .05 : 0);
+            const conVis = entVisita && [...pares(entVisita)].every(d => p.includes(d));
+            const s = cubre - .1 * (p.length / 2 - 1) + (locales.has(p) ? .05 : 0) + (conVis ? .05 : 0);
             if (cubre >= .5 && s > mejor) { mejor = s; sug = p; }
           }
+        }
+        if (!sug && entVisita) {
+          // Sin compras suficientes: el día siguiente a la visita, completado con el patrón de la zona si lo contiene.
+          const zona = [i.vecinos, ...patronLoc.map(p => p[0])].find(p => p && [...pares(entVisita)].every(d => p.includes(d)));
+          sug = zona || entVisita;
         }
         if (!sug && motivos.includes('aislado')) sug = i.vecinos;
         if (motivos.includes('frecuencia') && !motivos.some(m => m !== 'frecuencia')) {
@@ -140,10 +159,10 @@
           sug = (i.ent[top] || 0) ? top : '';
         }
         revisar.push({id:c.id, n:c.n, loc:c.loc, suc:c.suc, dom:c.dom, actual:c.d || '', sugerido:sug && sug !== c.d ? sug : '',
-          factura:i.factura, vecinos:i.vecinos || '', acierto:i.acierto, compras:i.compras, compSem:i.compSem, motivos});
+          factura:i.factura, vecinos:i.vecinos || '', visita:c.vis || '', acierto:i.acierto, compras:i.compras, compSem:i.compSem, motivos});
       }
     }
-    const peso = r => (r.motivos.includes('fuera') ? 4 : 0) + (r.motivos.includes('aislado') ? 3 : 0) + (r.motivos.includes('sindias') ? 2 : 0) + (r.sugerido ? 1 : 0);
+    const peso = r => (r.motivos.includes('visita') ? 5 : 0) + (r.motivos.includes('fuera') ? 4 : 0) + (r.motivos.includes('aislado') ? 3 : 0) + (r.motivos.includes('sindias') ? 2 : 0) + (r.sugerido ? 1 : 0);
     revisar.sort((a, b) => peso(b) - peso(a) || b.compras - a.compras);
     filas.sort((a, b) => a.suc.localeCompare(b.suc) || b.clientes - a.clientes);
     const conCompras = act.filter(c => c.d && V[c.id] && V[c.id].compras >= MIN_COMPRAS);
@@ -152,12 +171,12 @@
     const cuenta = m => revisar.filter(r => r.motivos.includes(m)).length;
     return {
       generado: new Date().toISOString(), desde: ventas && ventas.desde, hasta: ventas && ventas.hasta, suc,
-      resumen: {activos: act.length, sinDias: cuenta('sindias'), fuera: cuenta('fuera'), aislados: cuenta('aislado'), frecuencia: cuenta('frecuencia'),
+      resumen: {activos: act.length, sinDias: cuenta('sindias'), fuera: cuenta('fuera'), aislados: cuenta('aislado'), frecuencia: cuenta('frecuencia'), visita: cuenta('visita'),
         conSugerencia: revisar.filter(r => r.sugerido).length, acierto: aciertos.length ? aciertos.reduce((a, b) => a + b, 0) / aciertos.length : null,
         evaluadosAcierto: aciertos.length, localidadesConAlerta: filas.filter(f => f.notas.some(n => n.t === 'bad' || n.t === 'warn')).length},
       localidades: filas, clientes: revisar,
     };
   }
-  const api = {analizar, diasFacturados, DAYS};
+  const api = {analizar, diasFacturados, trasVisita, DAYS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.RutasRevision = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
