@@ -108,7 +108,8 @@ tr.suc td{font:700 12px var(--f-display);letter-spacing:.06em;text-transform:upp
 /* --- agregados para la app --- */
 [hidden]{display:none!important}
 .leaflet-tile-pane{filter:saturate(.55) contrast(.95)}
-@media (prefers-color-scheme: dark){.leaflet-tile-pane{filter:invert(.9) hue-rotate(180deg) saturate(.4) brightness(.9)}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .leaflet-tile-pane{filter:invert(.9) hue-rotate(180deg) saturate(.4) brightness(.9)}}
+:root[data-theme="dark"] .leaflet-tile-pane{filter:invert(.9) hue-rotate(180deg) saturate(.4) brightness(.9)}
 .topnav{display:flex;gap:6px}
 .topnav a{font:600 13px var(--f-display);letter-spacing:.04em;color:var(--muted);text-decoration:none;padding:6px 8px;border-radius:6px}
 .topnav a[aria-current="page"]{color:var(--ink);background:var(--chip)}
@@ -452,3 +453,8 @@ aside{position:relative}
 .rv-cli .rv-mot .pill{display:inline-block;margin:1px 3px 1px 0}
 .rv-cli .z,.rv-notas .z{color:var(--muted)}
 .warn-t{color:var(--warn)}
+
+/* --- Botón de tema claro / oscuro --- */
+.topbar .theme-toggle{min-height:30px;padding:4px 10px;display:inline-flex;align-items:center;gap:6px}
+.topbar .theme-toggle .theme-icon{font-size:14px;line-height:1}
+@media (max-width:820px){.topbar .theme-toggle span:last-child{display:none}}

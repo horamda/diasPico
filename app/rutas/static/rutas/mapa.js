@@ -1021,6 +1021,10 @@ document.addEventListener('keydown', e => {
   if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS');
 });
 
+// Tema claro / oscuro: los puntos toman colores del tema al dibujarse, así que se redibujan.
+new MutationObserver(() => { if (S.D) drawPoints(visible()); })
+  .observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
+
 let loadRequest=0;
 async function load() {
   const request=++loadRequest;

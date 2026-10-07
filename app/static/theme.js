@@ -42,13 +42,15 @@
   applyTheme(currentTheme());
 
   document.addEventListener('DOMContentLoaded', () => {
-    if (document.getElementById('themeToggle')) return;
-    const btn = document.createElement('button');
-    btn.id = 'themeToggle';
-    btn.type = 'button';
-    btn.className = 'theme-toggle';
+    let btn = document.getElementById('themeToggle');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'themeToggle';
+      btn.type = 'button';
+      btn.className = 'theme-toggle';
+      document.body.appendChild(btn);
+    }
     btn.addEventListener('click', toggleTheme);
-    document.body.appendChild(btn);
     applyTheme(root.getAttribute('data-theme') || currentTheme());
   });
 })();

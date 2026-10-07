@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="{{ url_for('rutas.static', filename='rutas/mapa.css') }}">
+<script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
 <div class="app">
@@ -28,6 +29,7 @@
              role="combobox" aria-expanded="false" aria-controls="qDrop" aria-autocomplete="list">
       <div class="qdrop" id="qDrop" role="listbox" aria-label="Resultados de la búsqueda" hidden></div>
     </div>
+    <button type="button" class="btn theme-toggle" id="themeToggle"></button>
     <details class="more">
       <summary class="btn" aria-label="Menú y filtros" title="Menú y filtros">☰</summary>
       <div class="more-body">
