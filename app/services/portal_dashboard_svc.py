@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import calendar
-from datetime import date
+from datetime import date, timedelta
 
 from app.database import pg_cursor
 
@@ -16,6 +16,71 @@ def _day_from_row(row: dict) -> int:
         return int(str(row.get("fecha") or "0000-00-00")[-2:])
     except Exception:
         return 0
+
+
+_METRICAS_COMPARATIVO = (
+    ("hl", "HL", "hectolitros"),
+    ("bultos", "Bultos", "bultos"),
+    ("pedidos", "Pedidos", "pedidos"),
+    ("salidas", "Salidas", "camiones_salidos"),
+)
+
+
+def _delta_pct(actual: float | None, previo: float | None) -> float | None:
+    if actual is None or not previo:
+        return None
+    return round((actual - previo) / previo * 100, 1)
+
+
+def _con_datos(row: dict) -> bool:
+    return float(row.get("hectolitros") or 0) > 0 or float(row.get("bultos") or 0) > 0
+
+
+def _ultimo_dia_con_datos(dias: list[dict], hasta: date) -> date | None:
+    fechas = [
+        date.fromisoformat(str(d["fecha"])[:10])
+        for d in dias
+        if d.get("fecha") and _con_datos(d) and str(d["fecha"])[:10] <= hasta.isoformat()
+    ]
+    return max(fechas) if fechas else None
+
+
+def _comparar(dias: list[dict], dias_prev: list[dict], dias_prev_dia: list[dict],
+              corte: date | None, corte_prev: date | None, dia_prev: date | None) -> dict:
+    """Mes a la fecha, último día y mes completo contra el año anterior."""
+    def _suma(rows, campo, hasta=None):
+        return sum(float(r.get(campo) or 0) for r in rows
+                   if hasta is None or str(r.get("fecha") or "")[:10] <= hasta.isoformat())
+
+    def _del_dia(rows, fecha, campo):
+        if fecha is None:
+            return None
+        return sum(float(r.get(campo) or 0) for r in rows if str(r.get("fecha") or "")[:10] == fecha.isoformat())
+
+    metricas = []
+    for key, label, campo in _METRICAS_COMPARATIVO:
+        mtd = _suma(dias, campo, corte) if corte else None
+        mtd_prev = _suma(dias_prev, campo, corte_prev) if corte_prev else None
+        mes_prev = _suma(dias_prev, campo)
+        dia = _del_dia(dias, corte, campo)
+        dia_ant = _del_dia(dias_prev_dia, dia_prev, campo)
+        metricas.append({
+            "key": key,
+            "label": label,
+            "mtd": round(mtd, 1) if mtd is not None else None,
+            "mtd_prev": round(mtd_prev, 1) if mtd_prev is not None else None,
+            "mtd_delta_pct": _delta_pct(mtd, mtd_prev),
+            "dia": round(dia, 1) if dia is not None else None,
+            "dia_prev": round(dia_ant, 1) if dia_ant is not None else None,
+            "dia_delta_pct": _delta_pct(dia, dia_ant),
+            "mes_prev_total": round(mes_prev, 1),
+            "avance_vs_mes_prev_pct": round(mtd / mes_prev * 100, 1) if mtd is not None and mes_prev else None,
+        })
+    return {
+        "metricas": metricas,
+        "dias_reparto": sum(1 for r in dias if _con_datos(r) and corte and str(r["fecha"])[:10] <= corte.isoformat()),
+        "dias_reparto_prev": sum(1 for r in dias_prev if _con_datos(r) and corte_prev and str(r["fecha"])[:10] <= corte_prev.isoformat()),
+    }
 
 
 def get_dashboard_kpis(empresa_id: str, sucursal_id: str) -> dict:
@@ -144,10 +209,64 @@ def get_dashboard_kpis(empresa_id: str, sucursal_id: str) -> dict:
         pass
 
     hl = float(kpis.get("hectolitros") or 0)
-    hl_mtd = sum(float(d.get("hectolitros") or 0) for d in dias_data if _day_from_row(d) <= hoy.day)
     prev_dias = _cal(sucursal_id, prev_anio_mes_str)
-    hl_prev_mtd = sum(float(d.get("hectolitros") or 0) for d in prev_dias if _day_from_row(d) <= corte_dia_prev)
-    delta_hl = round((hl_mtd - hl_prev_mtd) / hl_prev_mtd * 100, 1) if hl_prev_mtd else None
+
+    # El corte es el último día con datos cargados, no hoy: si la carga viene
+    # atrasada, comparar contra más días del año anterior inventa una caída.
+    corte = _ultimo_dia_con_datos(dias_data, hoy)
+    corte_prev = None
+    dia_prev = None
+    if corte:
+        corte_prev = date(anio - 1, mes, min(corte.day, calendar.monthrange(anio - 1, mes)[1]))
+        # "Mismo día" del año anterior = mismo día de la semana (364 días antes).
+        dia_prev = corte - timedelta(days=364)
+    corte_dia_prev = corte_prev.day if corte_prev else corte_dia_prev
+
+    def _dias_mes_de(fecha: date | None, suc: str, ya_cargados: list[dict]) -> list[dict]:
+        if fecha is None or fecha.strftime("%Y-%m") == prev_anio_mes_str:
+            return ya_cargados
+        return _cal(suc, fecha.strftime("%Y-%m"))
+
+    comparativo = _comparar(dias_data, prev_dias, _dias_mes_de(dia_prev, sucursal_id, prev_dias), corte, corte_prev, dia_prev)
+    def _acumulado(rows: list[dict], hasta: date | None) -> dict[int, float]:
+        por_dia: dict[int, float] = {}
+        for r in rows:
+            if hasta is not None and str(r.get("fecha") or "")[:10] > hasta.isoformat():
+                continue
+            por_dia[_day_from_row(r)] = por_dia.get(_day_from_row(r), 0.0) + float(r.get("hectolitros") or 0)
+        return por_dia
+
+    actual_dia = _acumulado(dias_data, corte) if corte else {}
+    previo_dia = _acumulado(prev_dias, None)
+    acumulado = []
+    acc_actual = acc_previo = 0.0
+    for dia in range(1, calendar.monthrange(anio, mes)[1] + 1):
+        acc_actual += actual_dia.get(dia, 0.0)
+        acc_previo += previo_dia.get(dia, 0.0)
+        acumulado.append({
+            "dia": dia,
+            "actual": round(acc_actual, 1) if corte and dia <= corte.day else None,
+            "previo": round(acc_previo, 1) if dia <= calendar.monthrange(anio - 1, mes)[1] else None,
+        })
+    comparativo.update({
+        "acumulado_hl": acumulado,
+        "corte": corte.isoformat() if corte else None,
+        "corte_prev": corte_prev.isoformat() if corte_prev else None,
+        "dia_prev": dia_prev.isoformat() if dia_prev else None,
+        "mes_prev": prev_anio_mes_str,
+        "por_sucursal": [],
+    })
+    if sucursal_id == "TODAS" and corte:
+        for suc, nombre in ((SUC_CASA_CENTRAL, "Casa Central"), (SUC_DOLORES, "Dolores")):
+            suc_prev = _cal(suc, prev_anio_mes_str)
+            item = _comparar(_cal(suc, mes_str), suc_prev, _dias_mes_de(dia_prev, suc, suc_prev), corte, corte_prev, dia_prev)
+            item.update({"sucursal": suc, "nombre": nombre})
+            comparativo["por_sucursal"].append(item)
+
+    hl_cmp = comparativo["metricas"][0]
+    hl_mtd = hl_cmp["mtd"] or 0.0
+    hl_prev_mtd = hl_cmp["mtd_prev"] or 0.0
+    delta_hl = hl_cmp["mtd_delta_pct"]
 
     bultos = float(kpis.get("bultos") or 0)
     salidas = int(kpis.get("camiones") or 0)
@@ -164,7 +283,9 @@ def get_dashboard_kpis(empresa_id: str, sucursal_id: str) -> dict:
         "hl_mtd": round(hl_mtd, 1),
         "hl_prev_mtd": round(hl_prev_mtd, 1),
         "hl_prev_mes": prev_anio_mes_str,
-        "hl_corte_dia": hoy.day,
+        "hl_corte_dia": corte.day if corte else None,
+        "hl_corte_dia_prev": corte_dia_prev,
+        "comparativo": comparativo,
         "hl_delta_pct": delta_hl,
         "bultos": round(bultos, 0),
         "salidas": salidas,

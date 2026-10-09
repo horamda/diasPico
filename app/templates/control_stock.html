@@ -1330,6 +1330,21 @@
       .perf-bar-name span,.perf-bar-name small{display:inline;margin-right:6px}
       .perf-legend{width:100%}
     }
+    /* ── Frescura: bultos en pallets cerrados vs sueltos ─────────── */
+    .fr-split{min-width:118px;text-align:right!important;white-space:nowrap}
+    .fr-split strong,.fr-split-mobile strong{display:block;font-size:15px;font-weight:850;font-variant-numeric:tabular-nums;color:var(--cs-text)}
+    .fr-split small,.fr-split-mobile small{display:block;font-size:11px;font-weight:600;color:var(--cs-muted)}
+    .fr-split .fr-sueltos,.fr-split-mobile .fr-sueltos{color:var(--cs-warning,#b45309)}
+    .fr-split .fr-sueltos-cero,.fr-split-mobile .fr-sueltos-cero{color:var(--cs-muted)}
+    .fr-split .fr-sueltos-un,.fr-split-mobile .fr-sueltos-un{font-size:12px;font-weight:800;color:var(--cs-text)}
+    .fr-split-na{font-size:11px;color:var(--cs-muted)}
+    .fr-split-mobile{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:2px 0}.fr-split-mobile.full{grid-column:1/-1}
+    .fr-split-mobile>span{display:block;padding:8px 10px;border:1px solid var(--cs-line-soft);border-radius:8px;background:var(--cs-elev);font-size:11px;font-weight:700;color:var(--cs-muted)}
+    .fr-split-mobile>span>span{display:block;margin-top:3px}
+    .fr-split-check{display:grid;gap:5px;margin-top:7px;text-align:left}
+    .fr-split-check[hidden]{display:none!important}
+    .fr-split-check select,.fr-split-check input{width:100%;min-height:34px!important;padding:4px 8px;font-size:12px;border-radius:8px}
+    .fr-split-check input:disabled{display:none}
 </style>
 </head>
 <body>
@@ -1567,7 +1582,7 @@
     </section>
     <section class="table-wrap" style="max-height:none">
       <table>
-        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Vencimiento esperado</th><th>Bultos contados</th><th>Unidades contadas</th><th>¿Coincide la fecha?</th><th>Fecha real (si no coincide)</th></tr></thead>
+        <thead><tr><th>Articulo</th><th>Descripcion</th><th>Vencimiento esperado</th><th>Bultos contados</th><th>En pallets cerrados</th><th>Sueltos (bultos + unidades)</th><th>Unidades contadas</th><th>¿Coincide la fecha?</th><th>Fecha real (si no coincide)</th></tr></thead>
         <tbody id="frescuraControlBody"></tbody>
       </table>
     </section>
@@ -2723,6 +2738,7 @@ function actualizarTotalesFrescura(){
     const u=frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '';
     const cb=b===''?null:Number(b);
     const cu=u===''?null:Number(u);
+    actualizarSplitFrescura(idx,cb??0,cu??0);
     if(cb!==null||cu!==null) cargados+=1;
     const realB=cb??0, realU=cu??0;
     totalBultos+=realB; totalUnidades+=realU;
@@ -2798,6 +2814,10 @@ function renderFrescuraMobileCards(){
     <div class="frescura-mobile-inputs">
       <div class="field"><label>Bultos</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(bultos)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></div>
       <div class="field"><label>Unids</label><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(unidades)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></div>
+    <div class="fr-split-mobile full">
+      <span>En pallets cerrados<span data-fr-cerr="${idx}">${splitPalletsHtml(r,bultos,unidades).cerr}</span>${splitCheckHtml(idx,r,'p')}</span>
+      <span>Sueltos (bultos + un.)<span data-fr-suel="${idx}">${splitPalletsHtml(r,bultos,unidades).suel}</span>${splitCheckHtml(idx,r,'s')}</span>
+    </div>
       <div class="field"><label>Fecha OK / No OK</label><select data-fr-ok="${idx}" onchange="actualizarCampoFrescura(${idx},'ok',this.value,this);fechaFrescuraLoteChanged(${idx})"><option value="PENDIENTE" ${fechaOk==='PENDIENTE'?'selected':''}>Pendiente</option><option value="OK" ${fechaOk==='OK'?'selected':''}>OK</option><option value="NO_OK" ${fechaOk==='NO_OK'?'selected':''}>No OK</option></select></div>
       <div class="field"><label>Fecha real</label><input class="stock-input" type="date" value="${esc(fechaReal)}" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" ${fechaOk==='OK'?'disabled':''}></div>
       <div class="field full"><label>Observacion</label><input class="obs-input" value="${esc(observacion)}" data-fr-obs="${idx}" placeholder="Opcional" oninput="actualizarCampoFrescura(${idx},'obs',this.value,this)"></div>
@@ -2808,16 +2828,19 @@ function renderFrescuraMobileCards(){
   }).join('');
 }
 function renderControlFrescuraRows(){
+  frSplitModo={};
   let lastGrupo='';
   frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>{
     const grupo=grupoUbicacion(r);
-    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="7"><span class="ubic-group-label">${esc(grupo)}</span></td></tr>`:'';
+    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="9"><span class="ubic-group-label">${esc(grupo)}</span></td></tr>`:'';
     lastGrupo=grupo;
     return groupRow+`<tr>
     <td class="num">${esc(r.codigo_articulo)}</td>
     <td>${esc(r.descripcion_articulo)}${ubicacionTag(r)}${botonDistribucionFrescura(idx)}</td>
     <td>${esc(r.fecha_vencimiento?fechaCorta(r.fecha_vencimiento):'-')}</td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_bultos||0)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></td>
+    <td class="fr-split"><div data-fr-cerr="${idx}">${splitPalletsHtml(r,r.stock_sistema_bultos,r.stock_sistema_unidades).cerr}</div>${splitCheckHtml(idx,r,'p')}</td>
+    <td class="fr-split"><div data-fr-suel="${idx}">${splitPalletsHtml(r,r.stock_sistema_bultos,r.stock_sistema_unidades).suel}</div>${splitCheckHtml(idx,r,'s')}</td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_unidades||0)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></td>
     <td><select data-fr-ok="${idx}" onchange="actualizarCampoFrescura(${idx},'ok',this.value,this);fechaFrescuraLoteChanged(${idx})"><option value="PENDIENTE">Pendiente</option><option value="OK">OK</option><option value="NO_OK">No OK</option></select></td>
     <td><input class="stock-input" style="width:156px;text-align:left" type="date" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" disabled></td>
@@ -2829,6 +2852,7 @@ function renderControlFrescuraRows(){
   }).join('');
   renderFrescuraMobileCards();
   aplicarDistribucionesFrescura();
+  aplicarSplitFrescura();
 }
 async function loadControlFrescura(forceSync=false){
   if(frescuraSession&&frescuraSession.estado!=='finalizado')return;
@@ -2877,6 +2901,117 @@ async function loadControlFrescura(forceSync=false){
     document.getElementById('frDesde').value=(fechaFrescura.value||today()).slice(0,8)+'01';
     document.getElementById('frHasta').value=fechaFrescura.value||today();
   }
+}
+function splitPallets(bultos,capacidad){
+  const b=Math.max(0,Number(bultos)||0), cap=Number(capacidad)||0;
+  if(cap<=0) return null;
+  const pallets=Math.floor(b/cap);
+  return {pallets,cerrados:pallets*cap,sueltos:Math.round((b-pallets*cap)*100)/100,capacidad:cap};
+}
+function splitPalletsHtml(r,bultos,unidades){
+  const u=Math.max(0,Number(unidades)||0);
+  const sp=splitPallets(bultos,r.bultos_por_pallet);
+  if(!sp) return {cerr:'<span class="fr-split-na">Sin dato de pallet</span>',suel:'<span class="fr-split-na">-</span>'};
+  const un=u>0?`<small class="fr-sueltos-un">+ ${fmt.format(u)} unidad${u===1?'':'es'}</small>`:'';
+  return {
+    cerr:`<strong>${fmt.format(sp.cerrados)}</strong><small>${fmt.format(sp.pallets)} pallet${sp.pallets===1?'':'s'} × ${fmt.format(sp.capacidad)}</small>`,
+    suel:sp.sueltos>0||u>0
+      ?`<strong class="fr-sueltos">${fmt.format(sp.sueltos)}</strong>${un}<small>${sp.sueltos>0?`faltan ${fmt.format(sp.capacidad-sp.sueltos)} para pallet`:'fuera de pallet'}</small>`
+      :`<strong class="fr-sueltos-cero">0</strong><small>sin sueltos</small>`,
+  };
+}
+// Modo "split": el lote tiene pallets cerrados Y bultos sueltos, y cada parte se
+// verifica por separado. No aplica si se usó "Revisar pallets / fechas".
+let frSplitModo={};
+function frSplitActivo(idx,bultos,unidades){
+  const r=frescuraRows[idx];
+  if(!r||r.distribucion_fechas?.length) return false;
+  const sp=splitPallets(bultos,r.bultos_por_pallet);
+  // Hay dos partes cuando existen pallets cerrados y además bultos o unidades fuera de ellos.
+  return !!sp&&sp.cerrados>0&&(sp.sueltos>0||Number(unidades)>0);
+}
+function splitCheckHtml(idx,r,k){
+  const ok=r[`_control_${k}ok`]||'PENDIENTE', real=r[`_control_${k}real`]||'';
+  const parte=k==='p'?'pallets cerrados':'bultos sueltos';
+  return `<div class="fr-split-check" data-fr-${k}chk="${idx}" hidden>
+    <select data-fr-${k}ok="${idx}" aria-label="Fecha de ${parte}" onchange="actualizarCampoFrescura(${idx},'${k}ok',this.value,this);fechaSplitChanged(${idx})">
+      <option value="PENDIENTE" ${ok==='PENDIENTE'?'selected':''}>Fecha: pendiente</option><option value="OK" ${ok==='OK'?'selected':''}>Fecha OK</option><option value="NO_OK" ${ok==='NO_OK'?'selected':''}>Fecha No OK</option>
+    </select>
+    <input type="date" data-fr-${k}real="${idx}" value="${esc(real)}" aria-label="Fecha real de ${parte}" onchange="actualizarCampoFrescura(${idx},'${k}real',this.value,this);fechaSplitChanged(${idx})" ${ok==='NO_OK'?'':'disabled'}>
+  </div>`;
+}
+function frSplitFecha(r,k){
+  const ok=r[`_control_${k}ok`]||'PENDIENTE';
+  if(ok==='NO_OK') return r[`_control_${k}real`]||'';
+  return ok==='OK'?(r.fecha_vencimiento_sistema||r.fecha_vencimiento||''):'';
+}
+// Deriva la revisión del lote a partir de las dos partes.
+function fechaSplitChanged(idx){
+  const r=frescuraRows[idx]; if(!r) return;
+  const editable=frescuraSession?.estado==='activo';
+  for(const k of ['p','s']){
+    const noOk=(r[`_control_${k}ok`]||'PENDIENTE')==='NO_OK';
+    if(!noOk) r[`_control_${k}real`]='';
+    document.querySelectorAll(`[data-fr-${k}real="${idx}"]`).forEach(el=>{el.disabled=!editable||!noOk;if(!noOk)el.value=''});
+  }
+  const pok=r._control_pok||'PENDIENTE', sok=r._control_sok||'PENDIENTE';
+  const lote=(pok==='PENDIENTE'||sok==='PENDIENTE')?'PENDIENTE':(pok==='NO_OK'||sok==='NO_OK')?'NO_OK':'OK';
+  const fechas=[frSplitFecha(r,'p'),frSplitFecha(r,'s')].filter(Boolean).sort();
+  const real=lote==='NO_OK'?(fechas[0]||''):'';
+  // Solo se escribe si cambia: así re-renderizar no marca el control como modificado.
+  if((r._control_ok??'PENDIENTE')!==lote) actualizarCampoFrescura(idx,'ok',lote,null);
+  else document.querySelectorAll(`[data-fr-ok="${idx}"]`).forEach(el=>el.value=lote);
+  if((r._control_real??'')!==real) actualizarCampoFrescura(idx,'real',real,null);
+  fechaFrescuraLoteChanged(idx);
+  document.querySelectorAll(`[data-fr-real="${idx}"]`).forEach(el=>el.disabled=true);
+}
+function actualizarSplitFrescura(idx,bultos,unidades){
+  const r=frescuraRows[idx]; if(!r) return;
+  const html=splitPalletsHtml(r,bultos,unidades);
+  document.querySelectorAll(`[data-fr-cerr="${idx}"]`).forEach(el=>el.innerHTML=html.cerr);
+  document.querySelectorAll(`[data-fr-suel="${idx}"]`).forEach(el=>el.innerHTML=html.suel);
+  const activo=frSplitActivo(idx,bultos,unidades);
+  const editable=frescuraSession?.estado==='activo';
+  document.querySelectorAll(`[data-fr-pchk="${idx}"],[data-fr-schk="${idx}"]`).forEach(el=>el.hidden=!activo);
+  document.querySelectorAll(`[data-fr-pok="${idx}"],[data-fr-sok="${idx}"]`).forEach(el=>el.disabled=!editable);
+  for(const k of ['p','s']) document.querySelectorAll(`[data-fr-${k}real="${idx}"]`).forEach(el=>el.disabled=!editable||(r[`_control_${k}ok`]||'PENDIENTE')!=='NO_OK');
+  document.querySelectorAll(`[data-fr-ok="${idx}"]`).forEach(el=>{
+    el.title=activo?'Se completa con la revisión de pallets cerrados y bultos sueltos':'';
+    if(activo) el.disabled=true;
+  });
+  if(activo) document.querySelectorAll(`[data-fr-real="${idx}"]`).forEach(el=>el.disabled=true);
+  if(frSplitModo[idx]!==activo){
+    frSplitModo[idx]=activo;
+    if(activo) fechaSplitChanged(idx);
+    else if(editable&&!r.distribucion_fechas?.length){
+      document.querySelectorAll(`[data-fr-ok="${idx}"]`).forEach(el=>el.disabled=false);
+      document.querySelectorAll(`[data-fr-real="${idx}"]`).forEach(el=>el.disabled=r._control_ok!=='NO_OK');
+    }
+  }
+}
+function aplicarSplitFrescura(){
+  frescuraRows.forEach((r,idx)=>{
+    const b=frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '';
+    const u=frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '';
+    actualizarSplitFrescura(idx,b===''?0:Number(b),u===''?0:Number(u));
+  });
+}
+// Grupos de fecha a guardar cuando el lote se revisó por partes.
+function frSplitGrupos(idx){
+  const r=frescuraRows[idx];
+  const b=Number(frescuraInput(`[data-fr-b="${idx}"]`)?.value||0), u=Number(frescuraInput(`[data-fr-u="${idx}"]`)?.value||0);
+  if(!frSplitActivo(idx,b,u)) return null;
+  const sp=splitPallets(b,r.bultos_por_pallet), sis=r.fecha_vencimiento_sistema||'';
+  const grupo=(k,referencia,bultos,unidades)=>{
+    const fecha=frSplitFecha(r,k);
+    // Una fecha "No OK" igual a la del sistema se registra como OK.
+    const revision=fecha&&fecha===sis?'OK':(r[`_control_${k}ok`]||'PENDIENTE');
+    return {referencia,bultos,unidades,fecha_vencimiento:fecha,revision};
+  };
+  return [
+    grupo('p',`Pallets cerrados (${sp.pallets} × ${sp.capacidad})`,sp.cerrados,0),
+    grupo('s',u>0?'Sueltos (bultos y unidades)':'Bultos sueltos',sp.sueltos,u),
+  ];
 }
 function grupoUbicacion(r){return r.cancha||'Sin ubicación'}
 function ubicacionTag(r){return r.con_ubicacion?`<span class="ubic-tag">${esc(r.ubicacion_label)}</span>`:'<span class="ubic-tag sin">Sin ubicación</span>'}
@@ -2937,6 +3072,11 @@ async function guardarControlFrescura(){
     await modalAlert(`Hay ${sinFecha.length} lote(s) controlados sin fecha de vencimiento. Cargá la fecha antes de guardar.`);
     return;
   }
+  const splitSinFecha=frescuraRows.map((r,idx)=>({r,grupos:frSplitGrupos(idx)})).filter(x=>x.grupos?.some(g=>!g.fecha_vencimiento));
+  if(splitSinFecha.length){
+    await modalAlert(`Falta la fecha real de pallets cerrados o bultos sueltos en: ${splitSinFecha.map(x=>x.r.codigo_articulo).join(', ')}.`);
+    return;
+  }
   if(!await modalConfirm(`Vas a guardar el control de frescura.\n\nSucursal: ${sucursalFrescura.options[sucursalFrescura.selectedIndex]?.text || sucursalFrescura.value}\nFecha: ${fechaCorta(fechaFrescura.value)}\nResponsable: ${responsableFrescura.value}\nLotes cargados: ${loaded}`,{okText:'Guardar frescura'})) return;
   guardarFrescuraBtn.disabled=true;
   guardarFrescuraBtn.textContent='Guardando...';
@@ -2946,6 +3086,7 @@ async function guardarControlFrescura(){
     revision:r._control_ok||'PENDIENTE',
     fecha_vencimiento_sistema:r.fecha_vencimiento_sistema||'',
     fecha_vencimiento:frescuraFechaControlada(idx),
+    ...(frSplitGrupos(idx)?{distribucion_fechas:frSplitGrupos(idx)}:{}),
     stock_contado_bultos:frescuraInput(`[data-fr-b="${idx}"]`)?.value ?? '',
     stock_contado_unidades:frescuraInput(`[data-fr-u="${idx}"]`)?.value ?? '',
     observacion:frescuraInput(`[data-fr-obs="${idx}"]`)?.value ?? '',

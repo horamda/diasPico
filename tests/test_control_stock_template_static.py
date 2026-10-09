@@ -27,7 +27,7 @@ def test_control_frescura_mobile_usa_inputs_visibles_para_guardar():
 def test_control_frescura_agrupa_por_cancha_en_tabla_y_mobile():
     html = TEMPLATE.read_text(encoding="utf-8")
 
-    assert '<tr class="ubic-group-row"><td colspan="7">' in html
+    assert '<tr class="ubic-group-row"><td colspan="9">' in html
     assert "frescura-mobile-code" in html
     assert "function grupoUbicacion(r){return r.cancha||'Sin ubicación'}" in html
     assert "${esc(r.descripcion_articulo)}${ubicacionTag(r)}" in html
@@ -44,7 +44,7 @@ def test_conteo_agrupa_por_cancha_y_avisa_sin_ubicacion():
 def test_control_frescura_fecha_ok_no_ok_y_fecha_real():
     html = TEMPLATE.read_text(encoding="utf-8")
 
-    assert "<th>Articulo</th><th>Descripcion</th><th>Vencimiento esperado</th><th>Bultos contados</th><th>Unidades contadas</th>" in html
+    assert "<th>Articulo</th><th>Descripcion</th><th>Vencimiento esperado</th><th>Bultos contados</th><th>En pallets cerrados</th><th>Sueltos (bultos + unidades)</th><th>Unidades contadas</th>" in html
     assert "<th>¿Coincide la fecha?</th><th>Fecha real (si no coincide)</th>" in html
     assert "function frescuraFechaControlada(idx)" in html
     assert 'data-fr-ok="${idx}"' in html
@@ -61,3 +61,12 @@ def test_control_frescura_responsive_conserva_carga_y_agrupa_cancha():
     assert "row[`_control_${campo}`]=valor;" in html
     assert 'class="frescura-cancha-title"' in html
     assert "grid-template-columns:repeat(2,minmax(0,1fr))" in html
+
+
+def test_control_frescura_separa_pallets_cerrados_y_sueltos_con_fecha_por_parte():
+    html = TEMPLATE.read_text(encoding="utf-8")
+
+    assert "function splitPallets(bultos,capacidad)" in html
+    assert "return !!sp&&sp.cerrados>0&&(sp.sueltos>0||Number(unidades)>0);" in html
+    assert "splitCheckHtml(idx,r,'p')" in html and "splitCheckHtml(idx,r,'s')" in html
+    assert "...(frSplitGrupos(idx)?{distribucion_fechas:frSplitGrupos(idx)}:{})," in html

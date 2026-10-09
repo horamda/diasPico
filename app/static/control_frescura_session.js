@@ -45,6 +45,7 @@ function frSessionControls(){
   if(active) frescuraRows.forEach((r,idx)=>{
     if(!r.distribucion_fechas?.length)document.querySelectorAll(`[data-fr-real="${idx}"]`).forEach(el=>el.disabled=r._control_ok!=='NO_OK');
   });
+  if(typeof aplicarSplitFrescura==='function')aplicarSplitFrescura();
   const leave=document.getElementById('frLeave');if(leave)leave.disabled=frescuraSession?.estado!=='pausado'||frescuraSessionRequest;
   const obs=document.getElementById('observacionesFrescura');if(obs)obs.disabled=!active;
 }
@@ -120,11 +121,12 @@ async function iniciarControlFrescura(){
 }
 function restaurarCamposFrescura(){
   frescuraRows.forEach((r,idx)=>{
-    for(const field of ['b','u','ok','real','obs']){
+    for(const field of ['b','u','ok','real','obs','pok','preal','sok','sreal']){
       if(r['_control_'+field]!==undefined)document.querySelectorAll(`[data-fr-${field}="${idx}"]`).forEach(el=>el.value=r['_control_'+field]);
     }
   });
   aplicarDistribucionesFrescura();actualizarTotalesFrescura();
+  if(typeof aplicarSplitFrescura==='function')aplicarSplitFrescura();
 }
 function frScheduleDraft(){
   clearTimeout(frescuraDraftTimer);

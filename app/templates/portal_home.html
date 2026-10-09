@@ -393,6 +393,47 @@ body { display: flex; }
   .module-hero { height: 96px; }
   .volume-chart-wrap { height: 280px; }
 }
+
+/* ── Comparativo vs año anterior ─────────────────────────── */
+:root { --yoy-cur: var(--acc); --yoy-prev: #8a94a6; }
+:root[data-theme="light"] { --yoy-prev: #7b8494; }
+.kpi-yoy { display: grid; gap: 3px; margin: -2px 0 10px; font-size: 10.5px; color: var(--muted); }
+.kpi-yoy-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.kpi-yoy-row b { color: var(--txt); font-weight: 700; }
+.kpi-yoy-row .kpi-delta { flex-shrink: 0; }
+.kpi-yoy-sep { height: 1px; background: var(--brd); margin: 3px 0; }
+.yoy-panel { margin-top: 10px; background: var(--surf); border: 1px solid var(--brd); border-radius: var(--r-lg); padding: 14px; }
+.yoy-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+.yoy-chart-box { margin: 0; min-width: 0; }
+.yoy-caption { font-size: 11px; font-weight: 600; color: var(--txt2); margin-bottom: 6px; }
+.yoy-chart { position: relative; min-height: 220px; }
+.yoy-chart svg { display: block; width: 100%; height: auto; overflow: visible; font-family: var(--sans); }
+.yoy-chart .grid { stroke: var(--brd); stroke-width: 1; }
+.yoy-chart .tick { fill: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.yoy-chart .cur { fill: none; stroke: var(--yoy-cur); stroke-width: 2.25; stroke-linejoin: round; stroke-linecap: round; }
+.yoy-chart .prev { fill: none; stroke: var(--yoy-prev); stroke-width: 2; stroke-dasharray: 5 4; stroke-linejoin: round; }
+.yoy-chart .cut { stroke: var(--txt2); stroke-width: 1; stroke-dasharray: 2 3; }
+.yoy-chart .mark-cur { fill: var(--yoy-cur); stroke: var(--surf); stroke-width: 2; }
+.yoy-chart .mark-prev { fill: var(--yoy-prev); stroke: var(--surf); stroke-width: 2; }
+.yoy-chart .end-label { font-size: 11px; font-weight: 700; fill: var(--txt); paint-order: stroke; stroke: var(--surf); stroke-width: 3px; }
+.yoy-chart .hit { fill: transparent; cursor: crosshair; }
+.yoy-chart .hover-line { stroke: var(--txt2); stroke-width: 1; opacity: 0; pointer-events: none; }
+.yoy-tip { position: fixed; z-index: 50; min-width: 170px; padding: 8px 10px; border-radius: 8px; background: var(--surf4); border: 1px solid var(--brd2); color: var(--txt); font-size: 11px; line-height: 1.5; box-shadow: var(--shadow-lg); pointer-events: none; }
+.yoy-tip b { display: block; margin-bottom: 2px; }
+.yoy-tip div { display: flex; justify-content: space-between; gap: 12px; }
+.yoy-tip i { display: inline-block; width: 10px; height: 2px; margin-right: 5px; vertical-align: middle; }
+.yoy-table-wrap { overflow-x: auto; }
+.yoy-table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+.yoy-table th, .yoy-table td { padding: 6px 8px; border-bottom: 1px solid var(--brd); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.yoy-table th { font-size: 9.5px; font-weight: 600; letter-spacing: .4px; text-transform: uppercase; color: var(--muted); background: transparent; }
+.yoy-table th.grp { text-align: center; border-bottom: 1px solid var(--brd2); color: var(--txt2); }
+.yoy-table td:first-child, .yoy-table th:first-child { text-align: left; }
+.yoy-table td.ind { font-weight: 600; color: var(--txt); }
+.yoy-table td.prev { color: var(--txt2); }
+.yoy-table tr.suc td { padding-top: 10px; font-size: 10px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--txt2); background: transparent; text-align: left; }
+.legend-line.dashed { background: repeating-linear-gradient(90deg, var(--yoy-prev) 0 5px, transparent 5px 9px) !important; }
+@media (max-width: 1100px) { .yoy-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) { .kpi-yoy-row { flex-wrap: wrap; row-gap: 1px; } .kpi-yoy-row span:last-child { margin-left: auto; } .yoy-chart { min-height: 200px; } }
 </style>
 </head>
 <body>
@@ -490,6 +531,23 @@ body { display: flex; }
       </div>
       <div class="kpi-grid" id="kpiVol">
         <div class="loading" style="grid-column:1/-1"><div class="spinner"></div> Cargando…</div>
+      </div>
+      <div class="yoy-panel" id="yoyPanel" hidden>
+        <div class="volume-mix-head">
+          <div>
+            <div class="volume-mix-title">Comparativo vs año anterior</div>
+            <div class="volume-mix-sub" id="yoySub"></div>
+          </div>
+          <div class="volume-mix-legend" id="yoyLegend"></div>
+        </div>
+        <div class="yoy-grid">
+          <figure class="yoy-chart-box">
+            <figcaption class="yoy-caption">HL acumulados del mes, día por día</figcaption>
+            <div id="yoyChart" class="yoy-chart"></div>
+          </figure>
+          <div class="yoy-table-wrap" id="yoyTable"></div>
+        </div>
+        <div class="volume-mix-foot">"Mismo día" = mismo día de la semana del año anterior (364 días antes), para comparar un martes con un martes. El mes a la fecha corta en el último día con datos en ambos años.</div>
       </div>
       <div class="volume-mix-panel">
         <div class="volume-mix-head">
@@ -607,6 +665,139 @@ function deltaChip(v, invert = false) {
   const cls  = Math.abs(v) < 0.5 ? 'eq' : good ? 'up' : 'dn';
   const icon = v > 0.1 ? '▲' : v < -0.1 ? '▼' : '—';
   return `<span class="kpi-delta ${cls}">${icon} ${Math.abs(v).toFixed(1)}%</span>`;
+}
+
+const DIAS_SEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const fmtDia = iso => {
+  if (!iso) return '—';
+  const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return `${DIAS_SEM[dow]} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${String(y).slice(2)}`;
+};
+const fmtMesCorto = ym => {
+  const [y, m] = String(ym || '').split('-');
+  return y && m ? `${MESES[Number(m) - 1].slice(0, 3).toLowerCase()} ${y}` : '—';
+};
+const cmpMetric = (d, key) => (d.comparativo?.metricas || []).find(m => m.key === key);
+
+// Líneas de comparación para las tarjetas: mes a la fecha, último día y mes completo.
+function yoyLines(d, key, unidad) {
+  const c = d.comparativo || {};
+  const m = cmpMetric(d, key);
+  if (!m || !c.corte) return '<div class="kpi-meta"><span class="kpi-sub">Sin datos del mes para comparar.</span></div>';
+  const ini = c.corte_prev ? `1–${Number(c.corte_prev.slice(8, 10))} ${fmtMesCorto(c.mes_prev)}` : '';
+  return `<div class="kpi-meta">${deltaChip(m.mtd_delta_pct)}<span class="kpi-sub">vs <b>${fmtN(m.mtd_prev)}</b> ${unidad} del ${ini}</span></div>
+    <div class="kpi-yoy">
+      <div class="kpi-yoy-row"><span>Último día · ${fmtDia(c.corte)}</span><span><b>${fmtN(m.dia)}</b> ${unidad}</span></div>
+      <div class="kpi-yoy-row"><span>Mismo día ${c.dia_prev ? c.dia_prev.slice(0, 4) : ''} · ${fmtDia(c.dia_prev)}</span><span><b>${fmtN(m.dia_prev)}</b> ${unidad} ${deltaChip(m.dia_delta_pct)}</span></div>
+      <div class="kpi-yoy-sep"></div>
+      <div class="kpi-yoy-row"><span>${fmtMesCorto(c.mes_prev)} cerró en</span><span><b>${fmtN(m.mes_prev_total)}</b> ${unidad} · llevamos ${fmtP(m.avance_vs_mes_prev_pct)}</span></div>
+    </div>`;
+}
+
+function yoyTable(d) {
+  const c = d.comparativo || {};
+  const anio = (d.mes || '').slice(0, 4);
+  const anioPrev = String(Number(anio) - 1);
+  const filas = metricas => metricas.map(m => `<tr>
+      <td class="ind">${m.label}</td>
+      <td>${fmtN(m.mtd)}</td><td class="prev">${fmtN(m.mtd_prev)}</td><td>${deltaChip(m.mtd_delta_pct)}</td>
+      <td>${fmtN(m.dia)}</td><td class="prev">${fmtN(m.dia_prev)}</td><td>${deltaChip(m.dia_delta_pct)}</td>
+      <td class="prev">${fmtN(m.mes_prev_total)}</td></tr>`).join('');
+  const grupos = (c.por_sucursal || []).length
+    ? `<tr class="suc"><td colspan="8">Total</td></tr>${filas(c.metricas)}` +
+      c.por_sucursal.map(s => `<tr class="suc"><td colspan="8">${s.nombre}</td></tr>${filas(s.metricas)}`).join('')
+    : filas(c.metricas || []);
+  return `<table class="yoy-table">
+    <thead>
+      <tr><th></th><th class="grp" colspan="3">Mes a la fecha</th><th class="grp" colspan="3">Último día vs mismo día</th><th class="grp">Mes ${anioPrev}</th></tr>
+      <tr><th>Indicador</th><th>${anio}</th><th>${anioPrev}</th><th>Var.</th><th>${fmtDia(c.corte).slice(4)}</th><th>${fmtDia(c.dia_prev).slice(4)}</th><th>Var.</th><th>Completo</th></tr>
+    </thead><tbody>${grupos}</tbody></table>`;
+}
+
+let yoyTipEl = null;
+function yoyTip(evt, html) {
+  if (!yoyTipEl) { yoyTipEl = document.createElement('div'); yoyTipEl.className = 'yoy-tip'; document.body.appendChild(yoyTipEl); }
+  if (!html) { yoyTipEl.hidden = true; return; }
+  yoyTipEl.hidden = false;
+  yoyTipEl.innerHTML = html;
+  const r = yoyTipEl.getBoundingClientRect();
+  let x = evt.clientX + 14, y = evt.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - 14;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - 14;
+  yoyTipEl.style.left = x + 'px';
+  yoyTipEl.style.top = y + 'px';
+}
+
+let lastYoy = null;
+function drawYoyChart(d) {
+  const box = document.getElementById('yoyChart');
+  const serie = d?.comparativo?.acumulado_hl || [];
+  if (!box || !serie.length) return;
+  const anio = (d.mes || '').slice(0, 4), anioPrev = String(Number(anio) - 1);
+  const W = Math.max(280, box.clientWidth || 480), H = 230;
+  const m = { t: 14, r: 64, b: 26, l: 48 };
+  const max = Math.max(1, ...serie.map(p => Math.max(p.actual || 0, p.previo || 0)));
+  const exp = Math.pow(10, Math.floor(Math.log10(max)));
+  const yMax = [1, 2, 2.5, 5, 10].map(f => f * exp).find(v => v >= max * 1.05) || max;
+  const n = serie.length;
+  const x = dia => m.l + ((dia - 1) / Math.max(1, n - 1)) * (W - m.l - m.r);
+  const y = v => H - m.b - (v / yMax) * (H - m.t - m.b);
+  const path = key => serie.filter(p => p[key] != null).map((p, i) => `${i ? 'L' : 'M'}${x(p.dia).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="HL acumulados del mes ${anio} contra ${anioPrev}">`;
+  for (let i = 0; i <= 4; i++) {
+    const v = (yMax / 4) * i;
+    svg += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${fmtHl(v)}</text>`;
+  }
+  [1, 5, 10, 15, 20, 25, n].filter((v, i, a) => v <= n && a.indexOf(v) === i).forEach(dia => {
+    svg += `<text class="tick" x="${x(dia)}" y="${H - 8}" text-anchor="middle">${dia}</text>`;
+  });
+  svg += `<path class="prev" d="${path('previo')}"/><path class="cur" d="${path('actual')}"/>`;
+  const ultPrev = [...serie].reverse().find(p => p.previo != null);
+  if (ultPrev) svg += `<circle class="mark-prev" cx="${x(ultPrev.dia)}" cy="${y(ultPrev.previo)}" r="4"/><text class="end-label" x="${x(ultPrev.dia) + 8}" y="${y(ultPrev.previo) + 4}">${fmtHl(ultPrev.previo)}</text>`;
+  const corte = [...serie].reverse().find(p => p.actual != null);
+  if (corte) {
+    const prevCorte = serie.find(p => p.dia === corte.dia)?.previo;
+    svg += `<line class="cut" x1="${x(corte.dia)}" x2="${x(corte.dia)}" y1="${m.t}" y2="${H - m.b}"/>`;
+    if (prevCorte != null) svg += `<circle class="mark-prev" cx="${x(corte.dia)}" cy="${y(prevCorte)}" r="4"/>`;
+    svg += `<circle class="mark-cur" cx="${x(corte.dia)}" cy="${y(corte.actual)}" r="5"/><text class="end-label" x="${x(corte.dia) + 8}" y="${y(corte.actual) - 6}">${fmtHl(corte.actual)}</text>`;
+  }
+  svg += `<line class="hover-line" id="yoyHover" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}"/>`;
+  const step = (W - m.l - m.r) / Math.max(1, n - 1);
+  serie.forEach(p => {
+    svg += `<rect class="hit" data-dia="${p.dia}" x="${x(p.dia) - step / 2}" y="${m.t}" width="${step}" height="${H - m.t - m.b}"/>`;
+  });
+  svg += '</svg>';
+  box.innerHTML = svg;
+  const hover = box.querySelector('#yoyHover');
+  box.querySelectorAll('.hit').forEach(rect => {
+    rect.addEventListener('pointermove', evt => {
+      const p = serie[Number(rect.dataset.dia) - 1];
+      hover.setAttribute('x1', x(p.dia)); hover.setAttribute('x2', x(p.dia)); hover.style.opacity = .5;
+      const diff = p.actual != null && p.previo ? ((p.actual - p.previo) / p.previo) * 100 : null;
+      yoyTip(evt, `<b>Día ${p.dia} · acumulado</b>
+        <div><span><i style="background:var(--yoy-cur)"></i>${anio}</span><strong>${p.actual == null ? 'sin datos' : fmtHl(p.actual) + ' HL'}</strong></div>
+        <div><span><i style="background:var(--yoy-prev)"></i>${anioPrev}</span><strong>${p.previo == null ? '—' : fmtHl(p.previo) + ' HL'}</strong></div>
+        ${diff == null ? '' : `<div><span>Diferencia</span><strong>${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</strong></div>`}`);
+    });
+    rect.addEventListener('pointerleave', () => { hover.style.opacity = 0; yoyTip(null, null); });
+  });
+}
+
+function renderYoy(d) {
+  const panel = document.getElementById('yoyPanel');
+  const c = d.comparativo;
+  if (!c || !c.corte) { panel.hidden = true; return; }
+  panel.hidden = false;
+  lastYoy = d;
+  const anio = (d.mes || '').slice(0, 4), anioPrev = String(Number(anio) - 1);
+  document.getElementById('yoySub').textContent =
+    `Mes a la fecha al ${fmtDia(c.corte)} contra el mismo tramo de ${anioPrev} · ${c.dias_reparto} vs ${c.dias_reparto_prev} días con reparto.`;
+  document.getElementById('yoyLegend').innerHTML =
+    `<span class="legend-item"><i class="legend-line" style="background:var(--yoy-cur)"></i>${anio}</span>` +
+    `<span class="legend-item"><i class="legend-line dashed"></i>${anioPrev}</span>`;
+  document.getElementById('yoyTable').innerHTML = yoyTable(d);
+  drawYoyChart(d);
 }
 
 function progressBar(pct) {
@@ -844,6 +1035,7 @@ async function reloadKpis() {
 
 function renderDashboard(d) {
   lastPesoSucursales = Array.isArray(d.peso_sucursales) ? d.peso_sucursales : [];
+  renderYoy(d);
   drawVolumeMix(lastPesoSucursales);
   drawVolumeDonut(lastPesoSucursales);
   document.getElementById('dataUpdated').textContent = `Datos hasta: ${fmtDate(d.ultima_fecha_datos)}`;
@@ -859,7 +1051,8 @@ function renderDashboard(d) {
   // ── Semáforos ─────────────────────────────────────────
   const dv     = d.hl_delta_pct;
   const hlCls  = dv == null ? 'blu' : dv >= -5 ? 'grn' : dv >= -15 ? 'ora' : 'red';
-  const bltCls = d.salidas > 0 ? 'grn' : 'blu';
+  const bv     = cmpMetric(d, 'bultos')?.mtd_delta_pct;
+  const bltCls = bv == null ? (d.salidas > 0 ? 'grn' : 'blu') : bv >= -5 ? 'grn' : bv >= -15 ? 'ora' : 'red';
   const ndsCls = d.nds == null ? 'blu' : d.nds >= 95 ? 'grn' : d.nds >= 90 ? 'ora' : 'red';
   const dpCls  = d.dias_pico <= 3 ? 'grn' : d.dias_pico <= 6 ? 'ora' : 'red';
   const ausCls = d.pct_ausentismo == null ? 'blu' : d.pct_ausentismo < 5 ? 'grn' : d.pct_ausentismo < 10 ? 'ora' : 'red';
@@ -867,7 +1060,7 @@ function renderDashboard(d) {
 
   // ── VOLUMEN ───────────────────────────────────────────
   const hlPct  = dv == null ? 50 : Math.min(100, Math.max(0, 50 + dv / 2));
-  const bltPct = Math.min(100, d.salidas > 0 ? 80 : 40);
+  const bltPct = bv == null ? Math.min(100, d.salidas > 0 ? 80 : 40) : Math.min(100, Math.max(0, 50 + bv / 2));
 
   document.getElementById('kpiVol').innerHTML = `
     <div class="kpi-card ${hlCls}">
@@ -875,11 +1068,8 @@ function renderDashboard(d) {
         <div class="kpi-lbl">HL despachados</div>
         <div class="kpi-icon">📦</div>
       </div>
-      <div class="kpi-val ${hlCls}">${fmtN(d.hl)}</div>
-      <div class="kpi-meta">
-        ${deltaChip(dv)}
-        <span class="kpi-sub">vs mismos días año anterior</span>
-      </div>
+      <div class="kpi-val ${hlCls}">${fmtN(d.hl_mtd)}</div>
+      ${yoyLines(d, 'hl', 'HL')}
       ${progressBar(hlPct)}
     </div>
 
@@ -889,6 +1079,7 @@ function renderDashboard(d) {
         <div class="kpi-icon">🗃️</div>
       </div>
       <div class="kpi-val ${bltCls}">${fmtN(d.bultos)}</div>
+      ${yoyLines(d, 'bultos', 'bultos')}
       ${bultosBreakdown(d)}
       ${progressBar(bltPct)}
     </div>`;
@@ -977,9 +1168,9 @@ function renderDashboard(d) {
     html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">Ausentismo moderado ${fmtP(d.pct_ausentismo)} — monitorear.</span></div>`;
   }
   if (dv != null && dv < -15) {
-    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Caída fuerte de HL vs mismos días año anterior (${fmtP(dv)}).</span></div>`;
+    html += `<div class="alert-item err"><span class="alert-icon">⊗</span><span class="alert-text">Caída fuerte de HL vs mismos días año anterior (${fmtP(dv)}, al ${fmtDia(d.comparativo?.corte)}).</span></div>`;
   } else if (dv != null && dv < -5) {
-    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">HL por debajo de mismos días año anterior (${fmtP(dv)}).</span></div>`;
+    html += `<div class="alert-item warn"><span class="alert-icon">⊘</span><span class="alert-text">HL por debajo de mismos días año anterior (${fmtP(dv)}, al ${fmtDia(d.comparativo?.corte)}).</span></div>`;
   }
   document.getElementById('alertsArea').innerHTML = html;
 }
@@ -990,6 +1181,7 @@ window.addEventListener('resize', () => {
   resizeVolumeTimer = setTimeout(() => {
     drawVolumeMix(lastPesoSucursales);
     drawVolumeDonut(lastPesoSucursales);
+    if (lastYoy) drawYoyChart(lastYoy);
   }, 120);
 });
 new MutationObserver(() => {
