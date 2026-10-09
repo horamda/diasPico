@@ -50,6 +50,8 @@ def test_planilla_sabado_incluye_articulos_fijos_en_cualquier_semana(monkeypatch
         ],
     )
 
+    monkeypatch.setattr(svc.ubicaciones_svc, "get_mapa", lambda sucursal: {})
+
     data = svc.get_planilla(mes="2026-08", semana="semana2", dia="Sabado", sucursal="2")
 
     assert [row["id_articulo"] for row in data["rows"]] == [2776, 2731, 2777]

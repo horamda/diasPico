@@ -3,7 +3,7 @@ from __future__ import annotations
 from flask import Blueprint, g, jsonify, request
 
 from app.routes.portal import login_required
-from app.services import control_stock_svc
+from app.services import control_stock_svc, ubicaciones_svc
 
 
 bp = Blueprint("control_stock", __name__, url_prefix="/api/control-stock")
@@ -360,3 +360,84 @@ def historial_externo():
         return jsonify({"ok": False, "error": str(exc)}), 400
     except Exception:
         return jsonify({"ok": False, "error": "No se pudieron consultar los controles externos"}), 500
+
+
+def _usuario_actual() -> str:
+    user = getattr(g, "portal_user", None) or {}
+    return str(user.get("nombre") or user.get("username") or "")
+
+
+def _sucursal_arg() -> str:
+    return control_stock_svc._sucursal_id(request.args.get("sucursal", "1"))
+
+
+@bp.get("/ubicaciones")
+@login_required
+def listar_ubicaciones():
+    try:
+        rows = ubicaciones_svc.list_ubicaciones(_sucursal_arg(), request.args.get("q", ""))
+        return jsonify({"ok": True, "total": len(rows), "rows": rows})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/ubicaciones/almacenes")
+@login_required
+def listar_almacenes_ubicacion():
+    try:
+        return jsonify({"ok": True, "rows": ubicaciones_svc.list_almacenes(_sucursal_arg())})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.get("/ubicaciones/sin-ubicacion")
+@login_required
+def articulos_sin_ubicacion():
+    try:
+        return jsonify(control_stock_svc.get_articulos_sin_ubicacion(_sucursal_arg(), request.args.get("mes")))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.post("/ubicaciones/import")
+@login_required
+def importar_ubicaciones():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"ok": False, "error": "Seleccioná el Excel de orden de canchas"}), 400
+    try:
+        return jsonify(ubicaciones_svc.importar_excel(f.read(), usuario=_usuario_actual()))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.put("/ubicaciones/<sucursal>/<int:id_articulo>")
+@login_required
+def guardar_ubicacion(sucursal: str, id_articulo: int):
+    try:
+        data = ubicaciones_svc.guardar_manual(
+            control_stock_svc._sucursal_id(sucursal),
+            id_articulo,
+            request.get_json(force=True) or {},
+            usuario=_usuario_actual(),
+        )
+        return jsonify({"ok": True, "data": data})
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+@bp.delete("/ubicaciones/<sucursal>/<int:id_articulo>")
+@login_required
+def eliminar_ubicacion(sucursal: str, id_articulo: int):
+    try:
+        if not ubicaciones_svc.eliminar(control_stock_svc._sucursal_id(sucursal), id_articulo):
+            return jsonify({"ok": False, "error": "El artículo no tiene ubicación cargada"}), 404
+        return jsonify({"ok": True})
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500

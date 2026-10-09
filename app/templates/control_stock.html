@@ -1148,8 +1148,9 @@
     .frescura-mobile-inputs input[type=number]{text-align:center!important;font-size:18px!important;font-weight:800}
     .frescura-mobile-diff{margin-top:10px;justify-content:center}
     .frescura-mobile-toolbar{display:none}
-    .frescura-calibre-title{display:none}
-    .frescura-calibre-row td{position:static!important;background:var(--cs-elev)!important;color:var(--cs-text)!important;font-weight:900;text-align:left;border-color:var(--cs-line)!important}
+    .frescura-cancha-title{display:none}
+    .ubic-tag{display:block;font-size:11px;font-weight:600;color:var(--cs-muted,#64748b);margin-top:2px}.ubic-tag.sin{color:#b45309}
+    .ubic-group-row td{position:static!important;background:var(--cs-elev)!important;color:var(--cs-text)!important;font-weight:900;text-align:left;border-color:var(--cs-line)!important}
     @media(max-width:1280px){
       #viewFrescura>.table-wrap{display:none!important}
       #viewFrescura>.table-wrap:last-of-type{display:block!important;max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
@@ -1158,8 +1159,8 @@
       .frescura-mobile-toolbar span{display:block;margin-top:2px;font-size:12px;color:var(--cs-muted)}
       .frescura-mobile-toolbar .pill{flex:0 0 auto;margin:0}
       #frescuraControlCards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding-bottom:8px}
-      #frescuraControlCards .frescura-calibre-title{display:flex;grid-column:1/-1;align-items:center;gap:10px;margin:8px 0 0;color:var(--cs-text);font-size:14px;font-weight:900}
-      #frescuraControlCards .frescura-calibre-title::after{content:"";height:1px;flex:1;background:var(--cs-line)}
+      #frescuraControlCards .frescura-cancha-title{display:flex;grid-column:1/-1;align-items:center;gap:10px;margin:8px 0 0;color:var(--cs-text);font-size:14px;font-weight:900}
+      #frescuraControlCards .frescura-cancha-title::after{content:"";height:1px;flex:1;background:var(--cs-line)}
       #frescuraControlCards .frescura-mobile-card{display:block;min-width:0;margin:0;padding:16px;border:1px solid var(--cs-line);border-radius:8px;background:var(--cs-surface);box-shadow:var(--cs-shadow-soft)}
       #viewFrescura .save-footer{position:static!important;display:flex!important;flex-direction:row!important;align-items:center;margin:12px 0 20px!important;padding:12px!important;border-radius:8px!important}
     }
@@ -1437,7 +1438,7 @@
     </div>
     <p class="fr-help">Verificá los <strong>bultos y unidades</strong> contados. Marcá <strong>OK</strong> si el vencimiento coincide, o <strong>No OK</strong> y cargá la fecha real. Si hay distintas fechas en un lote, usá <strong>Revisar pallets / fechas</strong>.</p>
     <section class="frescura-mobile-toolbar" aria-label="Progreso del control de frescura">
-      <div><strong>Artículos por calibre</strong><span>Revisá stock y vencimiento de cada lote</span></div>
+      <div><strong>Artículos por cancha</strong><span>Seguí el recorrido del depósito y revisá cada lote</span></div>
       <span class="pill" id="frescuraMobileProgress">0 de 0</span>
     </section>
     <section class="table-wrap" style="max-height:none">
@@ -2629,23 +2630,23 @@ function fechaFrescuraLoteChanged(idx){
 }
 function renderFrescuraMobileCards(){
   if(!frescuraRows.length){frescuraControlCards.innerHTML='';return}
-  let lastCalibre='';
+  let lastGrupo='';
   frescuraControlCards.innerHTML=frescuraRows.map((r,idx)=>{
-    const calibre=String(r.calibre_label||'Sin calibre');
-    const startsGroup=calibre!==lastCalibre;
-    lastCalibre=calibre;
+    const grupo=grupoUbicacion(r);
+    const startsGroup=grupo!==lastGrupo;
+    lastGrupo=grupo;
     const bultos=r._control_b ?? r.stock_sistema_bultos ?? 0;
     const unidades=r._control_u ?? r.stock_sistema_unidades ?? 0;
     const fechaOk=r._control_ok || 'PENDIENTE';
     const fechaReal=r._control_real || '';
     const observacion=r._control_obs || '';
-    const groupTitle=startsGroup?`<div class="frescura-calibre-title"><span>${esc(calibre)}</span></div>`:'';
+    const groupTitle=startsGroup?`<div class="frescura-cancha-title"><span>${esc(grupo)}</span></div>`:'';
     return `${groupTitle}<article class="frescura-mobile-card">
     <div class="frescura-mobile-head">
       <span class="frescura-mobile-code">${esc(r.codigo_articulo)}</span>
       <span class="frescura-mobile-lote">Lote ${esc(r.lote||'-')}</span>
     </div>
-    <div class="frescura-mobile-desc">${esc(r.descripcion_articulo)}</div>
+    <div class="frescura-mobile-desc">${esc(r.descripcion_articulo)}${ubicacionTag(r)}</div>
     <div class="frescura-mobile-system">
       <span>Vencimiento esperado<strong>${esc(r.fecha_vencimiento?fechaCorta(r.fecha_vencimiento):'-')}</strong></span>
       <span>Bultos<strong>${fmt.format(r.stock_sistema_bultos||0)}</strong></span>
@@ -2665,14 +2666,14 @@ function renderFrescuraMobileCards(){
   }).join('');
 }
 function renderControlFrescuraRows(){
-  let lastCalibre='';
+  let lastGrupo='';
   frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>{
-    const calibre=String(r.calibre_label||'Sin calibre');
-    const groupRow=calibre!==lastCalibre?`<tr class="frescura-calibre-row"><td colspan="7">${esc(calibre)}</td></tr>`:'';
-    lastCalibre=calibre;
+    const grupo=grupoUbicacion(r);
+    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="7">${esc(grupo)}</td></tr>`:'';
+    lastGrupo=grupo;
     return groupRow+`<tr>
     <td class="num">${esc(r.codigo_articulo)}</td>
-    <td>${esc(r.descripcion_articulo)}<br>${botonDistribucionFrescura(idx)}</td>
+    <td>${esc(r.descripcion_articulo)}${ubicacionTag(r)}${botonDistribucionFrescura(idx)}</td>
     <td>${esc(r.fecha_vencimiento?fechaCorta(r.fecha_vencimiento):'-')}</td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_bultos||0)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_unidades||0)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></td>
@@ -2718,8 +2719,8 @@ async function loadControlFrescura(forceSync=false){
   frLotes.textContent=`Lotes: ${fmt.format(data.total_lotes||0)}`;
   frTotal.textContent=`Sistema: ${fmt.format(data.total_bultos||0)} bultos con ${fmt.format(data.total_unidades||0)} unidades`;
   frescuraControlStatus.textContent=data.es_miercoles
-    ? `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar.`
-    : `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar. La fecha seleccionada es ${data.dia}; podes iniciar y guardar el control.`;
+    ? `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar.${avisoSinUbicacion(data.sin_ubicacion)}`
+    : `Planilla lista: ${fmt.format(frescuraRows.length)} lotes para controlar. La fecha seleccionada es ${data.dia}; podes iniciar y guardar el control.${avisoSinUbicacion(data.sin_ubicacion)}`;
   renderControlFrescuraRows();
   frescuraLoaded=true;
   actualizarTotalesFrescura();
@@ -2735,6 +2736,9 @@ async function loadControlFrescura(forceSync=false){
     document.getElementById('frHasta').value=fechaFrescura.value||today();
   }
 }
+function grupoUbicacion(r){return r.cancha||'Sin ubicación'}
+function ubicacionTag(r){return r.con_ubicacion?`<span class="ubic-tag">${esc(r.ubicacion_label)}</span>`:'<span class="ubic-tag sin">Sin ubicación</span>'}
+function avisoSinUbicacion(n){return n?` ${n} artículo(s) sin ubicación quedan al final; cargalos en Importaciones > Ubicaciones en depósito.`:''}
 async function loadDiferenciasFrescura(){
   const desde=(fechaFrescura.value||today()).slice(0,8)+'01';
   const hasta=fechaFrescura.value||today();
@@ -3012,7 +3016,7 @@ function renderMobileCards(){
   </div>`:'';
   cards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">${esc(rowSemana(r))} · ${esc(rowDia(r))}</span></div>
-    <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
+    <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}${ubicacionTag(r)}</div>
     <div class="mobile-logistics">
       <span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</strong></span>
       <span>Bultos/Piso<strong>${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</strong></span>
@@ -3049,7 +3053,7 @@ function abrirListaArticulosConteo(){
     return `<button type="button" class="modal-list-item ${i===mobileIndex?'current':''}" data-idx="${i}">
       <span class="modal-list-code">${esc(r.id_articulo)} <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span>
       <span class="modal-list-status ${done?'ok':'pending'}">${done?'Cargado':'Pendiente'}</span>
-      <span class="modal-list-desc">${esc(r.descripcion)}</span>
+      <span class="modal-list-desc">${esc(r.descripcion)} · ${esc(r.ubicacion_label||'Sin ubicación')}</span>
     </button>`;
   }).join('');
   const cargados=currentRows.filter(rowTouched).length;
@@ -3156,7 +3160,7 @@ function externalMobileNext(){
 }
 function renderControlExterno(){
   document.querySelector('#viewExterno thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
-  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td><td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td><td class="num">${logVal(r.pisos,r,'pisos')}</td><td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" data-ext-cant="${r.id_articulo}-${n}" value="${esc(externalDraft.values?.[String(r.id_articulo)+'-'+n]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Unidades sueltas" data-ext-unid="${r.id_articulo}" value="${esc(externalDraft.unidades?.[r.id_articulo]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
+  externoBody.innerHTML=externalRows.map(r=>`<tr><td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}${ubicacionTag(r)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td><td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td><td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td><td class="num">${logVal(r.pisos,r,'pisos')}</td><td class="num">${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</td>${[1,2,3,4,5,6].map(n=>`<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" data-ext-cant="${r.id_articulo}-${n}" value="${esc(externalDraft.values?.[String(r.id_articulo)+'-'+n]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td>`).join('')}<td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Unidades sueltas" data-ext-unid="${r.id_articulo}" value="${esc(externalDraft.unidades?.[r.id_articulo]??'')}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()"></td><td class="num" data-ext-total="${r.id_articulo}">0</td><td class="num" data-ext-unidades="${r.id_articulo}">0</td></tr>`).join('');
   const visibleRows=isMobileConteo()? [externalRows[Math.min(mobileIndex,externalRows.length-1)]].filter(Boolean) : externalRows;
   const cargados=externalRows.filter(externalRowTouched).length;
   const bar=isMobileConteo()&&externalRows.length?`<div class="mobile-carousel-bar">
@@ -3169,7 +3173,7 @@ function renderControlExterno(){
   </div>`:'';
   externoCards.innerHTML=bar+visibleRows.map(r=>`<article class="mobile-card">
     <div class="mobile-head"><span class="mobile-article-code">${esc(r.id_articulo)} · <span class="abc-badge abc-${String(r.abc||'').toLowerCase()}">${esc(r.abc)}</span></span><span class="mobile-article-route">Externo</span></div>
-    <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}</div>
+    <div class="mobile-meta mobile-article-desc">${esc(r.descripcion)}${ubicacionTag(r)}</div>
     <div class="mobile-logistics"><span>Bultos/Pallet<strong>${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</strong></span><span>Bultos/Piso<strong>${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</strong></span><span>Pisos<strong>${logVal(r.pisos,r,'pisos')}</strong></span><span>Unid/Bulto<strong>${logVal(r.unidades_por_bulto,r,'unidades_por_bulto')}</strong></span></div>
     <div class="mobile-error" id="externalMobileError">Carga al menos un valor para este articulo. Si no hay stock, escribi 0.</div>
     <div class="mobile-group"><div class="mobile-group-title">Bultos</div><div class="mobile-group-hint">Bultos completos encontrados en el conteo externo.</div><div class="mobile-row five">${[1,2,3,4,5,6].map((n,i)=>`<input class="stock-input" type="number" step="1" min="0" inputmode="numeric" aria-label="Bultos ${n}" data-ext-cant="${r.id_articulo}-${n}" value="${esc(cantidadInputsExterno(r.id_articulo).rawValues[i])}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotalesExterno()">`).join('')}</div></div>
@@ -3324,8 +3328,13 @@ async function loadPlanilla(){
   pArt.textContent=`Artículos: ${data.total_filtrado}`;
   pDia.textContent=`Fecha de control: ${fechaCorta(fecha.value)} | ${f.semana.toUpperCase()} | ${f.dia}`;
   document.querySelector('#viewConteo thead tr').innerHTML='<th>Articulo</th><th>Descripcion</th><th>ABC</th><th>Semana</th><th>Dia</th><th>Bultos/Pallet</th><th>Bultos/Piso</th><th>Pisos</th><th>Unid/Bulto</th><th>Bultos 1</th><th>Bultos 2</th><th>Bultos 3</th><th>Bultos 4</th><th>Bultos 5</th><th>Bultos 6</th><th>Unidades</th><th>Total bultos</th><th>Total unidades</th>';
-  tbody.innerHTML=currentRows.map(r=>`<tr>
-    <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
+  let lastGrupo='';
+  tbody.innerHTML=currentRows.map(r=>{
+    const grupo=grupoUbicacion(r);
+    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="18">${esc(grupo)}</td></tr>`:'';
+    lastGrupo=grupo;
+    return groupRow+`<tr>
+    <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}${ubicacionTag(r)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
     <td>${esc(rowSemana(r))}</td><td>${esc(rowDia(r))}</td>
     <td class="num">${logVal(r.bultos_por_pallet,r,'bultos_por_pallet')}</td>
     <td class="num">${logVal(r.bultos_por_piso,r,'bultos_por_piso')}</td>
@@ -3340,9 +3349,9 @@ async function loadPlanilla(){
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" pattern="[0-9]*" data-unid="${r.id_articulo}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarTotales()"></td>
     <td class="num" data-total="${r.id_articulo}">0</td>
     <td class="num" data-unidades="${r.id_articulo}">0</td>
-  </tr>`).join('');
+  </tr>`}).join('');
   renderMobileCards();
-  status.textContent=`Planilla lista: ${currentRows.length} artículos para contar.${logisticaAviso(data,currentRows)}`;
+  status.textContent=`Planilla lista: ${currentRows.length} artículos para contar en orden de recorrido.${avisoSinUbicacion(data.sin_ubicacion)}${logisticaAviso(data,currentRows)}`;
   if(!isMobileConteo()){
     cargarBorradorLocal();
     actualizarTotales(false);

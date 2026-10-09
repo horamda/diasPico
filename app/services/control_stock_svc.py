@@ -10,7 +10,7 @@ import psycopg2.extras
 
 from app.database import pg_conn, pg_cursor
 from app.services.articulos_svc import ensure_articulos_table
-from app.services import frescura_svc, frescura_control_svc
+from app.services import frescura_svc, frescura_control_svc, ubicaciones_svc
 from app.services.ventas_svc import ensure_ventas_detalle_table
 
 
@@ -810,6 +810,8 @@ def get_planilla(
                 continue
             rows.append(_prepare_saturday_planilla_row(row, semana_key))
             seen_ids.add(article_id)
+    rows = ubicaciones_svc.ordenar_por_recorrido(rows, data["sucursal"])
+    data["sin_ubicacion"] = sum(1 for row in rows if not row.get("con_ubicacion"))
     data["rows"] = rows
     data["total_filtrado"] = len(rows)
     incompletos = sum(1 for row in rows if row.get("logistica_incompleta"))
@@ -844,7 +846,7 @@ def generar_control_externo(mes: str | None = None, sucursal: str | None = "1", 
         restantes = [row for row in rows if int(row["id_articulo"]) not in selected_ids]
         if restantes:
             selected.extend(random.sample(restantes, min(faltan, len(restantes))))
-    random.shuffle(selected)
+    selected = ubicaciones_svc.ordenar_por_recorrido(selected, suc)
     for row in selected:
         row["control_semana"] = "externo"
         row["control_dia"] = "Externo"
@@ -1132,6 +1134,57 @@ def validar_dispersion_conteo(payload: dict) -> dict:
     }
 
 
+def get_articulos_sin_ubicacion(sucursal: str | None = "1", mes: str | None = None) -> dict:
+    """Artículos que entran al control de stock o a Frescura y no tienen ubicación."""
+    suc = _sucursal_id(sucursal)
+    mapa = ubicaciones_svc.get_mapa(suc)
+    faltantes: dict[int, dict] = {}
+    for row in get_abc_articulos(mes, sucursal=suc).get("rows", []):
+        article_id = int(row.get("id_articulo") or 0)
+        if article_id and article_id not in mapa:
+            faltantes[article_id] = {
+                "id_articulo": article_id,
+                "descripcion": row.get("descripcion") or "",
+                "abc": row.get("abc") or "",
+                "bultos_mes": row.get("bultos") or 0,
+                "stock_frescura": 0.0,
+                "control_stock": True,
+                "frescura": False,
+            }
+    frescura_svc._ensure_tables()
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT a.id_articulo, MAX(a.descripcion) AS descripcion,
+                   SUM(COALESCE(fa.stock_bultos, fa.stock_actual, 0)) AS stock_bultos
+            FROM frescura_articulos fa
+            JOIN articulos a ON a.id_articulo::text = fa.codigo_articulo
+            WHERE fa.sucursal_id = %s
+              AND (COALESCE(fa.stock_bultos, 0) <> 0 OR COALESCE(fa.stock_unidades, 0) <> 0 OR COALESCE(fa.stock_actual, 0) <> 0)
+              AND UPPER(TRIM(COALESCE(a.tipo_producto, ''))) = 'MERCADERIA'
+            GROUP BY a.id_articulo
+            """,
+            (suc,),
+        )
+        for row in cur.fetchall() or []:
+            article_id = int(row["id_articulo"])
+            if article_id in mapa:
+                continue
+            item = faltantes.setdefault(article_id, {
+                "id_articulo": article_id,
+                "descripcion": row.get("descripcion") or "",
+                "abc": "",
+                "bultos_mes": 0,
+                "stock_frescura": 0.0,
+                "control_stock": False,
+                "frescura": True,
+            })
+            item["frescura"] = True
+            item["stock_frescura"] = round(float(row.get("stock_bultos") or 0), 2)
+    rows = sorted(faltantes.values(), key=lambda r: ({"A": 0, "B": 1, "C": 2}.get(r["abc"], 3), -float(r["bultos_mes"] or 0), r["id_articulo"]))
+    return {"ok": True, "sucursal": suc, "sucursal_nombre": _sucursal_nombre(suc), "total": len(rows), "rows": rows}
+
+
 def _float_or_none(value):
     if value in (None, ""):
         return None
@@ -1221,6 +1274,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
             "stock_sistema_unidades": round(unidades, 2),
             "fecha_actualizacion": row.get("fecha_actualizacion").isoformat() if row.get("fecha_actualizacion") else "",
         })
+    rows = ubicaciones_svc.ordenar_por_recorrido(rows, suc, id_key="codigo_articulo")
 
     return {
         "ok": True,
@@ -1234,6 +1288,7 @@ def get_control_frescura_planilla(fecha_control: str | None = None, sucursal: st
         "total_bultos": round(sum(row["stock_sistema_bultos"] for row in rows), 2),
         "total_unidades": round(sum(row["stock_sistema_unidades"] for row in rows), 2),
         "frescura_status": status,
+        "sin_ubicacion": len({row["codigo_articulo"] for row in rows if not row.get("con_ubicacion")}),
         "rows": rows,
     }
 

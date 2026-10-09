@@ -24,13 +24,21 @@ def test_control_frescura_mobile_usa_inputs_visibles_para_guardar():
     assert "stock_contado_bultos:frescuraInput(`[data-fr-b=\"${idx}\"]`)?.value ?? ''," in html
 
 
-def test_control_frescura_muestra_calibre_en_tabla_y_mobile():
+def test_control_frescura_agrupa_por_cancha_en_tabla_y_mobile():
     html = TEMPLATE.read_text(encoding="utf-8")
 
-    assert 'class="frescura-calibre-row"' in html
-    assert 'colspan="7"' in html
+    assert '<tr class="ubic-group-row"><td colspan="7">' in html
     assert "frescura-mobile-code" in html
-    assert "r.calibre_label||'Sin calibre'" in html
+    assert "function grupoUbicacion(r){return r.cancha||'Sin ubicación'}" in html
+    assert "${esc(r.descripcion_articulo)}${ubicacionTag(r)}" in html
+
+
+def test_conteo_agrupa_por_cancha_y_avisa_sin_ubicacion():
+    html = TEMPLATE.read_text(encoding="utf-8")
+
+    assert '<tr class="ubic-group-row"><td colspan="18">' in html
+    assert "${esc(r.descripcion)}${ubicacionTag(r)}" in html
+    assert "avisoSinUbicacion(data.sin_ubicacion)" in html
 
 
 def test_control_frescura_fecha_ok_no_ok_y_fecha_real():
@@ -44,12 +52,12 @@ def test_control_frescura_fecha_ok_no_ok_y_fecha_real():
     assert "fecha_vencimiento:frescuraFechaControlada(idx)" in html
 
 
-def test_control_frescura_responsive_conserva_carga_y_agrupa_calibre():
+def test_control_frescura_responsive_conserva_carga_y_agrupa_cancha():
     html = TEMPLATE.read_text(encoding="utf-8")
 
     assert 'class="frescura-mobile-toolbar"' in html
     assert 'id="frescuraMobileProgress"' in html
     assert "function actualizarCampoFrescura(idx,campo,valor,origen)" in html
     assert "row[`_control_${campo}`]=valor;" in html
-    assert 'class="frescura-calibre-title"' in html
+    assert 'class="frescura-cancha-title"' in html
     assert "grid-template-columns:repeat(2,minmax(0,1fr))" in html
