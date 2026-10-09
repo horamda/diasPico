@@ -104,6 +104,20 @@ def resumen_mensual():
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+@bp.get("/desempeno")
+@login_required
+def desempeno():
+    try:
+        return jsonify(control_stock_svc.get_dashboard_desempeno(
+            mes=request.args.get("mes"),
+            meses=request.args.get("meses", type=int) or 4,
+        ))
+    except ValueError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 400
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
 @bp.get("/pendientes-dias")
 @login_required
 def pendientes_dias():

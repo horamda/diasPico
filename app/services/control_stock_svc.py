@@ -1942,6 +1942,207 @@ def get_resumen_mensual(mes: str | None = None, sucursal: str | None = "1") -> d
     }
 
 
+def _month_shift(mes: str, delta: int) -> str:
+    year, month = [int(part) for part in mes.split("-")]
+    index = year * 12 + (month - 1) + delta
+    return f"{index // 12}-{index % 12 + 1:02d}"
+
+
+def _nueva_metrica() -> dict:
+    return {
+        "controles": 0,
+        "dias": set(),
+        "articulos": 0,
+        "bultos": 0.0,
+        "minutos": 0.0,
+        "articulos_con_tiempo": 0,
+        "controles_con_tiempo": 0,
+        "con_dispersion": 0,
+        "correcciones": 0,
+    }
+
+
+def _sumar_metrica(acc: dict, row: dict) -> None:
+    acc["controles"] += 1
+    acc["dias"].add(row["fecha"])
+    acc["articulos"] += row["articulos"]
+    acc["bultos"] += row["bultos"]
+    acc["con_dispersion"] += row["con_dispersion"]
+    acc["correcciones"] += row["correcciones"]
+    if row["minutos"] is not None and row["minutos"] > 0:
+        acc["minutos"] += row["minutos"]
+        acc["articulos_con_tiempo"] += row["articulos"]
+        acc["controles_con_tiempo"] += 1
+
+
+def _cerrar_metrica(acc: dict) -> dict:
+    horas = acc["minutos"] / 60
+    return {
+        "controles": acc["controles"],
+        "dias": len(acc["dias"]),
+        "articulos": acc["articulos"],
+        "bultos": round(acc["bultos"], 1),
+        "minutos": round(acc["minutos"], 1),
+        # La productividad solo usa controles con hora de inicio y fin.
+        "articulos_por_hora": round(acc["articulos_con_tiempo"] / horas, 1) if horas else None,
+        "minutos_por_control": round(acc["minutos"] / acc["controles_con_tiempo"], 1) if acc["controles_con_tiempo"] else None,
+        "dispersion_pct": round(acc["con_dispersion"] / acc["articulos"] * 100, 1) if acc["articulos"] else None,
+        "con_dispersion": acc["con_dispersion"],
+        "correcciones": acc["correcciones"],
+    }
+
+
+def get_dashboard_desempeno(mes: str | None = None, meses: int = 4) -> dict:
+    """Desempeño de controles mensuales por persona y por sucursal.
+
+    Usa el último control de cada fecha/semana/día/responsable (igual que el
+    resumen mensual). Solo cuenta responsables registrados; los controles de
+    otros nombres (pruebas, usuarios de sistema) se informan aparte.
+    """
+    ensure_control_stock_tables()
+    mes_label, ini_mes, fin = _current_month_range(mes)
+    meses = max(1, min(12, int(meses or 4)))
+    inicio_label = _month_shift(mes_label, -(meses - 1))
+    _, ini, _ = _month_range(inicio_label)
+
+    with pg_cursor() as cur:
+        cur.execute(
+            """
+            SELECT UPPER(TRIM(nombre)) AS persona, MIN(sucursal) AS sucursal
+            FROM control_stock_responsables
+            GROUP BY UPPER(TRIM(nombre))
+            """
+        )
+        registrados = {r["persona"]: r["sucursal"] for r in cur.fetchall() or []}
+        cur.execute(
+            """
+            WITH latest AS (
+                SELECT DISTINCT ON (c.sucursal, c.fecha, c.responsable, c.semana, c.dia)
+                    c.id, c.sucursal, c.fecha, c.responsable, c.hora_inicio, c.hora_fin
+                FROM control_stock_conteos c
+                WHERE c.fecha BETWEEN %(ini)s AND %(fin)s
+                  AND COALESCE(c.tipo_conteo, 'mensual') = 'mensual'
+                ORDER BY c.sucursal, c.fecha, c.responsable, c.semana, c.dia, c.updated_at DESC, c.id DESC
+            ),
+            items AS (
+                SELECT i.conteo_id,
+                       COUNT(*) FILTER (WHERE i.stock IS NOT NULL) AS articulos,
+                       COALESCE(SUM(i.stock), 0) AS bultos,
+                       COUNT(*) FILTER (WHERE i.stock IS NOT NULL AND i.diferencia) AS con_dispersion
+                FROM control_stock_conteo_items i
+                WHERE i.conteo_id IN (SELECT id FROM latest)
+                GROUP BY i.conteo_id
+            ),
+            audit AS (
+                SELECT conteo_id, COUNT(*) AS correcciones
+                FROM control_stock_conteo_item_audit
+                WHERE conteo_id IN (SELECT id FROM latest)
+                GROUP BY conteo_id
+            )
+            SELECT l.sucursal, l.fecha, UPPER(TRIM(l.responsable)) AS persona,
+                   COALESCE(it.articulos, 0) AS articulos,
+                   COALESCE(it.bultos, 0) AS bultos,
+                   COALESCE(it.con_dispersion, 0) AS con_dispersion,
+                   COALESCE(a.correcciones, 0) AS correcciones,
+                   CASE WHEN l.hora_inicio IS NOT NULL AND l.hora_fin IS NOT NULL AND l.hora_fin > l.hora_inicio
+                        THEN EXTRACT(EPOCH FROM (l.hora_fin - l.hora_inicio)) / 60 END AS minutos
+            FROM latest l
+            LEFT JOIN items it ON it.conteo_id = l.id
+            LEFT JOIN audit a ON a.conteo_id = l.id
+            ORDER BY l.fecha, l.sucursal, persona
+            """,
+            {"ini": ini, "fin": fin},
+        )
+        rows = [
+            {
+                "sucursal": str(r["sucursal"]),
+                "fecha": r["fecha"],
+                "mes": r["fecha"].strftime("%Y-%m"),
+                "persona": r["persona"] or "",
+                "articulos": int(r["articulos"] or 0),
+                "bultos": float(r["bultos"] or 0),
+                "con_dispersion": int(r["con_dispersion"] or 0),
+                "correcciones": int(r["correcciones"] or 0),
+                "minutos": float(r["minutos"]) if r.get("minutos") is not None else None,
+            }
+            for r in cur.fetchall() or []
+        ]
+
+    excluidos: dict[str, int] = {}
+    validos = []
+    for row in rows:
+        if row["persona"] in registrados:
+            validos.append(row)
+        elif row["mes"] == mes_label:
+            excluidos[row["persona"] or "(sin nombre)"] = excluidos.get(row["persona"] or "(sin nombre)", 0) + 1
+
+    del_mes = [r for r in validos if r["mes"] == mes_label]
+    sucursales_ids = ["1", "2"]
+
+    por_sucursal = {suc: _nueva_metrica() for suc in sucursales_ids}
+    personas_suc: dict[str, set] = {suc: set() for suc in sucursales_ids}
+    por_persona: dict[tuple[str, str], dict] = {}
+    for row in del_mes:
+        por_sucursal.setdefault(row["sucursal"], _nueva_metrica())
+        _sumar_metrica(por_sucursal[row["sucursal"]], row)
+        personas_suc.setdefault(row["sucursal"], set()).add(row["persona"])
+        _sumar_metrica(por_persona.setdefault((row["sucursal"], row["persona"]), _nueva_metrica()), row)
+
+    sucursales = []
+    for suc, acc in por_sucursal.items():
+        item = _cerrar_metrica(acc)
+        item.update({"sucursal": suc, "sucursal_nombre": _sucursal_nombre(suc), "personas": len(personas_suc.get(suc, ()))})
+        sucursales.append(item)
+    total_suc = {s["sucursal"]: s["articulos"] for s in sucursales}
+
+    personas = []
+    for (suc, persona), acc in por_persona.items():
+        item = _cerrar_metrica(acc)
+        item.update({
+            "sucursal": suc,
+            "sucursal_nombre": _sucursal_nombre(suc),
+            "persona": persona.title(),
+            "participacion_pct": round(item["articulos"] / total_suc[suc] * 100, 1) if total_suc.get(suc) else 0.0,
+        })
+        personas.append(item)
+    personas.sort(key=lambda p: (-p["articulos"], p["persona"]))
+
+    tendencia: dict[tuple[str, str], dict] = {}
+    for row in validos:
+        _sumar_metrica(tendencia.setdefault((row["mes"], row["sucursal"]), _nueva_metrica()), row)
+    meses_labels = [_month_shift(mes_label, -offset) for offset in range(meses - 1, -1, -1)]
+    # Sin historia previa (p. ej. el módulo empezó a usarse hace poco) no se muestran meses vacíos al inicio.
+    con_datos = {mes_row for mes_row, _ in tendencia}
+    while len(meses_labels) > 1 and meses_labels[0] not in con_datos:
+        meses_labels.pop(0)
+    tendencia_rows = []
+    for label in meses_labels:
+        for suc in sucursales_ids:
+            item = _cerrar_metrica(tendencia.get((label, suc), _nueva_metrica()))
+            item.update({"mes": label, "sucursal": suc, "sucursal_nombre": _sucursal_nombre(suc)})
+            tendencia_rows.append(item)
+
+    diario: dict[tuple[str, str], dict] = {}
+    for row in del_mes:
+        key = (row["fecha"].isoformat(), row["sucursal"])
+        acc = diario.setdefault(key, {"fecha": key[0], "sucursal": row["sucursal"], "articulos": 0, "personas": {}})
+        acc["articulos"] += row["articulos"]
+        nombre = row["persona"].title()
+        acc["personas"][nombre] = acc["personas"].get(nombre, 0) + row["articulos"]
+
+    return {
+        "ok": True,
+        "mes": mes_label,
+        "desde": meses_labels[0],
+        "dias_habiles": _business_days_count(ini_mes, fin),
+        "sucursales": sorted(sucursales, key=lambda s: s["sucursal"]),
+        "personas": personas,
+        "tendencia": tendencia_rows,
+        "diario": sorted(diario.values(), key=lambda d: (d["fecha"], d["sucursal"])),
+        "excluidos": [{"responsable": k, "controles": v} for k, v in sorted(excluidos.items())],
+    }
+
+
 def get_articulos_controlados(mes: str | None = None, sucursal: str | None = "1") -> dict:
     ensure_control_stock_tables()
     mes_label, ini, fin = _current_month_range(mes)

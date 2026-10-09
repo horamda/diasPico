@@ -1206,6 +1206,130 @@
       #viewFrescura .save-footer .save-sub{font-size:11px!important}
       #viewFrescura .save-footer .save-btn{width:100%}
     }
+    /* ── Ubicaciones por cancha y contraste claro/oscuro ───────────── */
+    :root{--ubic-row-bg:#e6effa;--ubic-row-fg:#0b3b6f;--ubic-row-bar:#2563eb;--ubic-tag:#475569;--ubic-tag-sin:#9a3412;--ubic-tag-sin-bg:#ffedd5}
+    :root[data-theme="dark"]{--ubic-row-bg:#1b2840;--ubic-row-fg:#dbe8ff;--ubic-row-bar:#6b9bff;--ubic-tag:#c3cad8;--ubic-tag-sin:#fed7aa;--ubic-tag-sin-bg:rgba(251,146,60,.16)}
+    .ubic-tag,:root[data-theme] .ubic-tag{display:block;margin-top:3px;font-size:11.5px;font-weight:650;line-height:1.35;color:var(--ubic-tag)!important;letter-spacing:0}
+    .ubic-tag.sin,:root[data-theme] .ubic-tag.sin{display:inline-block;padding:1px 7px;border-radius:999px;background:var(--ubic-tag-sin-bg);color:var(--ubic-tag-sin)!important}
+    tr.ubic-group-row td,:root[data-theme] .table-wrap tr.ubic-group-row td,:root[data-theme] tr.ubic-group-row:hover td{
+      position:static!important;padding:9px 0!important;background:var(--ubic-row-bg)!important;color:var(--ubic-row-fg)!important;
+      border-top:2px solid var(--ubic-row-bar)!important;border-bottom:1px solid var(--cs-line)!important;font-size:13px;font-weight:850;text-align:left}
+    .ubic-group-label{position:sticky;left:0;display:inline-flex;align-items:center;gap:8px;padding:0 14px}
+    .ubic-group-label::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--ubic-row-bar)}
+    #frescuraControlCards .frescura-cancha-title{color:var(--ubic-row-fg)!important;font-size:15px}
+    #frescuraControlCards .frescura-cancha-title::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--ubic-row-bar)}
+    #frescuraControlCards .frescura-cancha-title::after{background:var(--ubic-row-bar)!important;opacity:.45}
+    /* ABC: la regla genérica de celdas en oscuro tapaba el fondo de la letra */
+    :root[data-theme] .table-wrap td.abc-a{background:var(--cs-success-bg)!important;color:var(--cs-success)!important;font-weight:850}
+    :root[data-theme] .table-wrap td.abc-b{background:var(--cs-warning-bg)!important;color:var(--cs-warning)!important;font-weight:850}
+    :root[data-theme] .table-wrap td.abc-c{background:var(--cs-danger-bg)!important;color:var(--cs-danger)!important;font-weight:850}
+    /* Controles bloqueados hasta iniciar el control: legibles pero claramente inactivos */
+    .btn:disabled,:root[data-theme] .btn:disabled{opacity:.62!important}
+    #viewFrescura select:disabled,#viewFrescura input:disabled{opacity:.7;cursor:not-allowed}
+    /* Tarjetas de frescura: sin franja de color detrás de las etiquetas */
+    #frescuraControlCards .field,#frescuraControlCards .field label{background:transparent!important}
+    #frescuraControlCards .field label{color:var(--cs-muted)!important}
+    @media(max-width:820px){
+      /* Encabezado fijo opaco: el contenido ya no se lee por debajo al desplazarse */
+      .top{background:var(--cs-surface-strong)!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+      .ubic-tag{font-size:12.5px}
+    }
+    /* ── Dashboard de desempeño ───────────────────────────────────── */
+    #perfRoot{--p-s1:#2a78d6;--p-s2:#eb6834;--p-surface:var(--cs-surface-strong,#fff);--p-ink:var(--cs-text,#0b0b0b);--p-ink2:var(--cs-muted,#52514e);--p-grid:#e6e5df;--p-base:#c3c2b7;--p-good:#006300;--p-bad:#b42318;--p-track:#eceae4}
+    :root[data-theme="dark"] #perfRoot{--p-s1:#3987e5;--p-s2:#d95926;--p-grid:#2f2f33;--p-base:#4a4a50;--p-good:#4ade80;--p-bad:#ff8a80;--p-track:#2c2c30}
+    .perf{margin:14px 0 22px;display:grid;gap:14px;text-align:left}
+    .perf-head{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:10px}
+    .perf-head h2{margin:0;font-size:20px;font-weight:850;color:var(--p-ink)}
+    .perf-head p{margin:2px 0 0;font-size:13px;color:var(--p-ink2)}
+    .perf-legend{display:flex;gap:14px;font-size:13px;font-weight:650;color:var(--p-ink)}
+    .perf-legend span{display:inline-flex;align-items:center;gap:6px}
+    .perf-swatch{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:baseline;flex:0 0 auto}
+    .perf-note{margin:0;font-size:12.5px;color:var(--p-ink2)}.perf-note:empty{display:none}.perf-note.err{color:var(--p-bad)}
+    .perf-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .perf-suc,.perf-panel{background:var(--p-surface);border:1px solid var(--cs-line,rgba(11,11,11,.1));border-radius:14px;padding:16px;color:var(--p-ink);box-shadow:var(--cs-shadow-soft,none);min-width:0}
+    .perf-suc{border-top:4px solid var(--p-key)}
+    .perf-suc header{display:flex;align-items:center;gap:8px}
+    .perf-suc header .perf-swatch{background:var(--p-key);margin:0}
+    .perf-suc h3{margin:0;font-size:16px;font-weight:800}
+    .perf-suc header small{margin-left:auto;color:var(--p-ink2);font-size:12px}
+    .perf-hero{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 10px;margin:10px 0 12px}
+    .perf-hero strong{font-size:40px;line-height:1;font-weight:850;letter-spacing:-.02em}
+    .perf-hero span{font-size:13px;color:var(--p-ink2)}
+    .perf-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0}
+    .perf-metrics div{padding:10px;border-radius:10px;background:var(--p-track)}
+    .perf-metrics dt{font-size:11.5px;font-weight:700;color:var(--p-ink2)}
+    .perf-metrics dd{margin:2px 0 0;font-size:20px;font-weight:800;font-variant-numeric:tabular-nums}
+    .perf-metrics small{display:block;min-height:15px;font-size:11.5px;color:var(--p-ink2)}
+    .perf-delta{font-size:11.5px;font-weight:750;white-space:nowrap}.perf-delta.up{color:var(--p-good)}.perf-delta.down{color:var(--p-bad)}.perf-delta.flat{color:var(--p-ink2)}
+    .perf-meter{margin-top:12px}
+    .perf-meter-head{display:flex;justify-content:space-between;font-size:12.5px;font-weight:700;color:var(--p-ink2)}
+    .perf-meter-head b{color:var(--p-ink);font-size:14px}
+    .perf-meter-track{height:8px;margin:6px 0 4px;border-radius:999px;background:var(--p-track);overflow:hidden}
+    .perf-meter-track span{display:block;height:100%;border-radius:999px;background:var(--p-key);transition:width .4s ease}
+    .perf-meter small{font-size:11.5px;color:var(--p-ink2)}
+    .perf-loading{font-weight:600;color:var(--p-ink2)}
+    .perf-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+    .perf-panel h3{margin:0;font-size:15px;font-weight:800}
+    .perf-sub{margin:3px 0 12px;font-size:12.5px;line-height:1.45;color:var(--p-ink2)}
+    .perf-empty{margin:18px 0;color:var(--p-ink2);font-size:13px}
+    .perf-bars{display:grid;gap:4px}
+    .perf-bar-row{display:grid;grid-template-columns:minmax(110px,170px) minmax(0,1fr) 64px;align-items:center;gap:10px;padding:6px 4px;border-radius:8px;outline:none}
+    .perf-bar-row:hover,.perf-bar-row:focus-visible{background:var(--p-track)}
+    .perf-bar-name span{display:block;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .perf-bar-name small,.perf-bar-value small{display:block;font-size:11px;color:var(--p-ink2)}
+    .perf-bar-track{height:14px;border-left:1px solid var(--p-base)}
+    .perf-bar{display:block;height:100%;min-width:2px;border-radius:0 4px 4px 0}
+    .perf-bar-value{text-align:right;font-size:14px;font-weight:800;font-variant-numeric:tabular-nums}
+    .perf-scatter{min-height:240px}
+    .perf-svg{display:block;width:100%;height:auto;overflow:visible;font-family:inherit}
+    .perf-svg .grid{stroke:var(--p-grid);stroke-width:1}
+    .perf-svg .baseline{stroke:var(--p-base);stroke-width:1}
+    .perf-svg .tick{fill:var(--p-ink2);font-size:11px;font-variant-numeric:tabular-nums}
+    .perf-svg .axis-title{fill:var(--p-ink2);font-size:11.5px;font-weight:650}
+    .perf-svg .ref{stroke:var(--p-ink2);stroke-width:1;stroke-dasharray:4 4;opacity:.7}
+    .perf-svg .ref-label{fill:var(--p-ink2);font-size:10.5px}
+    .perf-svg .dot{stroke:var(--p-surface);stroke-width:2}
+    .perf-svg .hit,.perf-svg .col-hit{fill:transparent;cursor:pointer;outline:none}
+    .perf-svg .col-hit:hover,.perf-svg .col-hit:focus-visible{fill:var(--p-ink);fill-opacity:.05}
+    .perf-svg .pt{cursor:pointer;outline:none}
+    .perf-svg .pt:focus-visible .dot,.perf-svg .pt:hover .dot{stroke:var(--p-ink)}
+    .perf-svg .pt-label{fill:var(--p-ink);font-size:12px;font-weight:700;paint-order:stroke;stroke:var(--p-surface);stroke-width:3px;pointer-events:none}
+    .perf-svg .line{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+    .perf-svg .mark{stroke:var(--p-surface);stroke-width:2;pointer-events:none}
+    .perf-svg .col{cursor:pointer;outline:none}
+    .perf-svg .col:hover,.perf-svg .col:focus-visible{opacity:.8}
+    .perf-svg .weekend{fill:var(--p-track);opacity:.7}
+    .perf-multiples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+    .perf-multiples.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .perf-mini{margin:0;min-width:0}
+    .perf-mini figcaption{display:flex;align-items:center;flex-wrap:wrap;gap:2px 6px;margin-bottom:6px;font-size:13px;font-weight:750;color:var(--p-ink)}
+    .perf-mini figcaption small{font-size:11.5px;font-weight:500;color:var(--p-ink2)}
+    .perf-table-wrap{max-height:none!important}
+    .perf-table td,.perf-table th{white-space:nowrap}
+    :root[data-theme="light"] .perf-table-wrap th:first-child{background:#d8e6f0!important;color:#003b73!important}
+    :root[data-theme="dark"] .perf-table-wrap th:first-child{background:#2c2c31!important;color:#ffffff!important}
+    .perf-table td:first-child{font-weight:700}
+    .perf-table td.num,.perf-table th.num{text-align:right;font-variant-numeric:tabular-nums}
+    .perf-tip{position:fixed;z-index:10000;max-width:260px;padding:9px 11px;border-radius:10px;background:#16181d;color:#f5f5f7;font-size:12px;line-height:1.45;box-shadow:0 10px 30px rgba(0,0,0,.28);pointer-events:none}
+    :root[data-theme="dark"] .perf-tip{background:#f5f5f7;color:#111114}
+    .perf-tip b{display:flex;align-items:center;font-weight:800;margin-bottom:3px}
+    .perf-tip-row{display:flex;justify-content:space-between;gap:14px}
+    .perf-tip-row span{display:inline-flex;align-items:center;opacity:.85}
+    .perf-dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;box-shadow:0 0 0 1.5px rgba(255,255,255,.7)}
+    .perf-divider{margin-top:6px}
+    @media(max-width:1100px){
+      .perf-grid{grid-template-columns:1fr}
+      .perf-multiples{grid-template-columns:repeat(2,minmax(0,1fr))}
+    }
+    @media(max-width:760px){
+      .perf-compare,.perf-multiples,.perf-multiples.two{grid-template-columns:1fr}
+      .perf-hero strong{font-size:34px}
+      .perf-suc,.perf-panel{padding:14px;border-radius:12px}
+      .perf-bar-row{grid-template-columns:minmax(0,1fr) 58px;gap:4px 8px}
+      .perf-bar-name{grid-column:1/-1}
+      .perf-bar-name span,.perf-bar-name small{display:inline;margin-right:6px}
+      .perf-legend{width:100%}
+    }
 </style>
 </head>
 <body>
@@ -1508,6 +1632,22 @@
       </div>
     </section>
     <div class="status" id="resumenStatus" role="status" aria-live="polite">Cargando...</div>
+    <section class="perf" id="perfRoot" aria-labelledby="perfTitle">
+      <div class="perf-head">
+        <div><h2 id="perfTitle">Desempeño del equipo</h2><p>Controles mensuales de ambas sucursales · <span id="perfPeriodo">-</span></p></div>
+        <div class="perf-legend" aria-label="Colores por sucursal"><span><i class="perf-swatch" style="background:var(--p-s1)"></i>Casa Central</span><span><i class="perf-swatch" style="background:var(--p-s2)"></i>Dolores</span></div>
+      </div>
+      <p class="perf-note" id="perfStatus" role="status" aria-live="polite"></p>
+      <div class="perf-compare" id="perfCompare"></div>
+      <div class="perf-grid">
+        <article class="perf-panel"><h3>Artículos contados por persona</h3><p class="perf-sub">Total del mes y porcentaje sobre el equipo de su sucursal.</p><div id="perfArticulos"></div></article>
+        <article class="perf-panel"><h3>Productividad y dispersión</h3><p class="perf-sub">Cada punto es una persona. Más a la derecha cuenta más rápido; más abajo, sus conteos se parecen más al stock del sistema.</p><div id="perfScatter" class="perf-scatter"></div></article>
+      </div>
+      <article class="perf-panel"><h3>Tendencia mensual</h3><p class="perf-sub">Hasta 4 meses por sucursal; arranca en el primer mes con controles. Pasá el mouse por un mes para ver los valores.</p><div class="perf-multiples" id="perfTendencia"></div></article>
+      <article class="perf-panel"><h3>Actividad diaria</h3><p class="perf-sub">Artículos contados por día; pasá el mouse para ver quién contó.</p><div class="perf-multiples two" id="perfDiario"></div></article>
+      <article class="perf-panel"><h3>Detalle por persona</h3><p class="perf-sub">Dispersión: porcentaje de artículos con diferencia de 5 bultos o más y al menos 20% contra el stock de Frescura. Puede deberse al conteo o al sistema. Correcciones: ítems editados después de guardar.</p><div class="table-wrap perf-table-wrap" id="perfTabla"></div><p class="perf-note" id="perfExcluidos"></p></article>
+    </section>
+    <div class="section-title perf-divider">Sucursal seleccionada <span>Cumplimiento ABC, pendientes y detalle diario</span></div>
     <section class="dashboard-grid" id="resumenKpis">
       <article class="kpi-card"><div class="kpi-label">Controles reales</div><div class="kpi-value" id="kpiControles">0</div><div class="kpi-note">guardados en el mes</div></article>
       <article class="kpi-card"><div class="kpi-label">Articulos contados</div><div class="kpi-value" id="kpiArticulos">0</div><div class="kpi-note">suma de items controlados</div></article>
@@ -2146,6 +2286,7 @@ async function loadPlanificacion(){
 }
 async function loadResumenMensual(){
   const selectedMes=mesResumen.value||defaultMonth();
+  window.perfDashboard?.load(selectedMes,sucursalResumen.value);
   resumenStatus.textContent='Cargando resumen...';
   const res=await fetch('/api/control-stock/resumen-mensual?mes='+encodeURIComponent(selectedMes)+'&sucursal='+encodeURIComponent(sucursalResumen.value));
   const data=await res.json();
@@ -2162,6 +2303,7 @@ async function loadResumenMensual(){
   const avance=Math.min(100, Math.round((diasUnicos/diasHabiles)*100));
   const totalBultos=diarios.reduce((a,r)=>a+Number(r.bultos_contados||0),0);
   const kpis=data.kpis||{};
+  window.perfDashboard?.setAbc(sucursalResumen.value,selectedMes,kpis);
   kpiControles.textContent=fmt.format(totalControles);
   kpiArticulos.textContent=fmt.format(totalArticulos);
   kpiPersonas.textContent=fmt.format(porControlador.length);
@@ -2669,7 +2811,7 @@ function renderControlFrescuraRows(){
   let lastGrupo='';
   frescuraControlBody.innerHTML=frescuraRows.map((r,idx)=>{
     const grupo=grupoUbicacion(r);
-    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="7">${esc(grupo)}</td></tr>`:'';
+    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="7"><span class="ubic-group-label">${esc(grupo)}</span></td></tr>`:'';
     lastGrupo=grupo;
     return groupRow+`<tr>
     <td class="num">${esc(r.codigo_articulo)}</td>
@@ -2678,7 +2820,7 @@ function renderControlFrescuraRows(){
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_bultos||0)}" data-fr-b="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'b',this.value,this)"></td>
     <td><input class="stock-input" type="number" step="1" min="0" inputmode="numeric" value="${esc(r.stock_sistema_unidades||0)}" data-fr-u="${idx}" oninput="this.value=this.value.replace(/[^0-9]/g,'');actualizarCampoFrescura(${idx},'u',this.value,this)"></td>
     <td><select data-fr-ok="${idx}" onchange="actualizarCampoFrescura(${idx},'ok',this.value,this);fechaFrescuraLoteChanged(${idx})"><option value="PENDIENTE">Pendiente</option><option value="OK">OK</option><option value="NO_OK">No OK</option></select></td>
-    <td><input class="stock-input" style="width:132px;text-align:left" type="date" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" disabled></td>
+    <td><input class="stock-input" style="width:156px;text-align:left" type="date" data-fr-real="${idx}" onchange="actualizarCampoFrescura(${idx},'real',this.value,this);fechaFrescuraLoteChanged(${idx})" disabled></td>
     <td data-fr-diff="${idx}" style="display:none">-</td>
     <td style="display:none"><input class="obs-input" data-fr-obs="${idx}" placeholder="Opcional" oninput="actualizarCampoFrescura(${idx},'obs',this.value,this)"></td>
     <td data-fr-dias="${idx}" style="display:none">${r.dias_frescura_restantes ?? '-'}</td>
@@ -3331,7 +3473,7 @@ async function loadPlanilla(){
   let lastGrupo='';
   tbody.innerHTML=currentRows.map(r=>{
     const grupo=grupoUbicacion(r);
-    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="18">${esc(grupo)}</td></tr>`:'';
+    const groupRow=grupo!==lastGrupo?`<tr class="ubic-group-row"><td colspan="18"><span class="ubic-group-label">${esc(grupo)}</span></td></tr>`:'';
     lastGrupo=grupo;
     return groupRow+`<tr>
     <td class="num">${esc(r.id_articulo)}</td><td>${esc(r.descripcion)}${ubicacionTag(r)}</td><td class="abc-${String(r.abc).toLowerCase()}">${esc(r.abc)}</td>
@@ -3472,6 +3614,7 @@ async function guardarConteo(){
   updateTabsFade();
 })();
 </script>
+<script src="{{ url_for('static', filename='control_stock_dashboard.js') }}"></script>
 </body>
 </html>
 
