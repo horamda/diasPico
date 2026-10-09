@@ -43,7 +43,7 @@ function frSessionControls(){
   }
   if(active) aplicarDistribucionesFrescura();
   if(active) frescuraRows.forEach((r,idx)=>{
-    if(!r.distribucion_fechas?.length)document.querySelectorAll(`[data-fr-real="${idx}"]`).forEach(el=>el.disabled=r._control_ok!=='NO_OK');
+    if(!r.distribucion_fechas?.length)(typeof frQ==='function'?frQ(idx,`[data-fr-real="${idx}"]`):document.querySelectorAll(`[data-fr-real="${idx}"]`)).forEach(el=>el.disabled=r._control_ok!=='NO_OK');
   });
   if(typeof aplicarSplitFrescura==='function')aplicarSplitFrescura();
   const leave=document.getElementById('frLeave');if(leave)leave.disabled=frescuraSession?.estado!=='pausado'||frescuraSessionRequest;
@@ -85,6 +85,7 @@ function frNextPending(){
   if(!pending.length)return;
   const index=pending.find(i=>i>frLastPending)??pending[0];
   frLastPending=index;
+  if(typeof isMobileConteo==='function'&&isMobileConteo()&&typeof frMobileGo==='function'){frMobileGo(index);return}
   const el=[...document.querySelectorAll(`[data-fr-ok="${index}"]`)].find(e=>e.getClientRects().length&&!e.disabled)
     ||[...document.querySelectorAll(`[data-fr-b="${index}"]`)].find(e=>e.getClientRects().length);
   if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.focus({preventScroll:true})}
@@ -122,7 +123,7 @@ async function iniciarControlFrescura(){
 function restaurarCamposFrescura(){
   frescuraRows.forEach((r,idx)=>{
     for(const field of ['b','u','ok','real','obs','pok','preal','sok','sreal']){
-      if(r['_control_'+field]!==undefined)document.querySelectorAll(`[data-fr-${field}="${idx}"]`).forEach(el=>el.value=r['_control_'+field]);
+      if(r['_control_'+field]!==undefined)(typeof frQ==='function'?frQ(idx,`[data-fr-${field}="${idx}"]`):document.querySelectorAll(`[data-fr-${field}="${idx}"]`)).forEach(el=>el.value=r['_control_'+field]);
     }
   });
   aplicarDistribucionesFrescura();actualizarTotalesFrescura();
