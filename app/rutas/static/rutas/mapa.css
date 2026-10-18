@@ -518,3 +518,7 @@ aside{position:relative}
 .ef-vendedores summary{cursor:pointer;overflow-wrap:anywhere}
 .ef-vendedores table{table-layout:fixed;width:100%}
 .ef-vendedores th,.ef-vendedores td{white-space:normal;overflow-wrap:anywhere;min-width:0}
+
+.carga-aclaracion{max-width:310px;white-space:normal;overflow-wrap:anywhere;font-size:11px;line-height:1.45;padding:8px;border-top:1px solid var(--line)}
+.carga-aclaracion summary{cursor:pointer;margin-top:4px}
+.carga-aclaracion p{margin:6px 0}

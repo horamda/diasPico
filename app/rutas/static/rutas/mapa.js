@@ -414,6 +414,16 @@ const Legend = L.Control.extend({options:{position:'bottomright'}, onAdd(){
 }});
 const legend = new Legend().addTo(map);
 let legendOpen = true;
+function aclaracionCargaHTML() {
+  if (!S.V?.desde || !S.V?.hasta) return '';
+  const fecha = f => esc(f.slice(0, 10).split('-').reverse().join('/'));
+  return `<div class="carga-aclaracion"><b>~ Carga estimada por compra</b><br>
+    Base: ${num(S.V.dias || S.periodo)} días · ${fecha(S.V.desde)} al ${fecha(S.V.hasta)}.
+    <details><summary>¿Cómo se calcula?</summary>
+    <p>Suma del promedio de cada cliente: volumen comprado en el período dividido por los días en que compró. Se expresa en bultos, HL y pallets equivalentes.</p>
+    <p>No es el promedio de los viernes ni de otro día específico. No son pedidos confirmados y no ajusta por la probabilidad de que cada cliente compre ese día.</p>
+    <p>El período termina en la última fecha de ventas cargada. Podés cambiarlo en la pestaña Ventas.</p></details></div>`;
+}
 function renderLegend(list) {
   const el = legend.getContainer(); let body = '';
   if (compActivo()) {
@@ -447,6 +457,7 @@ function renderLegend(list) {
   const extra = `<span><i class="sw" style="background:#9a9f9b"></i>Inactivo en el maestro</span><span><i class="sw ring"></i>Ubicación a revisar</span>`;
   el.innerHTML = `<details ${legendOpen?'open':''}><summary>Color: ${VER[S.ver]}</summary><div class="lg-body ${S.ver==='loc'?'lg-scroll':''}">${body}</div>${S.ver==='loc'?'':`<div class="lg-body">${extra}</div>`}</details>`;
   el.querySelector('details').ontoggle = e => { legendOpen = e.target.open; };
+  if (S.day !== 'TODOS') el.insertAdjacentHTML('beforeend', aclaracionCargaHTML());
   el.querySelectorAll('[data-loc]').forEach(b => b.onclick = () => zoomLoc(b.dataset.loc));
 }
 
