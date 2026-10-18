@@ -16,6 +16,7 @@ const PERIODOS = [7, 15, 30, 45, 60, 90, 120];
 // Pallets equivalentes: pueden ser fraccionarios; * indica bultos sin BxP.
 const palletTexto = v => `${num(v?.pallets, 2)} pallets${v?.bultos_sin_bxp ? '*' : ''}`;
 const volumenTexto = v => `${num(v?.bultos, 1)} b · ${num(v?.hl, 2)} HL · ${palletTexto(v)}`;
+const volumenCelda = v => `<span class="rec-vol"><span>~${num(v?.bultos,1)} b</span><span>${num(v?.hl,2)} HL</span><span>${palletTexto(v)}</span></span>`;
 const cargaVacia = () => ({bultos:0, hl:0, pallets:0, bultos_sin_bxp:0});
 function sumarCarga(total, v) {
   total.bultos += v?.drop || 0; total.hl += v?.drop_hl || 0;
@@ -572,7 +573,7 @@ function renderRec() {
         return `<td class="rec-cell${exceso ? ' exceso' : ''}" data-dia="${d}" data-locs="${esc(info.paradas.map(p => p.loc).join('|'))}" tabindex="0"
           title="${esc(v.nombre)} · ${DAYNAME[d]}: ${info.total} clientes${v.capacidad_clientes ? ' de ' + v.capacidad_clientes + ' de tope' : ''}${S.V ? ' · ~' + volumenTexto(volumen) : ''}. Tocá para verlo en el mapa.">
           <div class="rec-locs">${info.paradas.map(p => `<span><i class="sw" style="background:${colorLoc(p.loc)}"></i>${esc(p.loc)}<b>${p.n}</b>${p.compartida ? '<em title="Localidad compartida con otro vehículo el mismo día">⇄</em>' : ''}</span>`).join('')}</div>
-          <div class="rec-tot">${info.total} clientes${S.V ? ` · ~${volumenTexto(volumen)}` : ''}</div></td>`;
+          <div class="rec-tot">${info.total} clientes${S.V ? volumenCelda(volumen) : ''}</div></td>`;
       }).join('');
       filas += `<tr><td class="rec-dep">${v.deposito !== dep ? esc(v.deposito) : ''}</td><td class="rec-veh"><i class="sw" style="background:${esc(v.color)}"></i>${esc(v.nombre)}${v.patente ? `<small>${esc(v.patente)}</small>` : ''}</td>${celdas}</tr>`;
       dep = v.deposito;
@@ -588,7 +589,7 @@ function renderRec() {
   for (const r of filasM) {
     if (r.suc !== suc) { html += `<tr class="suc"><td colspan="${DAYS.length + 3}">Sale de ${esc(r.suc)}</td></tr>`; suc = r.suc; }
     html += `<tr data-loc="${esc(r.loc)}"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${DAYS.map(d => r[d]
-      ? `<td class="heat" style="--h:${Math.round(r[d] / max * 100)}%" data-dia="${d}" data-locs="${esc(r.loc)}" tabindex="0" title="${esc(r.loc)} · ${DAYNAME[d]}: ${r[d]} clientes${r.carga[d] ? ' · ~' + volumenTexto(r.carga[d]) : ''}">${r[d]}${S.V && r.carga[d] ? `<small>~${volumenTexto(r.carga[d])}</small>` : ''}</td>`
+      ? `<td class="heat" style="--h:${Math.round(r[d] / max * 100)}%" data-dia="${d}" data-locs="${esc(r.loc)}" tabindex="0" title="${esc(r.loc)} · ${DAYNAME[d]}: ${r[d]} clientes${r.carga[d] ? ' · ~' + volumenTexto(r.carga[d]) : ''}">${r[d]}${S.V && r.carga[d] ? `<small>${volumenCelda(r.carga[d])}</small>` : ''}</td>`
       : '<td class="z">·</td>').join('')}<td><b>${r.total}</b></td><td class="${r.sin ? 'bad' : 'z'}">${r.sin || '·'}</td></tr>`;
   }
   el.innerHTML = `<div class="rec-head"><div><h2>Recorridos por camión</h2><p class="note">${S.suc === 'TODAS' ? 'Todas las sucursales' : esc(S.suc)} · cada celda suma los clientes activos de ese día en las localidades del recorrido. Tocá una celda para verla en el mapa.</p></div>
