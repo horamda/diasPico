@@ -483,11 +483,18 @@ function tablaComparar() {
     ${filas.map(r => `<tr data-loc="${esc(r.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${S.cdias.map(d => `<td class="${r.n[d]?'':'z'}">${r.n[d]||'·'}</td>`).join('')}<td title="${r.ajenos} de ${r.unicos} clientes de un solo día">${r.ajenos}/${r.unicos}</td><td class="${r.pct>=40?'bad':r.pct>=15?'warn':''}">${r.pct}%</td></tr>`).join('')}</tbody></table></div>`
     : '<p class="empty">No hay localidades con clientes de estos días.</p>'}`;
 }
+function visitaEntregaHTML(c) {
+  const esperado = RutasRevision.trasVisita(c.vis || '');
+  const nombres = ds => (ds || '').match(/../g)?.map(d => DAYNAME[d] || (d === 'DO' ? 'Domingo' : d)).join(', ') || 'sin datos';
+  const actual = DAYS.filter(d => (c.d || '').includes(d)).join('');
+  const comparable = esperado && !(c.vis || '').includes('DO');
+  return `<p class="note">Visita: ${esc(nombres(c.vis))} · Entrega: ${esc(nombres(c.d))}${comparable ? `<br>Entrega esperada: ${esc(nombres(esperado))} · <b class="${actual === esperado ? '' : 'warn'}">${actual === esperado ? 'Coincide' : 'Revisar secuencia'}</b>` : ''}</p>`;
+}
 function renderDia() {
   const days = compActivo() ? S.cdias : S.day==='TODOS' ? DAYS : [S.day];
-  $('p-dia').innerHTML = days.map(d => {
+  $('p-dia').innerHTML = '<p class="note">Visitas programadas del maestro y entregas asignadas. Referencia: entrega al día siguiente de la visita; sábado → lunes. Las diferencias pueden ser excepciones operativas. El filtro de día corresponde a la entrega.</p>' + days.map(d => {
     const clients=scope().filter(c=>c.d.includes(d));
-    return `<h2>${DAYNAME[d]} · ${clients.length} clientes</h2><div class="list">${clients.map(c=>itemHTML(c,`<span class="pill">${esc(c.suc)}</span>`)).join('')||'<p class="note">No hay clientes para los filtros seleccionados.</p>'}</div>`;
+    return `<h2>${DAYNAME[d]} · ${clients.length} clientes</h2><div class="list">${clients.map(c=>`<div>${itemHTML(c,`<span class="pill">${esc(c.suc)}</span>`)}${visitaEntregaHTML(c)}</div>`).join('')||'<p class="note">No hay clientes para los filtros seleccionados.</p>'}</div>`;
   }).join('');
   bindItems($('p-dia'));
 }
@@ -766,7 +773,7 @@ function descargarCsv(vehs, carga, filasM) {
 }
 
 // ---------- efectividad de visita: visitas del maestro contra días con venta ----------
-const EFE = {res:null, dias:90, busy:false, filtro:'', loc:'', limite:150};
+const EFE = {res:null, dias:90, busy:false, filtro:'', loc:'', ven:'', limite:150};
 const EFE_FILTRO = {cero:'Sin ninguna venta', bajo:'Menos de 25%'};
 const efeCls = x => x == null ? '' : x >= .6 ? 'ok' : x >= .4 ? 'warn' : 'bad';
 const efeBarra = x => x == null ? '—' : `<span class="ef-bar ${efeCls(x)}" style="--p:${Math.round(x * 100)}%"><b>${Math.round(x * 100)}%</b></span>`;
@@ -779,12 +786,20 @@ async function generarEfectividad() {
     EFE.res = RutasEfectividad.analizar(S.D.clientes, f, {suc:S.suc});
     const ids = new Set(EFE.res.clientes.map(c => c.id));
     agregarVolumenAnalisis(EFE.res, ventas, S.D.clientes.filter(c => ids.has(c.id)));
-    EFE.filtro = ''; EFE.loc = ''; EFE.limite = 150;
+    EFE.filtro = ''; EFE.loc = ''; EFE.ven = ''; EFE.limite = 150;
   } catch (e) { toast('No se pudo calcular la efectividad: ' + e.message, true); }
   finally { EFE.busy = false; renderEfe(); }
 }
-const efeClientes = () => EFE.res.clientes.filter(r => (!EFE.loc || r.loc === EFE.loc)
+const efeClientes = () => EFE.res.clientes.filter(r => (!EFE.loc || r.loc === EFE.loc) && (!EFE.ven || r.ven === EFE.ven)
   && (EFE.filtro !== 'cero' || !r.efectivas) && (EFE.filtro !== 'bajo' || r.pct < .25));
+function vendedoresEfectividadHTML(R) {
+  return `<section class="ef-vendedores"><h2>Vendedores: visita y entrega posterior</h2>
+    <p class="note">Cartera y agenda actuales del maestro. Clientes únicos por día en una semana habitual, no pedidos confirmados. Sábado → lunes; no contempla feriados. La efectividad mide ciclos completos con alguna venta, incluida BEES: no acredita una visita realizada ni atribuye la venta al vendedor.</p>
+    ${(R.vendedores || []).map(v => `<details><summary>${esc(v.suc)} · ${esc(v.ven)} · ${v.cartera} clientes · ${pct(v.pct)} efectividad</summary>
+      <p class="note">${v.sinVisita} sin visita válida de lunes a sábado · ${v.clientes} clientes evaluados · ${num(v.efectivas)} de ${num(v.visitas)} ciclos con venta · ${pct(v.bees)} de los días con venta por BEES.</p>
+      <div class="tw"><table><thead><tr><th>Visita → entrega</th><th>Clientes a visitar</th><th>Con entrega al día siguiente</th><th>Secuencia a revisar</th><th>Total a entregar de su cartera</th><th>Ciclos con venta / evaluados</th><th>Efectividad</th></tr></thead><tbody>
+      ${v.dias.map(d => `<tr><td>${DAYNAME[d.dia]} → ${DAYNAME[d.entrega]}</td><td>${d.programados}</td><td>${d.coinciden}</td><td class="${d.revisar ? 'warn' : ''}">${d.revisar}</td><td>${d.entregas}</td><td>${d.efectivas} / ${d.visitas}</td><td>${pct(d.pct)}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}</section>`;
+}
 function renderEfe() {
   const el = $('p-efe'), R = EFE.res;
   const head = `<div class="rec-head"><div><h2>Efectividad de visita</h2>
@@ -807,18 +822,20 @@ function renderEfe() {
         <td class="ef-c">${efeBarra(l.pct)}</td><td>${pct(l.semPct)}</td><td>${pct(l.bees)}</td><td class="${l.ceros ? 'bad' : 'z'}">${l.ceros || '·'}</td><td class="${l.bajos ? 'warn' : 'z'}">${l.bajos || '·'}</td></tr>`;
     }
     const chips = d => d ? `<span class="dlbl">${diasChips(d)}</span>` : '<span class="z">—</span>';
-    const filasC = lista.slice(0, EFE.limite).map(r => `<tr data-eid="${r.id}" tabindex="0" title="Ver en el mapa"><td class="mono">${r.id}</td><td class="rv-nom">${esc(r.n)}<small>${esc(r.dom) || ''}</small></td><td>${esc(r.loc)}</td>
+    const filasC = lista.slice(0, EFE.limite).map(r => `<tr data-eid="${r.id}" tabindex="0" title="Ver en el mapa"><td class="mono">${r.id}</td><td class="rv-nom">${esc(r.n)}<small>${esc(r.ven)} - ${esc(r.dom) || ''}</small></td><td>${esc(r.loc)}</td>
       <td><span class="dlbl vis">${r.vis.match(/../g).map(d => `<i>${d}</i>`).join('')}</span></td><td>${chips(r.d)}</td><td>${r.visitas}</td><td>${r.efectivas}</td><td class="ef-c">${efeBarra(r.pct)}</td>
       <td>${r.semCompra}/${r.semanas}</td><td>${pct(r.bees)}</td><td>${r.ultima ? esc(r.ultima.slice(5).split('-').reverse().join('/')) : '—'}</td></tr>`).join('');
     el.innerHTML = head + `
       <p class="status">${otraSuc ? `<b class="warn-t">Calculado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a calcular para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · visitas estimadas con los días de visita del maestro · el último ciclo incompleto no cuenta</p>
       ${volumenAnalisisHTML(R)}
+      ${vendedoresEfectividadHTML(R)}
       <div class="kpis rv-kpis">${kp.map(([c, n, l, f]) => `<button class="kpi ${c}" ${f ? `data-ef="${f}" aria-pressed="${EFE.filtro === f}"` : 'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
       <div><h2>Por día de visita</h2></div>
       <div class="ef-dias">${R.porDia.map(x => `<div class="ef-dia" title="${DAYNAME[x.dia]}: ${num(x.efectivas)} de ${num(x.visitas)} visitas con venta · ${x.clientes} clientes"><span>${DIASLARGO[x.dia]}</span>${efeBarra(x.pct)}<small>${num(x.efectivas)} de ${num(x.visitas)} · ${x.clientes} clientes</small></div>`).join('')}</div>
       <div><h2>Por localidad</h2><p class="note">Efectividad: visitas con venta sobre visitas. Un cliente con dos visitas por semana que compra una vez por semana da 50%: por eso se muestra también el porcentaje de semanas con compra. Tocá una localidad para ver sus clientes.</p></div>
       <div class="tw"><table class="ef-loc"><thead><tr><th>Localidad</th><th>Clientes</th><th>Visitas</th><th>Con venta</th><th>Efectividad</th><th>Semanas con compra</th><th>Por BEES</th><th title="Clientes sin ninguna venta en el período">Sin ventas</th><th title="Clientes con efectividad menor a 25%">&lt; 25%</th></tr></thead><tbody>${filas}</tbody></table></div>
       <div class="rv-fil"><h2>Clientes · ${lista.length}</h2>
+        <label>Vendedor <select id="efeVen"><option value="">Todos</option>${[...new Set(R.vendedores.map(v => v.ven))].sort().map(v => `<option ${v === EFE.ven ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label>
         <label>Localidad <select id="efeLoc"><option value="">Todas</option>${locs.map(l => `<option ${l === EFE.loc ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
         ${EFE.filtro ? `<span class="pill">${EFE_FILTRO[EFE.filtro]} <a href="#" id="efeClr" aria-label="Quitar filtro">×</a></span>` : ''}</div>
       <p class="note">Ordenados de menor a mayor efectividad. Tocá un cliente para verlo en el mapa con sus vecinos.</p>
@@ -835,6 +852,7 @@ function renderEfe() {
   el.querySelectorAll('[data-ef]').forEach(b => b.onclick = () => { EFE.filtro = EFE.filtro === b.dataset.ef ? '' : b.dataset.ef; EFE.limite = 150; renderEfe(); });
   el.querySelectorAll('tr[data-eloc]').forEach(tr => { const f = () => { EFE.loc = EFE.loc === tr.dataset.eloc ? '' : tr.dataset.eloc; EFE.limite = 150; renderEfe(); };
     tr.onclick = f; tr.onkeydown = e => { if (e.key === 'Enter') f(); }; });
+  $('efeVen').onchange = e => { EFE.ven = e.target.value; EFE.limite = 150; renderEfe(); };
   $('efeLoc').onchange = e => { EFE.loc = e.target.value; EFE.limite = 150; renderEfe(); };
   const cl = $('efeClr'); if (cl) cl.onclick = e => { e.preventDefault(); EFE.filtro = ''; renderEfe(); };
   const mas = $('efeMas'); if (mas) mas.onclick = () => { EFE.limite += 300; renderEfe(); };
@@ -844,12 +862,14 @@ function renderEfe() {
 function csvEfectividad() {
   const R = EFE.res, q = v => /[;"\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : String(v ?? '');
   const p = x => x == null ? '' : Math.round(x * 100);
-  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_VISITA', 'DIAS_ENTREGA', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%', 'SEMANAS', 'SEMANAS_CON_COMPRA', 'DIAS_CON_VENTA', 'POR_BEES_%', 'ULTIMA_VENTA'].join(';')];
-  for (const r of efeClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.vis, r.d, r.visitas, r.efectivas, p(r.pct), r.semanas, r.semCompra, r.compras, p(r.bees), r.ultima || ''].map(q).join(';'));
+  const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'VENDEDOR', 'DIAS_VISITA', 'DIAS_ENTREGA', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%', 'SEMANAS', 'SEMANAS_CON_COMPRA', 'DIAS_CON_VENTA', 'POR_BEES_%', 'ULTIMA_VENTA'].join(';')];
+  for (const r of efeClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.ven, r.vis, r.d, r.visitas, r.efectivas, p(r.pct), r.semanas, r.semCompra, r.compras, p(r.bees), r.ultima || ''].map(q).join(';'));
   lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%', 'SEMANAS_CON_COMPRA_%', 'POR_BEES_%', 'SIN_VENTAS', 'MENOS_25%'].join(';'));
   for (const l of R.localidades) lineas.push([l.suc, l.loc, l.clientes, l.visitas, l.efectivas, p(l.pct), p(l.semPct), p(l.bees), l.ceros, l.bajos].map(q).join(';'));
   lineas.push('', ['DIA_VISITA', 'CLIENTES', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%'].join(';'));
   for (const x of R.porDia) lineas.push([DIASLARGO[x.dia], x.clientes, x.visitas, x.efectivas, p(x.pct)].map(q).join(';'));
+  lineas.push('', 'SUCURSAL;VENDEDOR;DIA_VISITA;DIA_ENTREGA;CLIENTES_A_VISITAR;COINCIDEN;REVISAR;TOTAL_ENTREGAS_CARTERA;CICLOS;CON_VENTA;EFECTIVIDAD_%');
+  for (const v of R.vendedores) for (const d of v.dias) lineas.push([v.suc,v.ven,d.dia,d.entrega,d.programados,d.coinciden,d.revisar,d.entregas,d.visitas,d.efectivas,p(d.pct)].map(q).join(';'));
   csvVolumenAnalisis(R, lineas, q);
   const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`efectividad_visita_${new Date().toISOString().slice(0, 10)}.csv`});
@@ -867,6 +887,7 @@ function informeEfectividad() {
     <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
     <h1>Efectividad de visita</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
     ${volumenAnalisisHTML(R)}
+    ${vendedoresEfectividadHTML(R).replaceAll('<details>', '<details open>')}
     <div class="k"><div><b class="${efeCls(s.pct)}">${pct(s.pct)}</b>efectividad de visita (${num(s.efectivas)} de ${num(s.visitas)} visitas con venta)</div><div><b>${pct(s.semPct)}</b>de las semanas con compra</div>
       <div><b>${pct(s.bees)}</b>de las ventas entraron por BEES</div><div><b>${s.clientes}</b>clientes con visita · <span class="bad">${s.ceros} sin ventas</span> · <span class="warn">${s.bajos} bajo 25%</span></div></div>
     <h2>Por día de visita</h2><table><thead><tr><th>Día</th><th class="n">Clientes</th><th class="n">Visitas</th><th class="n">Con venta</th><th class="n">Efectividad</th></tr></thead><tbody>

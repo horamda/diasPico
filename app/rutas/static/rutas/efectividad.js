@@ -40,7 +40,7 @@
     }
     const enPeriodo = [...ventas].filter(([t]) => t >= desde && t <= hasta);
     const ultima = enPeriodo.length ? iso(Math.max(...enPeriodo.map(([t]) => t))) : null;
-    return {id:c.id, n:c.n, loc:c.loc, suc:c.suc, dom:c.dom, vis:dias.join(''), d:c.d || '', visitas:vis, efectivas:ef,
+    return {id:c.id, n:c.n, loc:c.loc, suc:c.suc, ven:(c.ven || '').trim() || 'Sin vendedor', dom:c.dom, vis:dias.join(''), d:c.d || '', visitas:vis, efectivas:ef,
       pct:vis ? ef / vis : null, semanas, semCompra, compras:enPeriodo.length,
       bees:enPeriodo.length ? enPeriodo.filter(([, b]) => b).length / enPeriodo.length : null, ultima, porDia};
   }
@@ -67,11 +67,33 @@
       const visitas = rs.reduce((t, r) => t + r.porDia[d].visitas, 0), efectivas = rs.reduce((t, r) => t + r.porDia[d].efectivas, 0);
       return {dia:d, clientes:rs.length, visitas, efectivas, pct:visitas ? efectivas / visitas : null};
     });
+    const gruposVendedor = new Map();
+    for (const c of act) {
+      const ven = (c.ven || '').trim() || 'Sin vendedor', key = JSON.stringify([c.suc, ven]);
+      if (!gruposVendedor.has(key)) gruposVendedor.set(key, {suc:c.suc, ven, cartera:[]});
+      gruposVendedor.get(key).cartera.push(c);
+    }
+    const siguiente = {LU:'MA', MA:'MI', MI:'JU', JU:'VI', VI:'SA', SA:'LU'};
+    const vendedores = [...gruposVendedor.values()].map(g => {
+      const ids = new Set(g.cartera.map(c => c.id)), rs = filas.filter(r => ids.has(r.id));
+      return {suc:g.suc, ven:g.ven, ...sumar(rs), cartera:g.cartera.length,
+        sinVisita:g.cartera.filter(c => !DAYS.some(d => (c.vis || '').includes(d))).length,
+        dias:DAYS.map(d => {
+          const programados = g.cartera.filter(c => (c.vis || '').includes(d));
+          const visitas = rs.reduce((n, r) => n + r.porDia[d].visitas, 0);
+          const efectivas = rs.reduce((n, r) => n + r.porDia[d].efectivas, 0);
+          const coinciden = programados.filter(c => (c.d || '').includes(siguiente[d])).length;
+          return {dia:d, entrega:siguiente[d], programados:programados.length, coinciden,
+            revisar:programados.length - coinciden,
+            entregas:g.cartera.filter(c => (c.d || '').includes(siguiente[d])).length,
+            visitas, efectivas, pct:visitas ? efectivas / visitas : null};
+        })};
+    }).sort((a,b) => a.suc.localeCompare(b.suc) || a.ven.localeCompare(b.ven));
     filas.sort((a, b) => a.pct - b.pct || b.visitas - a.visitas);
     return {generado:new Date().toISOString(), desde:fechas.desde, hasta:fechas.hasta, suc,
       resumen:{...sumar(filas), sinVisitaDom:sinVisita.filter(c => (c.vis || '').includes('DO')).length,
         sinVisita:sinVisita.filter(c => !(c.vis || '').includes('DO')).length, activos:act.length},
-      localidades, porDia, clientes:filas};
+      localidades, porDia, vendedores, clientes:filas};
   }
   const api = {analizar, DAYS};
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.RutasEfectividad = api;

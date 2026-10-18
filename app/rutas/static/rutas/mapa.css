@@ -513,3 +513,8 @@ aside{position:relative}
   #p-rec th,#p-rec td{padding:4px 2px;font-size:10px}
   #p-rec .rec-vol,#p-rec .rec-matriz td.heat small{font-size:9px}
 }
+
+.ef-vendedores details{border:1px solid var(--line);padding:10px;margin:8px 0;border-radius:6px}
+.ef-vendedores summary{cursor:pointer;overflow-wrap:anywhere}
+.ef-vendedores table{table-layout:fixed;width:100%}
+.ef-vendedores th,.ef-vendedores td{white-space:normal;overflow-wrap:anywhere;min-width:0}

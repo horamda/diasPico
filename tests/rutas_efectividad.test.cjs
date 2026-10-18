@@ -6,6 +6,30 @@ const {analizar}=require('../app/rutas/static/rutas/efectividad.js');
 const fechas=(cl)=>({desde:'2026-09-07',hasta:'2026-09-27',clientes:cl});
 const c=(id,vis,extra={})=>({id,n:'C'+id,loc:'PUEBLO',suc:'DOLORES',d:'MA',vis,an:false,...extra});
 
+test('agenda por vendedor separa visitas, coincidencias y total de entregas de su cartera',()=>{
+ const r=analizar([
+  c(1,'LU',{ven:'Ana'}), c(2,'LU',{ven:'Ana',d:'MI'}),
+  c(3,'JU',{ven:'Ana',d:'MA'}), c(4,'SA',{ven:'Ana',d:'LU'}),
+  c(5,'',{ven:''}), c(6,'LU',{ven:'Ana',an:true}),
+  c(7,'LU',{ven:'Ana',suc:'OTRA'})
+ ],fechas({1:[['2026-09-08',1]]}),{suc:'DOLORES'});
+ const ana=r.vendedores.find(v=>v.ven==='Ana');
+ assert.equal(ana.cartera,4);
+ const lu=ana.dias.find(d=>d.dia==='LU');
+ assert.equal(lu.programados,2);
+ assert.equal(lu.coinciden,1);
+ assert.equal(lu.revisar,1);
+ assert.equal(lu.entregas,2,'incluye entregas de clientes con otra visita');
+ assert.equal(lu.visitas,4);
+ assert.equal(lu.efectivas,1);
+ assert.equal(lu.pct,.25);
+ assert.equal(ana.dias.find(d=>d.dia==='SA').coinciden,1);
+ assert.equal(r.vendedores.find(v=>v.ven==='Sin vendedor').sinVisita,1);
+ const corto=analizar([c(1,'LU',{ven:'Ana'})],{desde:'2026-09-07',hasta:'2026-09-08',clientes:{}});
+ assert.equal(corto.vendedores[0].dias[0].programados,1);
+ assert.equal(corto.vendedores[0].pct,null,'sin ciclo completo no inventa efectividad cero');
+});
+
 test('cuenta visitas por semana y venta antes de la visita siguiente',()=>{
  const r=analizar([c(1,'LU')],fechas({1:[['2026-09-08',1],['2026-09-16',0]]}));
  const x=r.clientes[0];
