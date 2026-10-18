@@ -228,7 +228,16 @@ def _dias_param(default):
 
 
 _RESUMEN_VENTA = ('compras', 'comprobantes', 'neto', 'ticket', 'bultos', 'hl', 'drop', 'bultos_sem', 'rech_pct',
-                  'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado', 'ent')
+                  'ultima', 'dias_sin', 'frec', 'tend', 'abc', 'estado', 'ent',
+                  'pallets', 'bultos_sin_bxp', 'drop_hl', 'drop_pallets', 'hl_sem', 'pallets_sem', 'frec_hist')
+
+
+@bp.get('/api/ventas/prioridades')
+@protegido
+def api_prioridades():
+    from .prioridades import diagnostico
+    return jsonify(diagnostico(S.clientes_vista(incluir_anulados=True), S.plan_vista(),
+                              _dias_param(60), request.args.get('suc', 'TODAS')))
 
 
 @bp.get("/api/ventas/comportamiento")

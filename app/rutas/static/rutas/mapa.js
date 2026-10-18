@@ -13,6 +13,42 @@ let VOL_Q = [];
 const volNivel = c => { const v = venta(c); if (!v || !v.bultos) return -1; let i = 0; while (i < VOL_Q.length && v.bultos_sem > VOL_Q[i]) i++; return i; };
 const num = (n, d = 0) => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: d});
 const PERIODOS = [7, 15, 30, 45, 60, 90, 120];
+// Pallets equivalentes: pueden ser fraccionarios; * indica bultos sin BxP.
+const palletTexto = v => `${num(v?.pallets, 2)} pallets${v?.bultos_sin_bxp ? '*' : ''}`;
+const volumenTexto = v => `${num(v?.bultos, 1)} b · ${num(v?.hl, 2)} HL · ${palletTexto(v)}`;
+const cargaVacia = () => ({bultos:0, hl:0, pallets:0, bultos_sin_bxp:0});
+function sumarCarga(total, v) {
+  total.bultos += v?.drop || 0; total.hl += v?.drop_hl || 0;
+  total.pallets += v?.drop_pallets || 0; total.bultos_sin_bxp += v?.bultos_sin_bxp || 0;
+  return total;
+}
+const notaPallets = '<p class="note">Pallets equivalentes = bultos / BxP de cada artículo. * Total parcial: hay bultos sin BxP.</p>';
+function agregarVolumenAnalisis(resultado, ventas, clientes) {
+  const localidades = new Map();
+  resultado.volumen = cargaVacia();
+  resultado.volumenClientes = clientes.map(c => {
+    const v = ventas.clientes[c.id] || cargaVacia();
+    const key = JSON.stringify([c.suc, c.loc]);
+    if (!localidades.has(key)) localidades.set(key, {suc:c.suc, loc:c.loc, ...cargaVacia()});
+    for (const k of Object.keys(resultado.volumen)) {
+      resultado.volumen[k] += v[k] || 0;
+      localidades.get(key)[k] += v[k] || 0;
+    }
+    return {id:c.id, n:c.n, suc:c.suc, loc:c.loc, ...v};
+  });
+  resultado.volumenLocalidades = [...localidades.values()];
+}
+function volumenAnalisisHTML(r) {
+  if (!r.volumen) return '';
+  return `<section><h2>Volumen del período</h2><p>${volumenTexto(r.volumen)}</p>${notaPallets}
+    <div class="tw"><table><thead><tr><th>Sucursal</th><th>Localidad</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>Bultos sin BxP</th></tr></thead><tbody>
+    ${r.volumenLocalidades.map(v => `<tr><td>${esc(v.suc)}</td><td>${esc(v.loc)}</td><td>${num(v.bultos,1)}</td><td>${num(v.hl,2)}</td><td>${palletTexto(v)}</td><td>${num(v.bultos_sin_bxp,1)}</td></tr>`).join('')}</tbody></table></div></section>`;
+}
+function csvVolumenAnalisis(r, lineas, q) {
+  lineas.push('', ['VOLUMEN DEL PERIODO', r.desde, r.hasta].map(q).join(';'));
+  lineas.push(['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'BULTOS', 'HL', 'PALLETS', 'BULTOS SIN BXP'].join(';'));
+  for (const v of r.volumenClientes || []) lineas.push([v.suc, v.loc, v.id, v.n, v.bultos || 0, v.hl || 0, v.pallets || 0, v.bultos_sin_bxp || 0].map(q).join(';'));
+}
 const RADIOS = [300, 500, 1000, 2000];   // metros alrededor del punto buscado
 // Comparar días: un color por día de entrega.
 const DAY_COL = {LU:'#2563eb', MA:'#16a34a', MI:'#9333ea', JU:'#ea580c', VI:'#0891b2', SA:'#db2777'};
@@ -59,6 +95,7 @@ const FLT_LABEL = {sindias:'sin días de entrega', singeo:'sin geolocalizar', fa
   anulado:'inactivos con días asignados', cambia:'días distintos al ERP', pend:'pendientes de subir a BEES',
   riesgo:'en riesgo de dejar de comprar', inactivo:'sin comprar hace más de 45 días', sin_compras:'sin compras en el período'};
 for (const e of ['riesgo','inactivo','sin_compras']) FLT[e] = c => !c.an && estadoDe(c) === e;
+FLT.sin_compras = c => !c.an && !venta(c)?.compras;
 
 function toast(msg, err){ const t=document.createElement('div'); t.className='toast'+(err?' err':''); t.setAttribute('role', err?'alert':'status'); t.textContent=msg;
   document.body.appendChild(t); setTimeout(()=>t.remove(), 3500); }
@@ -70,6 +107,12 @@ async function api(path, opts={}) {
   if (!r.ok) throw new Error(j.error || ('Error ' + r.status));
   return j;
 }
+
+const prioridades = RutasPrioridades.crear({el:$('p-pri'), api, sucursal:()=>S.suc,
+  verCliente:async id=>{
+    if (!byId.has(id)) { $('activeClients').value='si'; $('assignedDays').value='todos'; await load(); }
+    verClienteRevision(id);
+  }});
 
 // ---------- colores por localidad ----------
 let locColor = new Map();
@@ -199,7 +242,7 @@ function drawPoints(list) {
     const Marca = modoPin ? Pin : L.CircleMarker;
     const m = new Marca([c.lat,c.lng], {radius: sel?(modoPin?10:9):rad, weight: sel?3:(c.far||(S.ver==='loc'&&sd)?2.5:1),
       color: borde, fillColor: colorDe(c, sd), fillOpacity: c.an?.5:.92});
-    const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.compras)} compras · ${num(v.bultos_sem,1)} bultos/sem`:''}` : '';
+    const v = venta(c), vt = S.V ? `<br>${ESTADO[estadoDe(c)]}${v?` · ${num(v.compras)} compras · ${num(v.bultos_sem,1)} b/sem · ${num(v.hl_sem,2)} HL/sem · ${num(v.pallets_sem,2)} pallets/sem${v.bultos_sin_bxp ? '*' : ''}`:''}` : '';
     m.bindTooltip(`<b>${c.id}</b> ${esc(c.n)}<br><i class="sw" style="background:${colorLoc(c.loc)}"></i>${esc(c.loc)} · entrega ${c.d || 'sin días'}${c.vis?` · visita ${c.vis}`:''}${c.an?' · inactivo':''}${vt}`,
       modoPin ? {direction:'top', offset:[0, -(sel?10:rad) * (PIN_ALTO + 1)]} : {});
     m.on('click', () => select(c.id));
@@ -227,8 +270,8 @@ function drawZonas(list) {
   const g = new Map();
   for (const c of list) {
     if (c.an) continue;
-    const x = g.get(c.loc) || {loc:c.loc, n:0, pts:[], carga:0};
-    x.n++; x.carga += venta(c)?.drop || 0; if (isGeo(c) && !c.far) x.pts.push([c.lat, c.lng]); g.set(c.loc, x);
+    const x = g.get(c.loc) || {loc:c.loc, n:0, pts:[], carga:cargaVacia()};
+    x.n++; sumarCarga(x.carga, venta(c)); if (isGeo(c) && !c.far) x.pts.push([c.lat, c.lng]); g.set(c.loc, x);
   }
   const zonas = S.zonas && S.day !== 'TODOS', carga = !!S.V && S.day !== 'TODOS';
   for (const x of g.values()) {
@@ -246,7 +289,7 @@ function drawZonas(list) {
     }
     const norte = Math.max(...x.pts.map(p => p[0])), lng = x.pts.reduce((t,p)=>t+p[1],0)/x.pts.length;
     const m = L.marker([norte + .0035, lng], {keyboard:false, riseOnHover:true, icon:L.divIcon({className:'loc-tag-wrap', iconSize:null,
-      html:`<span class="loc-tag${foco?' foco':''}" style="--c:${col}" title="Acercar a ${esc(x.loc)}${carga?' · carga estimada: promedio de bultos por entrega de sus clientes':''}">${esc(x.loc)}<b>${x.n}</b>${carga?`<em>~${num(x.carga)} b</em>`:''}</span>`})});
+      html:`<span class="loc-tag${foco?' foco':''}" style="--c:${col}" title="Acercar a ${esc(x.loc)}${carga?' · carga estimada: promedio de volumen por entrega de sus clientes':''}">${esc(x.loc)}<b>${x.n}</b>${carga?`<em>~${volumenTexto(x.carga)}</em>`:''}</span>`})});
     m.on('click', () => zoomLoc(x.loc));
     tagLayer.addLayer(m);
   }
@@ -473,18 +516,19 @@ function renderVen() {
   const selector = `<div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-vp="${d}" aria-pressed="${S.periodo === d}">${d} d</button>`).join('')}</div>`;
   const bindPeriodo = () => el.querySelectorAll('[data-vp]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.vp; savePrefs(); load(); });
   if (!S.V) { el.innerHTML = selector + '<h2>Ventas</h2><p class="empty">No hay ventas importadas en el período. Se cargan desde Importaciones de datos → Ventas detalle.</p>'; bindPeriodo(); return; }
-  const act = scope().filter(c => !c.an), cnt = e => act.filter(c => estadoDe(c) === e).length;
+  const act = scope().filter(c => !c.an), cnt = e => act.filter(c => e === 'sin_compras' ? !venta(c)?.compras : estadoDe(c) === e).length;
   const tot = k => act.reduce((t, c) => t + (venta(c)?.[k] || 0), 0);
   const kp = [['',cnt('activo'),'activos',null],['warn',cnt('riesgo'),'en riesgo','riesgo'],
     ['bad',cnt('inactivo'),'inactivos (+45 días)','inactivo'],['',cnt('sin_compras'),'sin compras','sin_compras']];
   const lista = (e, n) => act.filter(c => estadoDe(c) === e).sort((a, b) => (venta(b)?.bultos || 0) - (venta(a)?.bultos || 0)).slice(0, n);
   const top = act.filter(venta).sort((a, b) => venta(b).bultos - venta(a).bultos).slice(0, 15);
-  const tag = c => { const v = venta(c); return v ? `<span class="pill">${num(v.bultos_sem,1)} b/sem</span><span class="pill">${v.dias_sin} d</span>` : ''; };
+  const tag = c => { const v = venta(c); return v ? `<span class="pill">${num(v.bultos_sem,1)} b/sem · ${num(v.hl_sem,2)} HL/sem · ${num(v.pallets_sem,2)} pallets/sem${v.bultos_sin_bxp ? '*' : ''}</span><span class="pill">${v.dias_sin} d</span>` : ''; };
   el.innerHTML = selector + `<p class="status">Ventas importadas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} (${S.V.dias} días) · sin remitos ni comodatos · volumen de mercadería</p>
-   <div class="vtot"><div title="Una compra por cliente y día · ${num(tot('comprobantes'))} comprobantes"><b>${num(tot('compras'))}</b><span>compras</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
+   <div class="vtot"><div title="Una compra por cliente y día · ${num(tot('comprobantes'))} comprobantes"><b>${num(tot('compras'))}</b><span>compras</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${num(tot('pallets'),2)}${tot('bultos_sin_bxp') ? '*' : ''}</b><span>pallets equivalentes</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
+   ${notaPallets}${tot('bultos_sin_bxp') ? `<p class="note">${num(tot('bultos_sin_bxp'),1)} bultos sin BxP.</p>` : ''}
    <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
-   <p class="note">En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días). Inactivo: más de 45 días.</p>
-   <h2>Mayor volumen</h2><div class="list">${top.map(c => itemHTML(c, `<span class="pill">${num(venta(c).bultos)} b</span>`)).join('') || '<p class="note">Sin datos.</p>'}</div>
+   <p class="note">Actividad al cierre de los datos: en riesgo si supera 2,5 veces su frecuencia histórica (mínimo 21 días); inactivo si supera 45 días. Frecuencia calculada sobre 120 días, independiente del período elegido. Sin compras cuenta la ventana seleccionada y puede incluir clientes activos.</p>
+   <h2>Mayor volumen</h2><div class="list">${top.map(c => itemHTML(c, `<span class="pill">${volumenTexto(venta(c))}</span>`)).join('') || '<p class="note">Sin datos.</p>'}</div>
    <h2>En riesgo · mayor volumen primero</h2><div class="list">${lista('riesgo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>
    <h2>Inactivos · mayor volumen primero</h2><div class="list">${lista('inactivo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>`;
   el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
@@ -502,7 +546,7 @@ function matrizLocalidades(base) {
     const k = c.suc + '|' + c.loc;
     if (!g.has(k)) g.set(k, {suc:c.suc, loc:c.loc, total:0, sin:0, carga:{}, ...Object.fromEntries(DAYS.map(d => [d, 0]))});
     const r = g.get(k); r.total++; if (!c.d) r.sin++;
-    for (const d of DAYS) if (c.d.includes(d)) { r[d]++; r.carga[d] = (r.carga[d] || 0) + (venta(c)?.drop || 0); }
+    for (const d of DAYS) if (c.d.includes(d)) { r[d]++; r.carga[d] = sumarCarga(r.carga[d] || cargaVacia(), venta(c)); }
   }
   return [...g.values()].sort((a, b) => a.suc.localeCompare(b.suc) || b.total - a.total || a.loc.localeCompare(b.loc));
 }
@@ -524,11 +568,11 @@ function renderRec() {
         const info = carga[d].vehiculos.find(x => x.id === v.id);
         if (!info || !info.paradas.length) return `<td class="vacio" title="Sin recorrido el ${DAYNAME[d].toLowerCase()}">—</td>`;
         const exceso = v.capacidad_clientes && info.total > v.capacidad_clientes;
-        const bultos = S.V ? info.paradas.reduce((t, p) => t + (matrizIdx.get(v.deposito + '|' + p.loc)?.carga[d] || 0), 0) : 0;
+        const volumen = info.paradas.reduce((t, p) => { const cargaLoc = matrizIdx.get(v.deposito + '|' + p.loc)?.carga[d]; for (const k of Object.keys(t)) t[k] += cargaLoc?.[k] || 0; return t; }, cargaVacia());
         return `<td class="rec-cell${exceso ? ' exceso' : ''}" data-dia="${d}" data-locs="${esc(info.paradas.map(p => p.loc).join('|'))}" tabindex="0"
-          title="${esc(v.nombre)} · ${DAYNAME[d]}: ${info.total} clientes${v.capacidad_clientes ? ' de ' + v.capacidad_clientes + ' de tope' : ''}${bultos ? ' · ~' + num(bultos) + ' bultos' : ''}. Tocá para verlo en el mapa.">
+          title="${esc(v.nombre)} · ${DAYNAME[d]}: ${info.total} clientes${v.capacidad_clientes ? ' de ' + v.capacidad_clientes + ' de tope' : ''}${S.V ? ' · ~' + volumenTexto(volumen) : ''}. Tocá para verlo en el mapa.">
           <div class="rec-locs">${info.paradas.map(p => `<span><i class="sw" style="background:${colorLoc(p.loc)}"></i>${esc(p.loc)}<b>${p.n}</b>${p.compartida ? '<em title="Localidad compartida con otro vehículo el mismo día">⇄</em>' : ''}</span>`).join('')}</div>
-          <div class="rec-tot">${info.total} clientes${bultos ? ` · ~${num(bultos)} b` : ''}</div></td>`;
+          <div class="rec-tot">${info.total} clientes${S.V ? ` · ~${volumenTexto(volumen)}` : ''}</div></td>`;
       }).join('');
       filas += `<tr><td class="rec-dep">${v.deposito !== dep ? esc(v.deposito) : ''}</td><td class="rec-veh"><i class="sw" style="background:${esc(v.color)}"></i>${esc(v.nombre)}${v.patente ? `<small>${esc(v.patente)}</small>` : ''}</td>${celdas}</tr>`;
       dep = v.deposito;
@@ -544,13 +588,14 @@ function renderRec() {
   for (const r of filasM) {
     if (r.suc !== suc) { html += `<tr class="suc"><td colspan="${DAYS.length + 3}">Sale de ${esc(r.suc)}</td></tr>`; suc = r.suc; }
     html += `<tr data-loc="${esc(r.loc)}"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td>${DAYS.map(d => r[d]
-      ? `<td class="heat" style="--h:${Math.round(r[d] / max * 100)}%" data-dia="${d}" data-locs="${esc(r.loc)}" tabindex="0" title="${esc(r.loc)} · ${DAYNAME[d]}: ${r[d]} clientes${r.carga[d] ? ' · ~' + num(r.carga[d]) + ' bultos' : ''}">${r[d]}${S.V && r.carga[d] ? `<small>~${num(r.carga[d])} b</small>` : ''}</td>`
+      ? `<td class="heat" style="--h:${Math.round(r[d] / max * 100)}%" data-dia="${d}" data-locs="${esc(r.loc)}" tabindex="0" title="${esc(r.loc)} · ${DAYNAME[d]}: ${r[d]} clientes${r.carga[d] ? ' · ~' + volumenTexto(r.carga[d]) : ''}">${r[d]}${S.V && r.carga[d] ? `<small>~${volumenTexto(r.carga[d])}</small>` : ''}</td>`
       : '<td class="z">·</td>').join('')}<td><b>${r.total}</b></td><td class="${r.sin ? 'bad' : 'z'}">${r.sin || '·'}</td></tr>`;
   }
   el.innerHTML = `<div class="rec-head"><div><h2>Recorridos por camión</h2><p class="note">${S.suc === 'TODAS' ? 'Todas las sucursales' : esc(S.suc)} · cada celda suma los clientes activos de ese día en las localidades del recorrido. Tocá una celda para verla en el mapa.</p></div>
       <div class="row"><button class="btn" id="recCsv" type="button">Descargar CSV</button><button class="btn primary" id="recVolver" type="button">Volver al mapa</button></div></div>
     ${cuadro}
-    <div><h2>Clientes por día y localidad</h2><p class="note">Clientes activos con entrega cada día${S.V ? '; debajo, bultos estimados según su promedio por compra' : ''}. Un cliente con dos días cuenta en ambos; el total de la semana lo cuenta una vez.</p></div>
+    ${S.V ? notaPallets : ''}
+    <div><h2>Clientes por día y localidad</h2><p class="note">Clientes activos con entrega cada día${S.V ? '; debajo, bultos, HL y pallets estimados según su promedio por compra' : ''}. Un cliente con dos días cuenta en ambos; el total de la semana lo cuenta una vez.</p></div>
     <div class="tw"><table class="rec-matriz"><thead><tr><th>Localidad</th>${DAYS.map(d => `<th>${DIASLARGO[d]}</th>`).join('')}<th>Clientes</th><th title="Sin días asignados">Sin días</th></tr></thead>
       <tbody>${html}</tbody><tfoot><tr><td>Total</td>${DAYS.map(d => `<td>${porDia[d]}</td>`).join('')}<td>${base.length}</td><td>${base.filter(c => !c.d).length}</td></tr></tfoot></table></div>`;
   el.querySelectorAll('[data-dia]').forEach(td => { const ir = () => irARecorrido(td.dataset.dia, td.dataset.locs.split('|'));
@@ -569,6 +614,7 @@ async function generarRevision() {
     const ventas = await api(`/ventas/comportamiento?dias=${REV.dias}`);
     if (!ventas.comprobantes) throw new Error('no hay ventas importadas en el período');
     REV.res = RutasRevision.analizar(S.D.clientes, ventas, {suc:S.suc});
+    agregarVolumenAnalisis(REV.res, ventas, S.D.clientes.filter(c => !c.an && (S.suc === 'TODAS' || c.suc === S.suc)));
     REV.motivo = ''; REV.loc = ''; REV.limite = 150;
   } catch (e) { toast('No se pudo generar el análisis: ' + e.message, true); }
   finally { REV.busy = false; renderRev(); }
@@ -578,13 +624,13 @@ const revClientes = () => REV.res.clientes.filter(r => (!REV.motivo || r.motivos
 function revDiasCelda(f, d) {
   const r = f.reales[d], a = f.asig[d], max = Math.max(1, ...RutasRevision.DAYS.map(x => f.reales[x]));
   const cls = f.sinDias < f.clientes && !a && r >= Math.max(3, .25 * max) ? 'falta' : a >= 5 && r < Math.max(3, .2 * max) ? 'flojo' : '';
-  return `<td class="heat rv-d ${cls}" style="--h:${Math.round(r / max * 100)}%" title="${DAYNAME[d]}: ${a} clientes asignados · ~${r.toFixed(1)} entregas por semana">${r >= .5 ? Math.round(r) : '·'}<small>${a ? a + ' asig.' : 'sin asig.'}</small></td>`;
+  return `<td class="heat rv-d ${cls}" style="--h:${Math.round(r / max * 100)}%" title="${DAYNAME[d]}: ${a} clientes asignados · ~${r.toFixed(1)} compras registradas por semana">${r >= .5 ? Math.round(r) : '·'}<small>${a ? a + ' asig.' : 'sin asig.'}</small></td>`;
 }
 function renderRev() {
   const el = $('p-rev'), R = REV.res;
   const otraSuc = R && R.suc !== S.suc;
   const head = `<div class="rec-head"><div><h2>Revisión de días de entrega</h2>
-      <p class="note">Compara los días asignados con los días en que cada cliente realmente factura y con los días de sus vecinos. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
+      <p class="note">Compara días asignados con fechas de comprobantes y vecinos; no confirma entregas físicas. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
     <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-rd="${d}" aria-pressed="${REV.dias === d}" ${REV.busy ? 'disabled' : ''}>${d} d</button>`).join('')}</div>
       <button class="btn primary" id="revGen" type="button" ${REV.busy ? 'disabled' : ''}>${REV.busy ? 'Analizando…' : R ? 'Volver a generar' : 'Generar análisis'}</button>
       ${R ? '<button class="btn" id="revCsv" type="button">Descargar CSV</button><button class="btn" id="revInf" type="button">Informe para imprimir</button>' : ''}
@@ -609,8 +655,9 @@ function renderRev() {
       <td class="${r.acierto != null && r.acierto < .5 ? 'bad' : ''}">${pct(r.acierto)}</td><td>${r.compras}</td><td class="rv-mot">${r.motivos.map(m => `<span class="pill">${REV_MOTIVO[m]}</span>`).join('')}</td></tr>`).join('');
     el.innerHTML = head + `
       <p class="status">${otraSuc ? `<b class="warn-t">Generado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a generar para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(R.generado.slice(0, 16).replace('T', ' '))}</p>
+      ${volumenAnalisisHTML(R)}
       <div class="kpis rv-kpis">${kp.map(([c, n, l, f]) => `<button class="kpi ${c}" ${f ? `data-rm="${f}" aria-pressed="${REV.motivo === f}"` : 'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
-      <div><h2>Por localidad · entregas reales por semana</h2><p class="note">Cada celda: clientes entregados por semana ese día según la facturación, y debajo cuántos tienen ese día asignado. <span class="rv-ley falta">Rojo</span>: se entrega sin clientes asignados. <span class="rv-ley flojo">Rayado</span>: día asignado casi sin entregas. Tocá una localidad para filtrar los clientes.</p></div>
+      <div><h2>Por localidad · compras registradas por semana</h2><p class="note">Cada celda: compras por semana en ese día de facturación, y debajo cuántos clientes tienen ese día asignado. No acredita entregas físicas. <span class="rv-ley falta">Rojo</span>: facturación sin clientes asignados. <span class="rv-ley flojo">Rayado</span>: día asignado casi sin compras. Tocá una localidad para filtrar los clientes.</p></div>
       <div class="tw"><table class="rec-matriz rv-loc"><thead><tr><th>Localidad</th><th>Clientes</th><th>Sin días</th>${RutasRevision.DAYS.map(d => `<th>${DIASLARGO[d]}</th>`).join('')}<th title="Promedio de compras en sus días asignados">En su día</th><th>Observaciones</th></tr></thead><tbody>${filas}</tbody></table></div>
       <div class="rv-fil"><h2>Clientes a revisar · ${lista.length}</h2>
         <label>Localidad <select id="revLoc"><option value="">Todas</option>${locs.map(l => `<option ${l === REV.loc ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
@@ -645,9 +692,10 @@ function csvRevision() {
   const lineas = [['SUCURSAL', 'LOCALIDAD', 'CLIENTE', 'NOMBRE', 'DOMICILIO', 'DIAS_ENTREGA_ACTUALES', 'DIAS_VISITA_VENDEDOR', 'DIAS_ENTREGA_SUGERIDOS', 'FACTURA_EN', 'VECINOS', 'EN_SU_DIA_%', 'COMPRAS', 'COMPRAS_POR_SEMANA', 'MOTIVOS'].join(';')];
   for (const r of revClientes()) lineas.push([r.suc, r.loc, r.id, r.n, r.dom, r.actual, r.visita, r.sugerido, r.factura, r.vecinos, r.acierto == null ? '' : Math.round(r.acierto * 100),
     r.compras, r.compSem.toFixed(2).replace('.', ','), r.motivos.map(m => REV_MOTIVO[m]).join(' / ')].map(q).join(';'));
-  lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'SIN_DIAS', ...RutasRevision.DAYS.map(d => 'ENTREGAS_SEM_' + d), ...RutasRevision.DAYS.map(d => 'ASIGNADOS_' + d), 'EN_SU_DIA_%', 'SUPERPOSICION_%', 'OBSERVACIONES'].join(';'));
+  lineas.push('', ['SUCURSAL', 'LOCALIDAD', 'CLIENTES', 'SIN_DIAS', ...RutasRevision.DAYS.map(d => 'COMPRAS_SEM_' + d), ...RutasRevision.DAYS.map(d => 'ASIGNADOS_' + d), 'EN_SU_DIA_%', 'SUPERPOSICION_%', 'OBSERVACIONES'].join(';'));
   for (const f of R.localidades) lineas.push([f.suc, f.loc, f.clientes, f.sinDias, ...RutasRevision.DAYS.map(d => f.reales[d].toFixed(1).replace('.', ',')), ...RutasRevision.DAYS.map(d => f.asig[d]),
     f.acierto == null ? '' : Math.round(f.acierto * 100), f.superp ? f.superp.pct : '', f.notas.map(n => n.m + (n.d ? ': ' + n.d : '')).join(' / ')].map(q).join(';'));
+  csvVolumenAnalisis(R, lineas, q);
   const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`revision_dias_${new Date().toISOString().slice(0, 10)}.csv`});
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -667,14 +715,15 @@ function informeRevision() {
     @media print{body{margin:10mm}button{display:none}tr{break-inside:avoid}}</style></head><body>
     <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
     <h1>Revisión de días de entrega</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
+    ${volumenAnalisisHTML(R)}
     <div class="k"><div><b>${s.activos}</b>clientes activos</div><div><b>${pct(s.acierto)}</b>factura en su día asignado (${s.evaluadosAcierto} clientes con 4+ compras)</div><div><b class="bad">${s.sinDias}</b>sin días asignados</div>
       <div><b class="bad">${s.fuera}</b>facturan menos de la mitad en su día</div><div><b class="warn">${s.aislados}</b>con días distintos a todos sus vecinos</div><div><b class="warn">${s.frecuencia}</b>con 2 días que compran menos de una vez cada 2 semanas</div><div><b class="bad">${s.visita}</b>con el día de visita cargado como día de entrega</div></div>
     <h2>Observaciones por localidad</h2>
     ${alertas.length ? `<table><thead><tr><th>Sucursal</th><th>Localidad</th><th class="n">Clientes</th><th>Observación</th></tr></thead><tbody>${alertas.map(f => f.notas.map((n, i) => `<tr>${i ? '<td></td><td></td><td></td>' : `<td>${esc(f.suc)}</td><td><b>${esc(f.loc)}</b></td><td class="n">${f.clientes}</td>`}<td class="${n.t}"><b>${esc(n.m)}</b>${n.d ? ' — ' + esc(n.d) : ''}</td></tr>`).join('')).join('')}</tbody></table>` : '<p>Sin observaciones.</p>'}
-    <h2>Entregas reales por semana y clientes asignados</h2>
+    <h2>Compras registradas por semana y clientes asignados</h2>
     <table><thead><tr><th>Sucursal</th><th>Localidad</th>${D.map(d => `<th class="n">${d}</th>`).join('')}<th class="n">En su día</th><th class="n">Zonas superpuestas</th></tr></thead><tbody>
     ${R.localidades.map(f => { const mx = Math.max(...D.map(d => f.reales[d])); return `<tr><td>${esc(f.suc)}</td><td>${esc(f.loc)}</td>${D.map(d => `<td class="n ${f.sinDias < f.clientes && !f.asig[d] && f.reales[d] >= Math.max(3, .25 * mx) ? 'falta' : ''}">${f.reales[d] >= .5 ? Math.round(f.reales[d]) : '·'} <span class="m">/ ${f.asig[d]}</span></td>`).join('')}<td class="n">${pct(f.acierto)}</td><td class="n">${f.superp ? f.superp.pct + '%' : '—'}</td></tr>`; }).join('')}</tbody></table>
-    <p class="m">Cada celda: entregas por semana según la facturación / clientes con ese día asignado. En rojo, días con entregas y sin clientes asignados.</p>
+    <p class="m">Cada celda: compras por semana según fecha de comprobantes / clientes con ese día asignado. No confirma entregas físicas. En rojo, facturación sin clientes asignados.</p>
     ${sinDias.size ? `<h2>Clientes sin días: días sugeridos según la facturación</h2><table><thead><tr><th>Localidad</th><th>Sugerencia (clientes)</th></tr></thead><tbody>${[...sinDias].sort((a, b) => [...b[1].values()].reduce((x, y) => x + y) - [...a[1].values()].reduce((x, y) => x + y)).map(([k, m]) => `<tr><td>${esc(k)}</td><td>${[...m].sort((a, b) => b[1] - a[1]).map(([p, n]) => `${esc(p)}: <b>${n}</b>`).join(' · ')}</td></tr>`).join('')}</tbody></table>` : ''}
     <h2>Clientes a revisar (día de visita cargado como entrega, factura fuera de su día o distinto a sus vecinos)${top.length === 80 ? ' · primeros 80' : ''}</h2>
     ${top.length ? `<table><thead><tr><th>Cliente</th><th>Localidad</th><th>Entrega actual</th><th>Visita</th><th>Sugerido</th><th>Factura en</th><th>Vecinos</th><th class="n">En su día</th><th class="n">Compras</th></tr></thead><tbody>${top.map(r => `<tr><td>#${r.id} ${esc(r.n)}</td><td>${esc(r.loc)}</td><td>${r.actual || '—'}</td><td>${r.visita || '—'}</td><td><b>${r.sugerido || '—'}</b></td><td>${r.factura || '—'}</td><td>${r.vecinos || '—'}</td><td class="n">${pct(r.acierto)}</td><td class="n">${r.compras}</td></tr>`).join('')}</tbody></table>` : '<p>Ninguno.</p>'}
@@ -702,6 +751,14 @@ function descargarCsv(vehs, carga, filasM) {
   })].map(q).join(';'));
   lineas.push('', ['SUCURSAL', 'LOCALIDAD', ...DAYS.map(d => DIASLARGO[d]), 'CLIENTES', 'SIN DIAS'].join(';'));
   for (const r of filasM) lineas.push([r.suc, r.loc, ...DAYS.map(d => r[d]), r.total, r.sin].map(q).join(';'));
+  if (S.V) {
+    lineas.push('', ['CARGA ESTIMADA', S.V.desde, S.V.hasta].join(';'));
+    lineas.push(['SUCURSAL', 'LOCALIDAD', 'DIA', 'BULTOS', 'HL', 'PALLETS', 'PALLETS PARCIALES'].join(';'));
+    for (const r of filasM) for (const d of DAYS) if (r[d]) {
+      const v = r.carga[d] || cargaVacia();
+      lineas.push([r.suc, r.loc, d, v.bultos.toFixed(2), v.hl.toFixed(2), v.pallets.toFixed(4), v.bultos_sin_bxp ? 'SI' : 'NO'].map(q).join(';'));
+    }
+  }
   const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`recorridos_${new Date().toISOString().slice(0,10)}.csv`});
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -716,9 +773,11 @@ async function generarEfectividad() {
   if (EFE.busy || !S.D) return;
   EFE.busy = true; renderEfe();
   try {
-    const f = await api(`/ventas/fechas?dias=${EFE.dias}`);
+    const [f, ventas] = await Promise.all([api(`/ventas/fechas?dias=${EFE.dias}`), api(`/ventas/comportamiento?dias=${EFE.dias}`)]);
     if (!f.desde) throw new Error('no hay ventas importadas');
     EFE.res = RutasEfectividad.analizar(S.D.clientes, f, {suc:S.suc});
+    const ids = new Set(EFE.res.clientes.map(c => c.id));
+    agregarVolumenAnalisis(EFE.res, ventas, S.D.clientes.filter(c => ids.has(c.id)));
     EFE.filtro = ''; EFE.loc = ''; EFE.limite = 150;
   } catch (e) { toast('No se pudo calcular la efectividad: ' + e.message, true); }
   finally { EFE.busy = false; renderEfe(); }
@@ -728,7 +787,7 @@ const efeClientes = () => EFE.res.clientes.filter(r => (!EFE.loc || r.loc === EF
 function renderEfe() {
   const el = $('p-efe'), R = EFE.res;
   const head = `<div class="rec-head"><div><h2>Efectividad de visita</h2>
-      <p class="note">De las visitas del vendedor, en cuántas hubo venta (por el vendedor o por BEES) antes de la visita siguiente. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
+      <p class="note">Venta entre visitas programadas según el maestro (vendedor o BEES). No hay registro de visitas realizadas; se excluyen ciclos incompletos. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
     <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período">${PERIODOS.map(d => `<button type="button" data-ed="${d}" aria-pressed="${EFE.dias === d}" ${EFE.busy ? 'disabled' : ''}>${d} d</button>`).join('')}</div>
       <button class="btn primary" id="efeGen" type="button" ${EFE.busy ? 'disabled' : ''}>${EFE.busy ? 'Calculando…' : R ? 'Volver a calcular' : 'Calcular efectividad'}</button>
       ${R ? '<button class="btn" id="efeCsv" type="button">Descargar CSV</button><button class="btn" id="efeInf" type="button">Informe para imprimir</button>' : ''}
@@ -752,6 +811,7 @@ function renderEfe() {
       <td>${r.semCompra}/${r.semanas}</td><td>${pct(r.bees)}</td><td>${r.ultima ? esc(r.ultima.slice(5).split('-').reverse().join('/')) : '—'}</td></tr>`).join('');
     el.innerHTML = head + `
       <p class="status">${otraSuc ? `<b class="warn-t">Calculado para ${esc(R.suc === 'TODAS' ? 'todas las sucursales' : R.suc)}: volvé a calcular para ${esc(S.suc === 'TODAS' ? 'todas' : S.suc)}.</b> ` : ''}Ventas del ${esc(R.desde)} al ${esc(R.hasta)} · visitas estimadas con los días de visita del maestro · el último ciclo incompleto no cuenta</p>
+      ${volumenAnalisisHTML(R)}
       <div class="kpis rv-kpis">${kp.map(([c, n, l, f]) => `<button class="kpi ${c}" ${f ? `data-ef="${f}" aria-pressed="${EFE.filtro === f}"` : 'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
       <div><h2>Por día de visita</h2></div>
       <div class="ef-dias">${R.porDia.map(x => `<div class="ef-dia" title="${DAYNAME[x.dia]}: ${num(x.efectivas)} de ${num(x.visitas)} visitas con venta · ${x.clientes} clientes"><span>${DIASLARGO[x.dia]}</span>${efeBarra(x.pct)}<small>${num(x.efectivas)} de ${num(x.visitas)} · ${x.clientes} clientes</small></div>`).join('')}</div>
@@ -789,6 +849,7 @@ function csvEfectividad() {
   for (const l of R.localidades) lineas.push([l.suc, l.loc, l.clientes, l.visitas, l.efectivas, p(l.pct), p(l.semPct), p(l.bees), l.ceros, l.bajos].map(q).join(';'));
   lineas.push('', ['DIA_VISITA', 'CLIENTES', 'VISITAS', 'VISITAS_CON_VENTA', 'EFECTIVIDAD_%'].join(';'));
   for (const x of R.porDia) lineas.push([DIASLARGO[x.dia], x.clientes, x.visitas, x.efectivas, p(x.pct)].map(q).join(';'));
+  csvVolumenAnalisis(R, lineas, q);
   const blob = new Blob(['﻿' + lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
   const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:`efectividad_visita_${new Date().toISOString().slice(0, 10)}.csv`});
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
@@ -804,6 +865,7 @@ function informeEfectividad() {
     @media print{body{margin:10mm}button{display:none}tr{break-inside:avoid}}</style></head><body>
     <button onclick="print()" style="float:right">Imprimir / guardar PDF</button>
     <h1>Efectividad de visita</h1><p class="m">${esc(R.suc === 'TODAS' ? 'Todas las sucursales' : R.suc)} · ventas del ${esc(R.desde)} al ${esc(R.hasta)} · generado ${esc(new Date(R.generado).toLocaleString('es-AR'))}</p>
+    ${volumenAnalisisHTML(R)}
     <div class="k"><div><b class="${efeCls(s.pct)}">${pct(s.pct)}</b>efectividad de visita (${num(s.efectivas)} de ${num(s.visitas)} visitas con venta)</div><div><b>${pct(s.semPct)}</b>de las semanas con compra</div>
       <div><b>${pct(s.bees)}</b>de las ventas entraron por BEES</div><div><b>${s.clientes}</b>clientes con visita · <span class="bad">${s.ceros} sin ventas</span> · <span class="warn">${s.bajos} bajo 25%</span></div></div>
     <h2>Por día de visita</h2><table><thead><tr><th>Día</th><th class="n">Clientes</th><th class="n">Visitas</th><th class="n">Con venta</th><th class="n">Efectividad</th></tr></thead><tbody>
@@ -869,26 +931,30 @@ async function cargarVentas(c, el) {
     const asig = r.asignados || '', totEnt = Object.values(m.ent).reduce((a, b) => a + b, 0) || 1;
     const dias7 = [...DAYS, ...(m.ent.DO ? ['DO'] : [])];
     const barras = dias7.map(d => { const n = m.ent[d] || 0, pct = Math.round(n / totEnt * 100);
-      return `<div class="wd${asig.includes(d)?' asig':''}" title="${n} entregas (${pct}%)${asig.includes(d)?' · día asignado':''}"><i style="height:${Math.max(pct, 3)}%"></i><b>${pct}%</b><span>${d}</span></div>`; }).join('');
+      return `<div class="wd${asig.includes(d)?' asig':''}" title="${n} compras (${pct}%)${asig.includes(d)?' · día asignado':''}"><i style="height:${Math.max(pct, 3)}%"></i><b>${pct}%</b><span>${d}</span></div>`; }).join('');
     const maxB = Math.max(1, ...r.semanas.map(s => s.bultos)), W = r.semanas.length;
     const spark = `<svg class="spark" viewBox="0 0 ${W * 10} 44" preserveAspectRatio="none" role="img" aria-label="Bultos por semana">${r.semanas.map((s, i) =>
-      `<rect x="${i * 10 + 1}" y="${44 - Math.max(1, s.bultos / maxB * 42)}" width="8" height="${Math.max(1, s.bultos / maxB * 42)}" rx="1.5"><title>Semana del ${s.desde}: ${num(s.bultos,1)} bultos · ${num(s.hl,2)} HL · ${s.compras} compras</title></rect>`).join('')}</svg>`;
+      `<rect x="${i * 10 + 1}" y="${44 - Math.max(1, s.bultos / maxB * 42)}" width="8" height="${Math.max(1, s.bultos / maxB * 42)}" rx="1.5"><title>Semana del ${s.desde}: ${num(s.bultos,1)} bultos · ${num(s.hl,2)} HL · ${palletTexto(s)} · ${s.compras} compras</title></rect>`).join('')}</svg>`;
     const kpi = (t, v, sub, k='') => `<div class="pv-kpi ${k}"><span>${t}</span><b>${v}</b>${sub?`<small>${sub}</small>`:''}</div>`;
     el.innerHTML = head + `<p class="status">${esc(r.desde)} al ${esc(r.hasta)} · ventas importadas, sin remitos ni comodatos</p>
       <div class="pv-tags"><span class="pill ${cls}">${ESTADO[m.estado]}</span><span class="pill" title="Clasificación ABC por venta neta">ABC ${esc(m.abc)}</span>${tend!=null?`<span class="pill ${tend<-15?'warn':''}" title="Bultos de la segunda mitad del período contra la primera">${tend>0?'▲':'▼'} ${Math.abs(tend)}%</span>`:''}<span class="pill" title="Compras con al menos un pedido por BEES">BEES ${Math.round(m.bees * 100)}%</span></div>
       <div class="pv-kpis">
         ${kpi('Compras', num(m.compras), m.comprobantes > m.compras ? `${num(m.comprobantes)} comprobantes` : 'un comprobante por día')}
-        ${kpi('Frecuencia', m.frec != null ? `cada ${num(m.frec,1)} d` : '—', `última hace ${m.dias_sin} d`, m.estado === 'activo' ? '' : cls)}
+        ${kpi('Frecuencia histórica', m.frec_hist != null ? `cada ${num(m.frec_hist,1)} d` : 'Sin base', m.dias_sin != null ? `última hace ${m.dias_sin} d al cierre` : 'Sin compra registrada', m.estado === 'activo' ? '' : cls)}
         ${kpi('Bultos', num(m.bultos), `${num(m.hl,1)} HL · ${num(m.bultos_sem,1)}/sem`)}
+        ${kpi('HL', num(m.hl,2), `${num(m.hl_sem,2)} HL/sem`)}
+        ${kpi('Pallets equivalentes', `${num(m.pallets,2)}${m.bultos_sin_bxp ? '*' : ''}`, `${num(m.pallets_sem,2)} pallets/sem`)}
+        ${kpi('Volumen por compra', `${num(m.drop_hl,2)} HL`, `${num(m.drop_pallets,2)} pallets${m.bultos_sin_bxp ? '*' : ''}`)}
         ${kpi('Por compra', `${num(m.drop,1)} b`, ref ? `${vsRef>0?'+':''}${vsRef}% vs ${esc(ref.localidad)} (${num(ref.drop,1)})` : `${num(m.drop_hl,2)} HL`)}
         ${kpi('Venta neta', money(m.neto), `ticket ${money(m.ticket)}`)}
         ${kpi('Rechazo', `${num(m.rech_pct * 100, 1)}%`, `${num(m.rech,1)} bultos`, m.rech_pct > .05 ? 'bad' : '')}
       </div>
-      <h3>Días en que recibe</h3><div class="wdays">${barras}</div>
-      <p class="note">${r.sugerencia ? `${Math.round(r.sugerencia.en_dia * 100)}% de sus entregas cae en sus días asignados (${asig || 'sin días'}). Recibe más: ${esc(r.sugerencia.dias) || '—'}.` : 'Pocas entregas para comparar con los días asignados.'}</p>
+      ${notaPallets}${m.bultos_sin_bxp ? `<p class="note">${num(m.bultos_sin_bxp,1)} bultos sin BxP.</p>` : ''}
+      <h3>Días con compras registradas</h3><div class="wdays">${barras}</div>
+      <p class="note">${r.sugerencia ? `${Math.round(r.sugerencia.en_dia * 100)}% de sus compras cae en sus días asignados (${asig || 'sin días'}). Compra más: ${esc(r.sugerencia.dias) || '—'}.` : 'Pocas compras para comparar con los días asignados.'}</p>
       <h3>Bultos por semana</h3>${spark}
-      ${r.ultimos.length ? `<h3>Últimas compras</h3><div class="tw"><table><thead><tr><th>Fecha</th><th>Comprob.</th><th>Bultos</th><th>HL</th><th>Neto</th><th>Rech.</th></tr></thead><tbody>${r.ultimos.slice(0, 8).map(u => `<tr title="${esc(u.docs.join(', '))} · ${esc(u.origen)}${u.motivo ? ' · ' + esc(u.motivo) : ''}"><td>${esc(u.fecha.slice(5).split('-').reverse().join('/'))}</td><td>${u.comprobantes > 1 ? `${u.comprobantes} · ` : ''}${esc(u.tipo)}</td><td>${num(u.bultos,1)}</td><td>${num(u.hl,2)}</td><td>${money(u.neto)}</td><td class="${u.rech ? 'bad' : 'z'}">${u.rech ? num(u.rech,1) : '·'}</td></tr>`).join('')}</tbody></table></div>` : ''}
-      ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${num(a.bultos,1)} b</b></li>`).join('')}</ol>` : ''}
+      ${r.ultimos.length ? `<h3>Últimas compras</h3><div class="tw"><table><thead><tr><th>Fecha</th><th>Comprob.</th><th>Bultos</th><th>HL</th><th>Pallets</th><th>Neto</th><th>Rech.</th></tr></thead><tbody>${r.ultimos.slice(0, 8).map(u => `<tr title="${esc(u.docs.join(', '))} · ${esc(u.origen)}${u.motivo ? ' · ' + esc(u.motivo) : ''}"><td>${esc(u.fecha.slice(5).split('-').reverse().join('/'))}</td><td>${u.comprobantes > 1 ? `${u.comprobantes} · ` : ''}${esc(u.tipo)}</td><td>${num(u.bultos,1)}</td><td>${num(u.hl,2)}</td><td>${num(u.pallets,2)}${u.bultos_sin_bxp ? '*' : ''}</td><td>${money(u.neto)}</td><td class="${u.rech ? 'bad' : 'z'}">${u.rech ? num(u.rech,1) : '·'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${volumenTexto(a)}</b></li>`).join('')}</ol>` : ''}
       ${Object.keys(m.motivos || {}).length ? `<p class="note">Motivos de rechazo: ${Object.entries(m.motivos).map(([k, n]) => `${esc(k)} (${n})`).join(', ')}</p>` : ''}`;
   }
   el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.p; savePrefs(); load(); });
@@ -933,15 +999,15 @@ function render() {
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
   const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderEfe(); renderCer(); renderLegend(v); renderTools();
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderEfe(); prioridades.render(); renderCer(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 function elegirTab(id) {
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
-  ['cer','loc','dia','pen','rec','rev','efe','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
-  const ancho = ['t-rec', 't-rev', 't-efe'].includes(id), antes = $('main').classList.contains('ancho');
+  ['cer','loc','dia','pen','rec','pri','rev','efe','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  const ancho = ['t-rec', 't-pri', 't-rev', 't-efe'].includes(id), antes = $('main').classList.contains('ancho');
   $('main').classList.toggle('ancho', ancho);
   if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
 }
@@ -1150,7 +1216,8 @@ async function load() {
     const params=new URLSearchParams({activos:$('activeClients').value,dias_asignados:$('assignedDays').value});
     const [data, ventas] = await Promise.all([api('/datos?'+params), api(`/ventas/comportamiento?dias=${S.periodo}`).catch(() => null)]);
     if(request!==loadRequest)return;
-    S.D=data; S.V=ventas && ventas.comprobantes ? ventas : null;
+    S.D=data; S.V=ventas && ventas.desde ? ventas : null;
+    prioridades.invalidar();
     VOL_Q = [];
     if (S.V) { const vs = Object.values(S.V.clientes).map(v => v.bultos_sem).filter(v => v > 0).sort((a,b) => a-b);
       VOL_Q = vs.length >= 5 ? [.2,.4,.6,.8].map(q => vs[Math.floor(q * (vs.length - 1))]) : []; }

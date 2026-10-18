@@ -22,12 +22,12 @@ def linea(cliente, dias_atras, doc, art=1, bultos=10, hl=1.0, neto=1000, rech=0,
 
 def cargar(lineas):
     s = Session()
-    s.execute(text('CREATE TABLE IF NOT EXISTS articulos (id_articulo INTEGER PRIMARY KEY, tipo_producto VARCHAR(30))'))
+    s.execute(text('CREATE TABLE IF NOT EXISTS articulos (id_articulo INTEGER PRIMARY KEY, tipo_producto VARCHAR(30), bultos_por_pallet NUMERIC)'))
     s.execute(text('CREATE TABLE IF NOT EXISTS ventas_detalle (id INTEGER PRIMARY KEY, sucursal VARCHAR(5), empresa VARCHAR(5), '
                    'letra VARCHAR(5), serie VARCHAR(10), numero VARCHAR(20), cliente VARCHAR(20), fecha DATE, documento VARCHAR(20), '
                    'detalle_documento VARCHAR(60), origen VARCHAR(30), id_articulo INTEGER, descripcion_articulo VARCHAR(100), '
                    'bultos NUMERIC, unidad_medida NUMERIC, importe_neto NUMERIC, bultos_rechazados NUMERIC, motivo_rechazo VARCHAR(80))'))
-    s.execute(text("INSERT OR IGNORE INTO articulos VALUES (1, 'mercaderia'), (2, 'Mercaderia '), (9, 'envase')"))
+    s.execute(text("INSERT OR IGNORE INTO articulos VALUES (1, 'mercaderia', 100), (2, 'Mercaderia ', 50), (9, 'envase', 10)"))
     s.execute(text(f'INSERT INTO ventas_detalle ({COLS}) VALUES ({", ".join(":" + c.strip() for c in COLS.split(","))})'), lineas)
     s.commit()
 
@@ -131,3 +131,43 @@ def test_periodos_analisis_incluyen_limite_y_excluyen_dia_anterior(ctx, dias):
             metrics = result['metricas'] if endpoint.startswith('clientes/') else result['clientes']['123']
             assert metrics['compras'] == 2
             assert metrics['bultos_sem'] == round(20 / (dias / 7), 1)
+
+
+@pytest.mark.parametrize('dias', [7, 15, 30, 45, 60, 90, 120])
+def test_pallets_por_articulo_hl_y_detalle(ctx, dias):
+    actualizar_desde_maestro('operador', source())
+    cargar([linea(123, 0, 1, art=1, bultos=25, hl=2.5),
+            linea(123, 0, 1, art=2, bultos=25, hl=1.25),
+            linea(123, 0, 1, art=9, bultos=100, hl=100),
+            linea(123, 1, 2, art=1, bultos=-5, hl=-.5, tipo='DVVTA'),
+            linea(123, 0, 3, art=1, bultos=500, hl=50, tipo='REMIT'),
+            linea(123, dias, 4, art=1, bultos=900, hl=90)])
+    client = ctx.test_client()
+    result = client.get(f'/rutas/api/clientes/123/ventas?dias={dias}').json
+    m = result['metricas']
+    assert m['bultos'] == 45 and m['hl'] == 3.25
+    assert m['pallets'] == .7 and m['bultos_sin_bxp'] == 0
+    assert m['pallets_sem'] == round(.7 / (dias / 7), 4)
+    assert m['hl_sem'] == round(3.25 / (dias / 7), 2)
+    assert m['drop_pallets'] == .7  # La devolución no es una segunda compra.
+    assert m['compras'] == 1
+    for key in ['ultimos', 'semanas', 'articulos']:
+        assert sum(x['pallets'] for x in result[key]) == pytest.approx(.7)
+        assert sum(x['hl'] for x in result[key]) == pytest.approx(3.25)
+    compact = client.get(f'/rutas/api/ventas/comportamiento?dias={dias}').json['clientes']['123']
+    for key in ['pallets', 'bultos_sin_bxp', 'drop_hl', 'drop_pallets', 'hl_sem', 'pallets_sem']:
+        assert compact[key] == m[key]
+
+
+@pytest.mark.parametrize('bxp', [None, 0, -10])
+def test_pallets_sin_equivalencia_informa_volumen_parcial(ctx, bxp):
+    cargar([linea(123, 0, 1, art=1, bultos=10), linea(123, 0, 1, art=2, bultos=25),
+            linea(123, 0, 2, art=2, bultos=-5, tipo='DVVTA')])
+    Session().execute(text('UPDATE articulos SET bultos_por_pallet = :bxp WHERE id_articulo = 2'), {'bxp': bxp})
+    Session().commit()
+    m = ventas_app.comportamiento(7, HASTA)['clientes'][123]
+    assert m['pallets'] == .1
+    assert m['bultos_sin_bxp'] == 30  # No se cancelan faltantes entre ventas y devoluciones.
+    detail = ventas_app.detalle_cliente(123, 7, HASTA)
+    for key in ['ultimos', 'semanas', 'articulos']:
+        assert sum(x['bultos_sin_bxp'] for x in detail[key]) == 30

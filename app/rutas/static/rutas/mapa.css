@@ -219,7 +219,7 @@ kbd{font:600 11px var(--f-mono);padding:1px 5px;border:1px solid var(--line);bor
 /* --- Pedidos y volumen --- */
 .loc-tag em{font:600 11px/1 var(--f-mono);font-style:normal;color:var(--muted);padding-right:5px}
 .loc-tag:hover em,.loc-tag.foco em{color:#fff}
-.vtot{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.vtot{display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:6px}
 .vtot div{border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--bg);min-width:0}
 .vtot b{display:block;font:700 18px/1.1 var(--f-display);font-variant-numeric:tabular-nums;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vtot span{font-size:11px;color:var(--muted)}
@@ -467,6 +467,21 @@ aside{position:relative}
 
 /* --- Solapa Efectividad de visita --- */
 #p-efe{gap:16px}
+#p-pri{gap:16px}
+.pri-report{display:grid;gap:14px;min-width:0}
+.pri-report h2{margin:10px 0 0}
+.pri-report td{white-space:normal;min-width:85px;vertical-align:top}
+.pri-report th,.pri-report td{text-align:left}
+.pri-report tbody tr{cursor:default}
+.pri-report p{margin:4px 0}
+.pri-report td small,.pri-categories small{display:block;color:var(--muted);margin-top:4px;font-size:11px}
+.pri-notice{border-left:3px solid var(--accent);padding:10px 14px;background:var(--panel);line-height:1.5}
+.pri-categories{display:flex;flex-wrap:wrap;gap:8px}
+.pri-categories button{text-align:left;white-space:normal;padding:10px}
+.pri-categories button[aria-pressed="true"]{outline:2px solid var(--accent)}
+.pri-report details{padding:10px;border:1px solid var(--line);border-radius:6px}
+.pri-report summary{cursor:pointer;font-weight:600}
+.pri-report .rv-fil input{max-width:220px}
 .ef-bar{position:relative;display:inline-block;width:110px;height:18px;border-radius:4px;background:var(--chip);overflow:hidden;vertical-align:middle}
 .ef-bar::before{content:"";position:absolute;inset:0 auto 0 0;width:var(--p);background:var(--ok);opacity:.85}
 .ef-bar.warn::before{background:var(--warn)} .ef-bar.bad::before{background:var(--bad)}

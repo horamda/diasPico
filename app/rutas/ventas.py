@@ -242,7 +242,7 @@ def comportamiento(dias=60, hasta=None):
 def estado(c, dias):
     if not c["compras"]:
         return "sin_compras"
-    lim_inactivo = min(45, dias - 7)
+    lim_inactivo = 45
     if c["dias_sin"] is not None and c["dias_sin"] > lim_inactivo:
         return "inactivo"
     if c["frec"] and c["dias_sin"] > max(2.5 * c["frec"], 21):
