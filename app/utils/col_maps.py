@@ -184,6 +184,12 @@ CLIENTES_MAP: dict[str, list[str]] = {
     'modificacion': ['modificacion fecha', 'modificacion'],
     'cliente_asoc': ['cliente asociado', 'cliente asoci', 'cliente_asoc'],
     'cta_y_ord': ['cta y orden', 'cta. y ord', 'cta y ord', 'cta_y_ord'],
+    'fuerza_venta_1_descripcion_personal_comercial': [
+        'fuerza de venta 1 descripcion personal comercial',
+        'fuerza venta 1 descripcion personal comercial',
+        'fuerza_venta_1_descripcion_personal_comercial',
+        'descripcion vendedor', 'vendedor', 'promotor',
+    ],
     'fuerza_venta_1_dias_visita': [
         'fuerza de venta 1 dias de visita',
         'fuerza de venta 1 dias visita',

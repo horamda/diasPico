@@ -242,3 +242,20 @@ def test_mapping_applies_to_previously_loaded_clients_without_refresh(app):
 def test_dias_de_visita_del_maestro():
     from app.rutas import dias as D
     assert [D.desde_visita(v) for v in ('MAR,VIE', 'JUE', 'DOM', 'MIE,SAB', '', None)] == ['MAVI', 'JU', 'DO', 'MISA', '', '']
+
+
+def test_agenda_reads_assigned_seller_and_visit_days_together():
+    from types import SimpleNamespace
+    from app.rutas.services import _agenda_maestro
+    class FakeSession:
+        bind = SimpleNamespace(dialect=SimpleNamespace(name='postgresql'))
+        def execute(self, sql):
+            if 'to_regclass' in str(sql):
+                return SimpleNamespace(scalar=lambda: 'clientes')
+            return [SimpleNamespace(id='123', datos={
+                'fuerza_venta_1_descripcion_personal_comercial':' Ana ',
+                'fuerza_venta_1_dias_visita':'MAR,VIE'}),
+                SimpleNamespace(id='124', datos={})]
+    result = _agenda_maestro(FakeSession())
+    assert result[123] == {'ven':'Ana', 'vis':'MAVI'}
+    assert result[124] == {'ven':'', 'vis':''}

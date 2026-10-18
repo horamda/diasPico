@@ -19,7 +19,7 @@ import calendar as cal_mod
 from dataclasses import dataclass, field
 
 import openpyxl
-from psycopg2.extras import execute_values
+from psycopg2.extras import Json, execute_values
 
 from app.database import pg_conn
 from app.services.articulos_svc import ensure_articulos_table
@@ -1040,6 +1040,41 @@ def load_ventas_detalle(file_bytes: bytes, force: bool = False,
     return result
 
 
+
+def _parse_clientes_csv(file_bytes: bytes) -> list[dict]:
+    """Preserve every source column, including unknown fields, without truncation."""
+    raw = _parse_csv(file_bytes)
+    if not raw:
+        return []
+    headers = list(raw[0])
+    if None in headers or any(None in row or any(v is None for v in row.values()) for row in raw):
+        raise ValueError('CSV de clientes con filas incompletas o columnas de mas.')
+    # DictReader cannot retain repeated column names: reject them before loading.
+    content = _decode_csv_bytes(file_bytes)
+    try:
+        delim = csv.Sniffer().sniff(content[:8192], delimiters=';,\t|').delimiter
+    except csv.Error:
+        first = content.splitlines()[0]
+        delim = ';' if first.count(';') >= first.count(',') else ','
+    original_headers = next(csv.reader(io.StringIO(content), delimiter=delim))
+    if len(set(original_headers)) != len(original_headers) or any(not h.strip() for h in original_headers):
+        raise ValueError('CSV de clientes con encabezados vacios o repetidos.')
+    mapped = map_headers(headers, CLIENTES_MAP)
+    if 'cliente' not in mapped:
+        raise ValueError('Falta la columna cliente.')
+    rows, seen = [], set()
+    for source in raw:
+        row = {col: source[headers[idx]] for col, idx in mapped.items()}
+        cid = str(row.get('cliente') or '').strip()
+        if not cid or len(cid) > 50 or cid in seen:
+            raise ValueError('Codigos de cliente vacios, repetidos o mayores a 50 caracteres. No se importo el archivo.')
+        seen.add(cid)
+        row['cliente'] = cid
+        row['datos_csv'] = source
+        rows.append(row)
+    return rows
+
+
 _CLI_COLS = [
     'cliente', 'descripcion', 'sucursal', 'razon_social', 'nombre_fantasia', 'telefonos', 'movil',
     'email', 'domicilio', 'calle', 'altura', 'depto', 'calle_1', 'calle_2',
@@ -1053,8 +1088,9 @@ _CLI_COLS = [
     'fecha_vencimiento', 'exento_ib', 'inscripto_ib', 'convenio_mut',
     'agente_de_pe', 'documento', 'licencia_alco', 'vencimiento', 'alta_fecha',
     'anulado', 'anulado_fecha', 'modificacion', 'cliente_asoc', 'cta_y_ord',
+    'fuerza_venta_1_descripcion_personal_comercial',
     'fuerza_venta_1_dias_visita',
-    'activo_maestro', 'ultima_importacion_clientes', 'desactivado_en',
+    'activo_maestro', 'ultima_importacion_clientes', 'desactivado_en', 'datos_csv',
 ]
 
 _CLI_CONFLICT = """
@@ -1118,10 +1154,12 @@ ON CONFLICT (cliente) DO UPDATE SET
     modificacion = EXCLUDED.modificacion,
     cliente_asoc = EXCLUDED.cliente_asoc,
     cta_y_ord = EXCLUDED.cta_y_ord,
+    fuerza_venta_1_descripcion_personal_comercial = EXCLUDED.fuerza_venta_1_descripcion_personal_comercial,
     fuerza_venta_1_dias_visita = EXCLUDED.fuerza_venta_1_dias_visita,
     activo_maestro = TRUE,
     ultima_importacion_clientes = EXCLUDED.ultima_importacion_clientes,
-    desactivado_en = NULL
+    desactivado_en = NULL,
+    datos_csv = COALESCE(clientes.datos_csv, '{}'::jsonb) || EXCLUDED.datos_csv
 """
 
 
@@ -1165,6 +1203,7 @@ def _analyze_clientes_rows(rows: list[dict]) -> dict:
     dias_visita = [str(r.get('fuerza_venta_1_dias_visita') or '').strip() for r in rows]
     coords_validas = sum(1 for r in rows if _coord_pair(r) is not None)
     return {
+        'columnas_csv_conservadas': len(rows[0].get('datos_csv', {})) if rows else 0,
         'filas_leidas': len(rows),
         'clientes_validos': len(clientes_validos),
         'clientes_unicos': len(set(clientes_validos)),
@@ -1291,16 +1330,18 @@ def _cli_row(r: dict, imported_at: datetime) -> tuple:
         str(r.get('modificacion') or '')[:100],
         str(r.get('cliente_asoc') or '')[:100],
         str(r.get('cta_y_ord') or '')[:100],
+        str(r.get('fuerza_venta_1_descripcion_personal_comercial') or '').strip()[:120],
         str(r.get('fuerza_venta_1_dias_visita') or '')[:50],
         True,
         imported_at,
         None,
+        Json(r.get('datos_csv', {})),
     )
 
 
 def load_clientes(file_bytes: bytes) -> UploadResult:
     t0 = time.perf_counter()
-    rows = _parse_csv(file_bytes, CLIENTES_MAP)
+    rows = _parse_clientes_csv(file_bytes)
     imported_at = datetime.now()
 
     typed: list[tuple] = []
@@ -1314,6 +1355,8 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
         except Exception:
             parse_errors += 1
 
+    if parse_errors:
+        raise ValueError('Hay filas de clientes que no se pudieron convertir. No se importo el archivo.')
     if not typed:
         raise ValueError('Sin filas validas: se espera la columna cliente')
 
@@ -1380,11 +1423,15 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS modificacion VARCHAR(100)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cliente_asoc VARCHAR(100)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS cta_y_ord VARCHAR(100)")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS fuerza_venta_1_descripcion_personal_comercial VARCHAR(120)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS fuerza_venta_1_dias_visita VARCHAR(50)")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS activo_maestro BOOLEAN NOT NULL DEFAULT TRUE")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS ultima_importacion_clientes TIMESTAMP")
             cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS desactivado_en TIMESTAMP")
+            cur.execute("ALTER TABLE clientes ADD COLUMN IF NOT EXISTS datos_csv JSONB NOT NULL DEFAULT '{}'::jsonb")
             ins, err = _bulk_insert(cur, 'clientes', _CLI_COLS, typed, _CLI_CONFLICT)
+            if err:
+                raise ValueError('No se pudieron guardar todos los clientes. Se cancelo la importacion completa.')
             cliente_ids = [row[0] for row in typed]
             cur.execute(
                 """UPDATE clientes
@@ -1408,7 +1455,7 @@ def load_clientes(file_bytes: bytes) -> UploadResult:
 
 def analyze_clientes(file_bytes: bytes) -> UploadResult:
     t0 = time.perf_counter()
-    rows = _parse_csv(file_bytes, CLIENTES_MAP)
+    rows = _parse_clientes_csv(file_bytes)
     imported_at = datetime.now()
 
     valid_rows = 0

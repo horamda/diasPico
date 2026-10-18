@@ -100,6 +100,7 @@ def actualizar_desde_maestro(usuario, source=None):
             c.domicilio = str(r.get('domicilio') or '')[:200]
             c.localidad_erp = normalizar_nombre(r.get('localidad'))[:80]
             c.lat, c.lng = coordenadas(r)
+            c.vendedor = str(r.get('fuerza_venta_1_descripcion_personal_comercial') or '').strip()[:120]
             c.horario = str(r.get('horario_entrega') or '')[:120]
             # This flag drives inactive-client filtering throughout Rutas and CSV import.
             c.anulado = not cliente_activo(r)
