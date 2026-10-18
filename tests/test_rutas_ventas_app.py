@@ -111,3 +111,23 @@ def test_fechas_compra_para_efectividad(ctx):
     r = ctx.test_client().get('/rutas/api/ventas/fechas?dias=30').json
     assert r['hasta'] == HASTA.isoformat()
     assert r['clientes']['7'] == [[(HASTA - timedelta(days=7)).isoformat(), 1], [HASTA.isoformat(), 0]]
+
+
+@pytest.mark.parametrize('dias', [7, 15, 30, 45, 60, 90, 120])
+def test_periodos_analisis_incluyen_limite_y_excluyen_dia_anterior(ctx, dias):
+    actualizar_desde_maestro('operador', source())
+    cargar([linea(123, 0, 1), linea(123, dias - 1, 2), linea(123, dias, 3)])
+    client = ctx.test_client()
+    desde = (HASTA - timedelta(days=dias - 1)).isoformat()
+    for endpoint in ['ventas/comportamiento', 'ventas/fechas', 'clientes/123/ventas']:
+        response = client.get(f'/rutas/api/{endpoint}?dias={dias}')
+        assert response.status_code == 200
+        result = response.json
+        assert result['dias'] == dias
+        assert result['desde'] == desde and result['hasta'] == HASTA.isoformat()
+        if endpoint == 'ventas/fechas':
+            assert len(result['clientes']['123']) == 2
+        else:
+            metrics = result['metricas'] if endpoint.startswith('clientes/') else result['clientes']['123']
+            assert metrics['compras'] == 2
+            assert metrics['bultos_sem'] == round(20 / (dias / 7), 1)

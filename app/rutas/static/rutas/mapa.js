@@ -12,7 +12,7 @@ const VOL_PAL = ['#c6dcf2','#8bbbe6','#4b93d4','#2166ad','#123d75'];
 let VOL_Q = [];
 const volNivel = c => { const v = venta(c); if (!v || !v.bultos) return -1; let i = 0; while (i < VOL_Q.length && v.bultos_sem > VOL_Q[i]) i++; return i; };
 const num = (n, d = 0) => Number(n || 0).toLocaleString('es-AR', {maximumFractionDigits: d});
-const PERIODOS = [30, 60, 90];
+const PERIODOS = [7, 15, 30, 45, 60, 90, 120];
 const RADIOS = [300, 500, 1000, 2000];   // metros alrededor del punto buscado
 // Comparar días: un color por día de entrega.
 const DAY_COL = {LU:'#2563eb', MA:'#16a34a', MI:'#9333ea', JU:'#ea580c', VI:'#0891b2', SA:'#db2777'};
@@ -38,7 +38,7 @@ try {
   if (typeof p.suc === 'string') S.suc = p.suc;
   if (typeof p.zonas === 'boolean') S.zonas = p.zonas;
   if (typeof p.ctx === 'boolean') S.ctx = p.ctx;
-  if ([30, 60, 90].includes(p.periodo)) S.periodo = p.periodo;
+  if (PERIODOS.includes(p.periodo)) S.periodo = p.periodo;
   if (typeof p.panel === 'boolean') S.panel = p.panel;
   if (Number.isFinite(p.panelW)) S.panelW = p.panelW;
   if (typeof p.comp === 'boolean') S.comp = p.comp;
@@ -470,7 +470,9 @@ function renderExp(){
 }
 function renderVen() {
   const el = $('p-ven');
-  if (!S.V) { el.innerHTML = '<h2>Ventas</h2><p class="empty">No hay ventas importadas en el período. Se cargan desde Importaciones de datos → Ventas detalle.</p>'; return; }
+  const selector = `<div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-vp="${d}" aria-pressed="${S.periodo === d}">${d} d</button>`).join('')}</div>`;
+  const bindPeriodo = () => el.querySelectorAll('[data-vp]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.vp; savePrefs(); load(); });
+  if (!S.V) { el.innerHTML = selector + '<h2>Ventas</h2><p class="empty">No hay ventas importadas en el período. Se cargan desde Importaciones de datos → Ventas detalle.</p>'; bindPeriodo(); return; }
   const act = scope().filter(c => !c.an), cnt = e => act.filter(c => estadoDe(c) === e).length;
   const tot = k => act.reduce((t, c) => t + (venta(c)?.[k] || 0), 0);
   const kp = [['',cnt('activo'),'activos',null],['warn',cnt('riesgo'),'en riesgo','riesgo'],
@@ -478,7 +480,7 @@ function renderVen() {
   const lista = (e, n) => act.filter(c => estadoDe(c) === e).sort((a, b) => (venta(b)?.bultos || 0) - (venta(a)?.bultos || 0)).slice(0, n);
   const top = act.filter(venta).sort((a, b) => venta(b).bultos - venta(a).bultos).slice(0, 15);
   const tag = c => { const v = venta(c); return v ? `<span class="pill">${num(v.bultos_sem,1)} b/sem</span><span class="pill">${v.dias_sin} d</span>` : ''; };
-  el.innerHTML = `<p class="status">Ventas importadas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} (60 días) · sin remitos ni comodatos · volumen de mercadería</p>
+  el.innerHTML = selector + `<p class="status">Ventas importadas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} (${S.V.dias} días) · sin remitos ni comodatos · volumen de mercadería</p>
    <div class="vtot"><div title="Una compra por cliente y día · ${num(tot('comprobantes'))} comprobantes"><b>${num(tot('compras'))}</b><span>compras</span></div><div><b>${num(tot('bultos'))}</b><span>bultos</span></div><div><b>${num(tot('hl'),1)}</b><span>HL</span></div><div><b>${money(tot('neto'))}</b><span>venta neta</span></div></div>
    <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
    <p class="note">En riesgo: lleva más de 2,5 veces su frecuencia habitual sin comprar (mínimo 21 días). Inactivo: más de 45 días.</p>
@@ -486,6 +488,7 @@ function renderVen() {
    <h2>En riesgo · mayor volumen primero</h2><div class="list">${lista('riesgo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>
    <h2>Inactivos · mayor volumen primero</h2><div class="list">${lista('inactivo', 40).map(c => itemHTML(c, tag(c))).join('') || '<p class="note">Ninguno.</p>'}</div>`;
   el.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
+  bindPeriodo();
   bindItems(el);
 }
 
@@ -582,7 +585,7 @@ function renderRev() {
   const otraSuc = R && R.suc !== S.suc;
   const head = `<div class="rec-head"><div><h2>Revisión de días de entrega</h2>
       <p class="note">Compara los días asignados con los días en que cada cliente realmente factura y con los días de sus vecinos. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
-    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período de ventas">${[60, 90, 180].map(d => `<button type="button" data-rd="${d}" aria-pressed="${REV.dias === d}">${d} d</button>`).join('')}</div>
+    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-rd="${d}" aria-pressed="${REV.dias === d}" ${REV.busy ? 'disabled' : ''}>${d} d</button>`).join('')}</div>
       <button class="btn primary" id="revGen" type="button" ${REV.busy ? 'disabled' : ''}>${REV.busy ? 'Analizando…' : R ? 'Volver a generar' : 'Generar análisis'}</button>
       ${R ? '<button class="btn" id="revCsv" type="button">Descargar CSV</button><button class="btn" id="revInf" type="button">Informe para imprimir</button>' : ''}
       <button class="btn" id="revVolver" type="button">Volver al mapa</button></div></div>`;
@@ -617,7 +620,7 @@ function renderRev() {
         ${lista.length > REV.limite ? `<button class="btn" id="revMas" type="button">Mostrar ${Math.min(300, lista.length - REV.limite)} más (quedan ${lista.length - REV.limite})</button>` : ''}`
       : '<p class="empty">No hay clientes para este filtro.</p>'}`;
   }
-  el.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { REV.dias = +b.dataset.rd; renderRev(); });
+  el.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { REV.dias = +b.dataset.rd; REV.res = null; renderRev(); });
   $('revGen').onclick = generarRevision;
   $('revVolver').onclick = () => elegirTab('t-loc');
   if (!R) return;
@@ -726,7 +729,7 @@ function renderEfe() {
   const el = $('p-efe'), R = EFE.res;
   const head = `<div class="rec-head"><div><h2>Efectividad de visita</h2>
       <p class="note">De las visitas del vendedor, en cuántas hubo venta (por el vendedor o por BEES) antes de la visita siguiente. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
-    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período">${[30, 60, 90].map(d => `<button type="button" data-ed="${d}" aria-pressed="${EFE.dias === d}">${d} d</button>`).join('')}</div>
+    <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período">${PERIODOS.map(d => `<button type="button" data-ed="${d}" aria-pressed="${EFE.dias === d}" ${EFE.busy ? 'disabled' : ''}>${d} d</button>`).join('')}</div>
       <button class="btn primary" id="efeGen" type="button" ${EFE.busy ? 'disabled' : ''}>${EFE.busy ? 'Calculando…' : R ? 'Volver a calcular' : 'Calcular efectividad'}</button>
       ${R ? '<button class="btn" id="efeCsv" type="button">Descargar CSV</button><button class="btn" id="efeInf" type="button">Informe para imprimir</button>' : ''}
       <button class="btn" id="efeVolver" type="button">Volver al mapa</button></div></div>`;
@@ -762,7 +765,7 @@ function renderEfe() {
         ${lista.length > EFE.limite ? `<button class="btn" id="efeMas" type="button">Mostrar ${Math.min(300, lista.length - EFE.limite)} más (quedan ${lista.length - EFE.limite})</button>` : ''}`
       : '<p class="empty">No hay clientes para este filtro.</p>'}`;
   }
-  el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { EFE.dias = +b.dataset.ed; renderEfe(); });
+  el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { EFE.dias = +b.dataset.ed; EFE.res = null; renderEfe(); });
   $('efeGen').onclick = generarEfectividad;
   $('efeVolver').onclick = () => elegirTab('t-loc');
   if (!R) return;
@@ -888,7 +891,7 @@ async function cargarVentas(c, el) {
       ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${num(a.bultos,1)} b</b></li>`).join('')}</ol>` : ''}
       ${Object.keys(m.motivos || {}).length ? `<p class="note">Motivos de rechazo: ${Object.entries(m.motivos).map(([k, n]) => `${esc(k)} (${n})`).join(', ')}</p>` : ''}`;
   }
-  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.p; savePrefs(); cargarVentas(c, el); });
+  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.p; savePrefs(); load(); });
 }
 
 // ---------- controles ----------
@@ -1145,9 +1148,10 @@ async function load() {
   loading.hidden=false;
   try {
     const params=new URLSearchParams({activos:$('activeClients').value,dias_asignados:$('assignedDays').value});
-    const [data, ventas] = await Promise.all([api('/datos?'+params), api('/ventas/comportamiento').catch(() => null)]);
+    const [data, ventas] = await Promise.all([api('/datos?'+params), api(`/ventas/comportamiento?dias=${S.periodo}`).catch(() => null)]);
     if(request!==loadRequest)return;
     S.D=data; S.V=ventas && ventas.comprobantes ? ventas : null;
+    VOL_Q = [];
     if (S.V) { const vs = Object.values(S.V.clientes).map(v => v.bultos_sem).filter(v => v > 0).sort((a,b) => a-b);
       VOL_Q = vs.length >= 5 ? [.2,.4,.6,.8].map(q => vs[Math.floor(q * (vs.length - 1))]) : []; }
     byId = new Map(S.D.clientes.map(c => [c.id, c]));
