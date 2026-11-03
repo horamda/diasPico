@@ -32,3 +32,23 @@ def test_comparar_corta_ambos_anios_en_el_mismo_dia():
 def test_delta_pct_sin_base_devuelve_none():
     assert svc._delta_pct(10, 0) is None
     assert svc._delta_pct(None, 5) is None
+
+def test_series_sucursales_conservan_corte_y_suman_general():
+    corte = date(2026, 10, 2)
+    casa = [_dia('2026-10-01', 100), _dia('2026-10-03', 999)]
+    dolores = [_dia('2026-10-02', 40)]
+    anterior = [_dia('2025-10-01', 70), _dia('2025-10-31', 20)]
+    a = svc._serie_acumulada_hl(casa, anterior, 2026, 10, corte)
+    b = svc._serie_acumulada_hl(dolores, [], 2026, 10, corte)
+    total = svc._serie_acumulada_hl(casa + dolores, anterior, 2026, 10, corte)
+    assert a[1]['actual'] == 100 and b[1]['actual'] == 40
+    assert total[1]['actual'] == a[1]['actual'] + b[1]['actual']
+    assert all(p['actual'] is None for p in total[2:])
+    assert total[-1]['previo'] == 90
+
+
+def test_serie_bisiesto_no_inventa_dia_previo():
+    serie = svc._serie_acumulada_hl([], [], 2024, 2, None)
+    assert len(serie) == 29
+    assert serie[-1]['previo'] is None
+    assert all(p['actual'] is None for p in serie)

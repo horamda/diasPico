@@ -1,5 +1,7 @@
 """Diagnóstico operativo de lectura: señales explicables, sin modificar recorridos."""
 import math
+import hashlib
+import json
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from statistics import median
@@ -23,8 +25,16 @@ def variacion(actual, anterior):
     return round(actual / anterior - 1, 4) if anterior > 0 else None
 
 
-def diagnostico(clientes, plan, dias, suc='TODAS', hoy=None):
+def diagnostico(clientes, plan, dias, suc='TODAS', hoy=None, seleccion=None, dias_entrega=None):
     hoy = hoy or datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).date()
+    # Share the sales cache TTL and explicit cache clearing. Changes to clients
+    # or route planning must never reuse a previous diagnosis.
+    firma = hashlib.sha256(json.dumps([clientes, plan, seleccion, dias_entrega], sort_keys=True, default=str).encode()).hexdigest()
+    key = ('prioridades', Session().get_bind(), firma, dias, suc, hoy)
+    return V._memo(key, lambda: _diagnostico(clientes, plan, dias, suc, hoy, seleccion, dias_entrega))
+
+
+def _diagnostico(clientes, plan, dias, suc, hoy, seleccion=None, dias_entrega=None):
     if not V.disponible() or not V.ultima_fecha():
         return {'disponible': False, 'dias': dias, 'suc': suc}
     hasta = V.ultima_fecha()
@@ -71,12 +81,14 @@ def diagnostico(clientes, plan, dias, suc='TODAS', hoy=None):
             'anterior_hasta': prev_hasta.isoformat(), 'primera_fecha': primera.isoformat() if primera else None,
             'historial_suficiente': bool(primera and primera <= prev_desde),
             'dias_desactualizacion': (hoy - hasta).days, 'calidad_origen': calidad}
-    return analizar(clientes, plan, actual, anterior, docs, dias, suc, meta)
+    return analizar(clientes, plan, actual, anterior, docs, dias, suc, meta, seleccion, dias_entrega)
 
 
-def analizar(clientes, plan, actual, anterior, docs, dias, suc, meta):
+def analizar(clientes, plan, actual, anterior, docs, dias, suc, meta, seleccion=None, dias_entrega=None):
     """Agrupa por sucursal de entrega del maestro, no por sucursal contable de venta."""
-    activos = [c for c in clientes if not c['an'] and (suc == 'TODAS' or c['suc'] == suc)]
+    ids = set(seleccion) if seleccion is not None else None
+    activos = [c for c in clientes if not c['an'] and (suc == 'TODAS' or c['suc'] == suc)
+               and (ids is None or c['id'] in ids)]
     grupos, por_doc = defaultdict(list), defaultdict(list)
     for c in activos:
         grupos[(c['suc'], c['loc'])].append(c)
@@ -164,7 +176,7 @@ def analizar(clientes, plan, actual, anterior, docs, dias, suc, meta):
         alta = {u: round(sum(altas[c['id']][u] for c in cs), 4) if completa else None for u in UNIDADES}
         return {**habituales, 'alta': alta, 'sin_base': sum(not actual.get(c['id'], {}).get('compras') for c in cs),
                 'bultos_sin_bxp': sum(actual.get(c['id'], {}).get('bultos_sin_bxp', 0) for c in cs)}
-    for d in DAYS:
+    for d in (dias_entrega if dias_entrega is not None else DAYS):
         cs_dia = [c for c in activos if d in c['d']]
         dias_carga.append({'dia': d, 'clientes': len(cs_dia), **carga(cs_dia)})
         for c in cs_dia:

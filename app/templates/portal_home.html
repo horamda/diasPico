@@ -403,7 +403,11 @@ body { display: flex; }
 .kpi-yoy-row .kpi-delta { flex-shrink: 0; }
 .kpi-yoy-sep { height: 1px; background: var(--brd); margin: 3px 0; }
 .yoy-panel { margin-top: 10px; background: var(--surf); border: 1px solid var(--brd); border-radius: var(--r-lg); padding: 14px; }
-.yoy-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; align-items: start; }
+.yoy-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.yoy-charts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; }
+.yoy-charts .yoy-chart-box { padding:12px; border:1px solid var(--brd); border-radius:8px; }
+.yoy-caption small { display:block; margin-top:4px; color:var(--muted); font-weight:400; }
+@media(max-width:1100px){.yoy-charts{grid-template-columns:1fr}}
 .yoy-chart-box { margin: 0; min-width: 0; }
 .yoy-caption { font-size: 11px; font-weight: 600; color: var(--txt2); margin-bottom: 6px; }
 .yoy-chart { position: relative; min-height: 220px; }
@@ -435,6 +439,7 @@ body { display: flex; }
 @media (max-width: 1100px) { .yoy-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .kpi-yoy-row { flex-wrap: wrap; row-gap: 1px; } .kpi-yoy-row span:last-child { margin-left: auto; } .yoy-chart { min-height: 200px; } }
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='portal-home-accessibility.css') }}">
 </head>
 <body>
 
@@ -541,10 +546,7 @@ body { display: flex; }
           <div class="volume-mix-legend" id="yoyLegend"></div>
         </div>
         <div class="yoy-grid">
-          <figure class="yoy-chart-box">
-            <figcaption class="yoy-caption">HL acumulados del mes, día por día</figcaption>
-            <div id="yoyChart" class="yoy-chart"></div>
-          </figure>
+          <div id="yoyCharts" class="yoy-charts"></div>
           <div class="yoy-table-wrap" id="yoyTable"></div>
         </div>
         <div class="volume-mix-foot">"Mismo día" = mismo día de la semana del año anterior (364 días antes), para comparar un martes con un martes. El mes a la fecha corta en el último día con datos en ambos años.</div>
@@ -731,8 +733,13 @@ function yoyTip(evt, html) {
 
 let lastYoy = null;
 function drawYoyChart(d) {
-  const box = document.getElementById('yoyChart');
-  const serie = d?.comparativo?.acumulado_hl || [];
+  const groups=[{nombre:d.sucursal==='TODAS'?'General':d.sucursal==='1'?'Casa Central':'Dolores',acumulado_hl:d.comparativo.acumulado_hl},...(d.comparativo.por_sucursal||[])];
+  const container=document.getElementById('yoyCharts');
+  container.style.gridTemplateColumns=groups.length===1?'minmax(0,1fr)':'';
+  container.innerHTML=groups.map((g,i)=>`<figure class="yoy-chart-box"><figcaption class="yoy-caption">${g.nombre}<small>HL acumulados del mes</small></figcaption><div class="yoy-chart" id="yoyChart${i}"></div></figure>`).join('');
+  groups.forEach((g,i)=>drawYoySeries(d,document.getElementById('yoyChart'+i),g.acumulado_hl||[],g.nombre));
+}
+function drawYoySeries(d, box, serie, nombre) {
   if (!box || !serie.length) return;
   const anio = (d.mes || '').slice(0, 4), anioPrev = String(Number(anio) - 1);
   const W = Math.max(280, box.clientWidth || 480), H = 230;
@@ -744,7 +751,7 @@ function drawYoyChart(d) {
   const x = dia => m.l + ((dia - 1) / Math.max(1, n - 1)) * (W - m.l - m.r);
   const y = v => H - m.b - (v / yMax) * (H - m.t - m.b);
   const path = key => serie.filter(p => p[key] != null).map((p, i) => `${i ? 'L' : 'M'}${x(p.dia).toFixed(1)} ${y(p[key]).toFixed(1)}`).join(' ');
-  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="HL acumulados del mes ${anio} contra ${anioPrev}">`;
+  let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${nombre}: HL acumulados del mes ${anio} contra ${anioPrev}">`;
   for (let i = 0; i <= 4; i++) {
     const v = (yMax / 4) * i;
     svg += `<line class="grid" x1="${m.l}" x2="${W - m.r}" y1="${y(v)}" y2="${y(v)}"/><text class="tick" x="${m.l - 6}" y="${y(v) + 4}" text-anchor="end">${fmtHl(v)}</text>`;
@@ -762,23 +769,26 @@ function drawYoyChart(d) {
     if (prevCorte != null) svg += `<circle class="mark-prev" cx="${x(corte.dia)}" cy="${y(prevCorte)}" r="4"/>`;
     svg += `<circle class="mark-cur" cx="${x(corte.dia)}" cy="${y(corte.actual)}" r="5"/><text class="end-label" x="${x(corte.dia) + 8}" y="${y(corte.actual) - 6}">${fmtHl(corte.actual)}</text>`;
   }
-  svg += `<line class="hover-line" id="yoyHover" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}"/>`;
+  svg += `<line class="hover-line" data-yoy-hover x1="0" x2="0" y1="${m.t}" y2="${H - m.b}"/>`;
   const step = (W - m.l - m.r) / Math.max(1, n - 1);
   serie.forEach(p => {
     svg += `<rect class="hit" data-dia="${p.dia}" x="${x(p.dia) - step / 2}" y="${m.t}" width="${step}" height="${H - m.t - m.b}"/>`;
   });
   svg += '</svg>';
   box.innerHTML = svg;
-  const hover = box.querySelector('#yoyHover');
+  const hover = box.querySelector('[data-yoy-hover]');
   box.querySelectorAll('.hit').forEach(rect => {
     rect.addEventListener('pointermove', evt => {
       const p = serie[Number(rect.dataset.dia) - 1];
       hover.setAttribute('x1', x(p.dia)); hover.setAttribute('x2', x(p.dia)); hover.style.opacity = .5;
       const diff = p.actual != null && p.previo ? ((p.actual - p.previo) / p.previo) * 100 : null;
+      const diferencia = p.actual != null && p.previo != null ? p.actual - p.previo : null;
+      const hlDetalle = v => new Intl.NumberFormat('es-AR', {maximumFractionDigits: 1}).format(v);
       yoyTip(evt, `<b>Día ${p.dia} · acumulado</b>
-        <div><span><i style="background:var(--yoy-cur)"></i>${anio}</span><strong>${p.actual == null ? 'sin datos' : fmtHl(p.actual) + ' HL'}</strong></div>
-        <div><span><i style="background:var(--yoy-prev)"></i>${anioPrev}</span><strong>${p.previo == null ? '—' : fmtHl(p.previo) + ' HL'}</strong></div>
-        ${diff == null ? '' : `<div><span>Diferencia</span><strong>${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%</strong></div>`}`);
+        <div><span><i style="background:var(--yoy-cur)"></i>${anio}</span><strong>${p.actual == null ? 'sin datos' : hlDetalle(p.actual) + ' HL'}</strong></div>
+        <div><span><i style="background:var(--yoy-prev)"></i>${anioPrev}</span><strong>${p.previo == null ? '—' : hlDetalle(p.previo) + ' HL'}</strong></div>
+        ${diff == null ? '' : `<div><span>Variación</span><strong>${diff > 0 ? '+' : ''}${diff.toFixed(1)}%</strong></div>`}
+        ${diferencia == null ? '' : `<div class="yoy-tip-difference"><span>Diferencia en HL</span><strong>${diferencia > 0 ? '+' : ''}${hlDetalle(diferencia)} HL</strong></div><p class="yoy-tip-calculation">${hlDetalle(p.actual)} − ${hlDetalle(p.previo)} = ${hlDetalle(diferencia)} HL</p>`}`);
     });
     rect.addEventListener('pointerleave', () => { hover.style.opacity = 0; yoyTip(null, null); });
   });

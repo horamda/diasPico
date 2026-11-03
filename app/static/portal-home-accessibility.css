@@ -1,0 +1,81 @@
+/* Readable dashboard typography and responsive layouts; scoped to portal home. */
+:root {
+  --txt: #f1f5fb;
+  --txt2: #c5cfe0;
+  --muted: #a5b2c8;
+  --red: #ff8585;
+  --grn: #70d9aa;
+  --brd: #384254;
+  --yoy-prev: #b7c3d6;
+}
+:root[data-theme="light"] {
+  --txt: #142034;
+  --txt2: #334155;
+  --muted: #475569;
+  --red: #b42332;
+  --grn: #12683e;
+  --brd: #bbc8d8;
+  --yoy-prev: #59677d;
+}
+body { font-size: 14px; line-height: 1.5; }
+.main, .content, .greeting { min-width: 0; }
+.sidebar { height: 100dvh; }
+.nav-item { min-height: 44px; font-size: 14px; }
+.nav-icon { opacity: 1; }
+.nav-label { font-size: 11px; letter-spacing: 1px; }
+.logo-sub, .user-role { font-size: 12px; }
+.user-name, .logo-name { font-size: 14px; }
+.topbar { min-height: 72px; height: auto; padding-block: 12px; gap: 12px; }
+.topbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+.greeting-title { font-size: 19px; }
+.greeting-sub, .last-updated, .data-updated { font-size: 12px; }
+.suc-sel { min-height: 42px; font-size: 14px; max-width: 100%; }
+.refresh-btn, .hamburger { width: 42px; height: 42px; flex-shrink: 0; }
+.alert { font-size: 14px; line-height: 1.5; }
+.section-label { font-size: 12px; letter-spacing: 1px; }
+.kpi-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+.kpi-lbl { font-size: 12px; line-height: 1.4; font-weight: 600; }
+.kpi-val { font-size: clamp(28px, 2.5vw, 36px); line-height: 1.2; }
+.kpi-icon { opacity: .85; }
+.kpi-sub, .kpi-breakdown-row, .kpi-yoy { font-size: 13px; line-height: 1.6; }
+.kpi-yoy { gap: 6px; }
+.kpi-yoy-row, .kpi-breakdown-row { flex-wrap: wrap; gap: 4px 12px; }
+.kpi-yoy-row > span:last-child, .kpi-breakdown-row > span:last-child { margin-left: auto; }
+.kpi-delta { font-size: 12px; padding: 3px 6px; }
+.volume-mix-title, .volume-donut-title { font-size: 16px; line-height: 1.4; }
+.volume-mix-sub, .volume-mix-foot, .volume-donut-sub { font-size: 13px; line-height: 1.6; }
+.legend-item { font-size: 12px; }
+.volume-mix-legend { max-width: none; }
+.yoy-panel { padding: 18px; }
+.yoy-charts { grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); }
+.yoy-caption { font-size: 15px; color: var(--txt); }
+.yoy-caption small { font-size: 12px; }
+.yoy-chart .tick { font-size: 12px; }
+.yoy-chart .end-label { font-size: 13px; }
+.yoy-chart .cur { stroke-width: 3; }
+.yoy-chart .prev { stroke-width: 2.5; }
+.yoy-table-wrap { max-width: 100%; overscroll-behavior-x: contain; }
+.yoy-table { font-size: 14px; }
+.yoy-table th { font-size: 11px; color: var(--txt2); }
+.yoy-table th, .yoy-table td { padding: 10px; }
+.yoy-table tr.suc td { font-size: 12px; background: var(--surf2); color: var(--txt); }
+.yoy-tip { font-size: 13px; padding: 10px 12px; }
+.yoy-tip-difference { border-top: 1px solid var(--brd2); margin-top: 6px; padding-top: 6px; }
+.yoy-tip-calculation { margin: 4px 0 0; color: var(--txt2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.module-desc { font-size: 13px; }
+.module-title { font-size: 17px; }
+.theme-toggle { left: auto; right: 18px; bottom: 14px; min-height: 42px; }
+:is(button, a, select, summary):focus-visible { outline: 3px solid var(--acc); outline-offset: 3px; }
+@media (max-width: 700px) {
+  .content { padding: 16px 12px 76px; }
+  .topbar { padding: 12px; flex-wrap: wrap; position: relative; }
+  .topbar-actions { flex: 1 0 100%; justify-content: flex-start; }
+  .greeting-title { font-size: 17px; }
+  .kpi-grid { grid-template-columns: minmax(0, 1fr); }
+  .yoy-panel, .volume-mix-panel { padding: 12px; }
+  .volume-mix-head { gap: 8px; }
+  .yoy-table { min-width: 760px; }
+  .yoy-charts { grid-template-columns: minmax(0, 1fr); }
+  .yoy-charts .yoy-chart-box { padding: 10px 6px; }
+  .theme-toggle { right: 12px; bottom: 12px; }
+}

@@ -11,6 +11,30 @@ SUC_CASA_CENTRAL = "1"
 SUC_DOLORES = "2"
 
 
+def _serie_acumulada_hl(actual, previo, anio, mes, corte):
+    def _acumulado(rows: list[dict], hasta: date | None) -> dict[int, float]:
+        por_dia: dict[int, float] = {}
+        for r in rows:
+            if hasta is not None and str(r.get("fecha") or "")[:10] > hasta.isoformat():
+                continue
+            por_dia[_day_from_row(r)] = por_dia.get(_day_from_row(r), 0.0) + float(r.get("hectolitros") or 0)
+        return por_dia
+
+    actual_dia = _acumulado(actual, corte) if corte else {}
+    previo_dia = _acumulado(previo, None)
+    acumulado = []
+    acc_actual = acc_previo = 0.0
+    for dia in range(1, calendar.monthrange(anio, mes)[1] + 1):
+        acc_actual += actual_dia.get(dia, 0.0)
+        acc_previo += previo_dia.get(dia, 0.0)
+        acumulado.append({
+            "dia": dia,
+            "actual": round(acc_actual, 1) if corte and dia <= corte.day else None,
+            "previo": round(acc_previo, 1) if dia <= calendar.monthrange(anio - 1, mes)[1] else None,
+        })
+    return acumulado
+
+
 def _day_from_row(row: dict) -> int:
     try:
         return int(str(row.get("fecha") or "0000-00-00")[-2:])
@@ -228,26 +252,7 @@ def get_dashboard_kpis(empresa_id: str, sucursal_id: str) -> dict:
         return _cal(suc, fecha.strftime("%Y-%m"))
 
     comparativo = _comparar(dias_data, prev_dias, _dias_mes_de(dia_prev, sucursal_id, prev_dias), corte, corte_prev, dia_prev)
-    def _acumulado(rows: list[dict], hasta: date | None) -> dict[int, float]:
-        por_dia: dict[int, float] = {}
-        for r in rows:
-            if hasta is not None and str(r.get("fecha") or "")[:10] > hasta.isoformat():
-                continue
-            por_dia[_day_from_row(r)] = por_dia.get(_day_from_row(r), 0.0) + float(r.get("hectolitros") or 0)
-        return por_dia
-
-    actual_dia = _acumulado(dias_data, corte) if corte else {}
-    previo_dia = _acumulado(prev_dias, None)
-    acumulado = []
-    acc_actual = acc_previo = 0.0
-    for dia in range(1, calendar.monthrange(anio, mes)[1] + 1):
-        acc_actual += actual_dia.get(dia, 0.0)
-        acc_previo += previo_dia.get(dia, 0.0)
-        acumulado.append({
-            "dia": dia,
-            "actual": round(acc_actual, 1) if corte and dia <= corte.day else None,
-            "previo": round(acc_previo, 1) if dia <= calendar.monthrange(anio - 1, mes)[1] else None,
-        })
+    acumulado = _serie_acumulada_hl(dias_data, prev_dias, anio, mes, corte)
     comparativo.update({
         "acumulado_hl": acumulado,
         "corte": corte.isoformat() if corte else None,
@@ -259,8 +264,10 @@ def get_dashboard_kpis(empresa_id: str, sucursal_id: str) -> dict:
     if sucursal_id == "TODAS" and corte:
         for suc, nombre in ((SUC_CASA_CENTRAL, "Casa Central"), (SUC_DOLORES, "Dolores")):
             suc_prev = _cal(suc, prev_anio_mes_str)
-            item = _comparar(_cal(suc, mes_str), suc_prev, _dias_mes_de(dia_prev, suc, suc_prev), corte, corte_prev, dia_prev)
-            item.update({"sucursal": suc, "nombre": nombre})
+            suc_actual = _cal(suc, mes_str)
+            item = _comparar(suc_actual, suc_prev, _dias_mes_de(dia_prev, suc, suc_prev), corte, corte_prev, dia_prev)
+            item.update({"sucursal": suc, "nombre": nombre,
+                         "acumulado_hl": _serie_acumulada_hl(suc_actual, suc_prev, anio, mes, corte)})
             comparativo["por_sucursal"].append(item)
 
     hl_cmp = comparativo["metricas"][0]

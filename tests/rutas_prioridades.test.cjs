@@ -29,3 +29,13 @@ test('CSV conserva unidades, fechas, rechazos y neutraliza fórmulas en textos',
   assert.match(result,/2026-10-01/);assert.match(result,/'=HYPERLINK\(""x""\)/);
   assert.match(result,/"-3";"2";"0.5"/);assert.match(result,/"CERRADO";"2";"1";"3"/);
 });
+test('consulta automatica solo en panel visible y usa periodo compartido',async()=>{
+ const el=element();el.hidden=true;const urls=[];let dias=30;
+ const ui=crear({el,api:async url=>{urls.push(url);return {disponible:false};},sucursal:()=> 'A',verCliente:()=>{},periodo:()=>dias,automatico:true});
+ ui.render();assert.equal(urls.length,0);
+ el.hidden=false;ui.render();await new Promise(resolve=>setImmediate(resolve));
+ assert.match(urls[0],/dias=30/);
+ ui.render();assert.equal(urls.length,1);
+ dias=7;ui.render();await new Promise(resolve=>setImmediate(resolve));
+ assert.match(urls[1],/dias=7/);
+});

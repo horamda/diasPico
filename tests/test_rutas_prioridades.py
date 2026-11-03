@@ -17,6 +17,17 @@ def camion(i, suc='A'):
     return {'id': i, 'nombre': f'Camión {i}', 'deposito': suc, 'capacidad_clientes': 1, 'plan': {'LU': ['Centro']}}
 
 
+def test_diagnostico_fecha_local_sin_hoy_inyectado(ctx):
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    cargar([linea(1, 0, 1)])
+    result = diagnostico([cliente(1)], {'vehiculos': []}, 7)
+    assert result['disponible'] is True
+    assert result['dias_desactualizacion'] == (
+        datetime.now(ZoneInfo('America/Argentina/Buenos_Aires')).date() - HASTA
+    ).days
+
+
 @pytest.mark.parametrize('dias', [7, 15, 30, 45, 60, 90, 120])
 def test_actividad_independiente_de_ventana_y_creditos(ctx, dias):
     cargar([linea(1, 1, 1), linea(2, 50, 2), linea(2, 0, 3, tipo='DVVTA', bultos=-3, neto=-300),
@@ -124,3 +135,33 @@ def test_alejamiento_solo_con_coordenadas_confiables_y_bajo_volumen(ctx):
     clientes[0]['far'] = True
     r = diagnostico(clientes, {'vehiculos': []}, 30, hoy=HASTA)
     assert not any(a['tipo']=='distancia' and a['id']==1 for a in r['alertas'])
+
+def test_diagnostico_reutiliza_calculo_y_respeta_cambios(ctx, monkeypatch):
+    from app.rutas import prioridades as P
+    llamadas = []
+    def calcular(*args):
+        llamadas.append(args)
+        return {'revision': len(llamadas)}
+    monkeypatch.setattr(P, '_diagnostico', calcular)
+    clientes, plan = [cliente(1)], {'vehiculos': []}
+    assert diagnostico(clientes, plan, 7, hoy=HASTA)['revision'] == 1
+    assert diagnostico(clientes, plan, 7, hoy=HASTA)['revision'] == 1
+    clientes[0]['d'] = 'MA'
+    assert diagnostico(clientes, plan, 7, hoy=HASTA)['revision'] == 2
+    plan['vehiculos'].append(camion(1))
+    assert diagnostico(clientes, plan, 7, hoy=HASTA)['revision'] == 3
+    assert diagnostico(clientes, plan, 15, hoy=HASTA)['revision'] == 4
+    V._cache.clear()
+    assert diagnostico(clientes, plan, 15, hoy=HASTA)['revision'] == 5
+
+def test_seleccion_dias_y_clientes_no_duplica_y_preserva_calidad_global(ctx):
+    cargar([linea(1,0,1),linea(2,0,2,bultos=900)])
+    cs=[cliente(1),cliente(2)]
+    result=diagnostico(cs,{'vehiculos':[]},7,hoy=HASTA,seleccion=[1],dias_entrega=['LU','JU'])
+    assert result['clientes']==1
+    assert result['volumen']['bultos']==10
+    assert [d['dia'] for d in result['dias_carga']]==['LU','JU']
+    assert all(a['id']==1 for a in result['alertas'])
+    assert result['calidad_origen']['filas_sin_cliente']==0
+    empty=diagnostico(cs,{'vehiculos':[]},7,hoy=HASTA,seleccion=[],dias_entrega=['MA'])
+    assert empty['clientes']==0 and empty['volumen']['bultos']==0

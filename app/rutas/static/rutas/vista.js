@@ -31,5 +31,23 @@
     }
     return {por_localidad:[...groups.values()].sort((a,b)=>a.suc.localeCompare(b.suc)||b.clientes-a.clientes),carga};
   }
-  const api={filtrar,resumir};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RutasVista=api;
+  function indicadores(clientes, dias, ventas, efectividad) {
+    const activos=clientes.filter(c=>!c.an), ids=new Set(activos.map(c=>c.id));
+    const elegidos=dias.length?dias:DAYS;
+    const programados=elegidos.reduce((n,d)=>n+activos.filter(c=>(c.d||'').includes(d)).length,0);
+    const filas=(efectividad?.clientes||[]).filter(c=>ids.has(c.id));
+    const ciclos=filas.reduce((n,c)=>n+c.visitas,0), efectivos=filas.reduce((n,c)=>n+c.efectivas,0);
+    const carga=activos.reduce((n,c)=>n+(ventas?.clientes[c.id]?.drop||0),0);
+    return {clientes:clientes.length, activos:activos.length, promedio:programados/elegidos.length,
+      compradores:ventas?activos.filter(c=>ventas.clientes[c.id]?.compras>0).length:null,
+      carga:ventas?carga:null, ciclos, efectivos, efectividad:ciclos?efectivos/ciclos:null};
+  }
+  function alertas(clientes, plan, dias=DAYS) {
+    const activos=clientes.filter(c=>!c.an), cubiertas=new Set();
+    for(const v of plan.vehiculos)for(const d of dias)for(const loc of v.plan[d]||[])cubiertas.add(JSON.stringify([v.deposito,loc,d]));
+    return {sinDias:activos.filter(c=>!c.d).length,
+      sinGeo:activos.filter(c=>c.lat==null||c.lng==null).length,
+      sinCamion:activos.filter(c=>dias.some(d=>c.d.includes(d)&&!cubiertas.has(JSON.stringify([c.suc,c.loc,d])))).length};
+  }
+  const api={filtrar,resumir,indicadores,alertas};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RutasVista=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

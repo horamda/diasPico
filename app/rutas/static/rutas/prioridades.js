@@ -22,20 +22,20 @@
     rows.push([],['CALIDAD GLOBAL'],...Object.entries(r.calidad_origen),['Días desde última fecha cargada',r.dias_desactualizacion],['Historial alcanza período anterior',r.historial_suficiente?'SI':'NO']);
     return '\ufeff'+rows.map(row=>row.map(csvCell).join(';')).join('\r\n');
   }
-  function crear({el, api, sucursal, verCliente}) {
+  function crear({el, api, sucursal, verCliente, periodo, cambiarPeriodo, automatico=false, seleccion}) {
     const state={dias:60,res:null,busy:false,error:'',tipo:'',nivel:'',q:'',limite:100,request:0};
     const filtradas=()=>state.res.alertas.filter(a=>(!state.tipo||a.tipo===state.tipo)&&(!state.nivel||a.nivel===state.nivel)&&`${a.nombre} ${a.id??''} ${a.loc} ${a.suc}`.toLowerCase().includes(state.q.toLowerCase()));
     async function generar() {
-      const request=++state.request, suc=sucursal(), dias=state.dias;
+      const request=++state.request, suc=sucursal(), dias=state.dias, filtro=seleccion?.();
       state.busy=true;state.error='';state.res=null;render();
-      try { const r=await api(`/ventas/prioridades?dias=${dias}&suc=${encodeURIComponent(suc)}`);
+      try { const r=await api(`/ventas/prioridades?dias=${dias}&suc=${encodeURIComponent(suc)}`,filtro?{method:'POST',body:JSON.stringify(filtro)}:{});
         if(request===state.request&&suc===sucursal()) state.res=r;
       } catch(e) { if(request===state.request)state.error=e.message; }
       finally { if(request===state.request){state.busy=false;render();} }
     }
     function render() {
       const r=state.res;
-      const head=`<div class="rec-head"><div><h2>Prioridades operativas</h2><p class="note">${esc(sucursal())} · todos sus clientes activos. No aplica el filtro de día, búsqueda ni días asignados del mapa.</p></div>
+      const head=`<div class="rec-head"><div><h2>Prioridades operativas</h2><p class="note">${esc(sucursal())} · ${seleccion?'clientes activos de la selección del mapa; carga y recorridos de los días elegidos.':'todos sus clientes activos.'}</p></div>
         <div class="rv-acc"><div class="seg seg-sm" role="group" aria-label="Período del diagnóstico">${PERIODOS.map(d=>`<button data-prid="${d}" aria-pressed="${d===state.dias}" ${state.busy?'disabled':''}>${d} d</button>`).join('')}</div>
         <button class="btn primary" data-generar ${state.busy?'disabled':''}>${state.busy?'Analizando…':'Generar diagnóstico'}</button>${r?.disponible?'<button class="btn" data-csv>Descargar CSV</button><button class="btn" data-print>Imprimir informe</button>':''}</div></div>`;
       if(!r?.disponible) {
@@ -68,7 +68,7 @@
         </div>`;
       }
       el.querySelector('[data-generar]').onclick=generar;
-      el.querySelectorAll('[data-prid]').forEach(b=>b.onclick=()=>{state.dias=+b.dataset.prid;state.res=null;state.limite=100;render();});
+      el.querySelectorAll('[data-prid]').forEach(b=>b.onclick=()=>{if(cambiarPeriodo){cambiarPeriodo(+b.dataset.prid);return;}state.dias=+b.dataset.prid;state.res=null;state.limite=100;render();});
       el.querySelectorAll('[data-tipo]').forEach(b=>b.onclick=()=>{state.tipo=state.tipo===b.dataset.tipo?'':b.dataset.tipo;state.limite=100;render();});
       el.querySelectorAll('[data-cliente]').forEach(b=>b.onclick=()=>verCliente(+b.dataset.cliente));
       const on=(selector,event,fn)=>{const x=el.querySelector(selector);if(x)x[event]=fn;};
@@ -77,10 +77,10 @@
       on('[data-clear]','onclick',()=>{state.tipo='';state.nivel='';state.q='';state.limite=100;render();});
       on('[data-mas]','onclick',()=>{state.limite+=100;render();});
       on('[data-csv]','onclick',()=>{const blob=new Blob([csv(r,filtradas())],{type:'text/csv;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`prioridades_${r.suc}_${r.hasta}_${r.dias}d.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
-      on('[data-print]','onclick',()=>{const w=window.open('','_blank');if(!w)return;w.opener=null;const limite=state.limite;state.limite=Infinity;render();const report=el.querySelector('.pri-report').innerHTML;state.limite=limite;render();w.document.write(`<!doctype html><html lang="es"><meta charset="utf-8"><title>Prioridades operativas</title><style>body{font:12px system-ui;margin:24px;color:#17251d}table{border-collapse:collapse;width:100%;margin:10px 0}td,th{padding:6px;border-bottom:1px solid #ccc;text-align:left}small{display:block}h2{margin-top:24px}button,input,select,.rv-fil,.pri-categories{display:none}button[data-cliente]{display:inline;border:0;background:none;font:inherit;color:inherit;padding:0}.bad{color:#a21d24}.warn{color:#805900}.vtot{display:flex;gap:30px}.vtot span{display:block}@media print{tr{break-inside:avoid}}</style><h1>Prioridades · ${esc(r.suc)}</h1>${report}<p>Informe con ${filtradas().length} alertas filtradas. Carga, evolución y calidad corresponden a toda la sucursal seleccionada.</p></html>`);w.document.close();w.focus();w.print();});
+      on('[data-print]','onclick',()=>{const w=window.open('','_blank');if(!w)return;w.opener=null;const limite=state.limite;state.limite=Infinity;render();const report=el.querySelector('.pri-report').innerHTML;state.limite=limite;render();w.document.write(`<!doctype html><html lang="es"><meta charset="utf-8"><title>Prioridades operativas</title><style>body{font:12px system-ui;margin:24px;color:#17251d}table{border-collapse:collapse;width:100%;margin:10px 0}td,th{padding:6px;border-bottom:1px solid #ccc;text-align:left}small{display:block}h2{margin-top:24px}button,input,select,.rv-fil,.pri-categories{display:none}button[data-cliente]{display:inline;border:0;background:none;font:inherit;color:inherit;padding:0}.bad{color:#a21d24}.warn{color:#805900}.vtot{display:flex;gap:30px}.vtot span{display:block}@media print{tr{break-inside:avoid}}</style><h1>Prioridades · ${esc(r.suc)}</h1>${report}<p>Informe con ${filtradas().length} alertas filtradas. Carga y evolución corresponden a los clientes seleccionados; calidad del origen es global.</p></html>`);w.document.close();w.focus();w.print();});
     }
-    let suc=sucursal();
-    return {render(){if(suc!==sucursal()){suc=sucursal();state.request++;state.busy=false;state.res=null;state.error='';}render();},invalidar(){state.request++;state.busy=false;state.res=null;state.error='';render();}};
+    let suc=sucursal(), filtroKey='';
+    return {render(){const next=JSON.stringify(seleccion?.()||null);if(filtroKey!==next||suc!==sucursal()||(periodo&&state.dias!==periodo())){filtroKey=next;suc=sucursal();if(periodo)state.dias=periodo();state.request++;state.busy=false;state.res=null;state.error='';}render();if(automatico&&!el.hidden&&!state.res&&!state.busy&&!state.error)generar();},invalidar(){state.request++;state.busy=false;state.res=null;state.error='';render();}};
   }
   const api={crear,csv};if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.RutasPrioridades=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

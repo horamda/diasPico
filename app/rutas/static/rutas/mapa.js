@@ -62,6 +62,33 @@ const tok = n => getComputedStyle(document.documentElement).getPropertyValue(n).
 const S = {suc:'TODAS', day:'TODOS', q:'', flt:null, sel:null, D:null, ver:'loc', V:null, zonas:true, ctx:true, foco:null, periodo:60, panel:true, panelW:0, comp:false, cdias:[], compStats:[], ref:null, radio:500};
 const ESTADO = {activo:'Activo', riesgo:'En riesgo', inactivo:'Inactivo', sin_compras:'Sin compras'};
 const ABC_COL = {A:'#2f6fde', B:'#0e97ad', C:'#86a9ec', '-':'#9a9f9b'};
+// Top 10 por localidad: clase Pareto dentro de la localidad (A: hasta 80% acumulado, B: hasta 95%, C: resto).
+const PARETO_COL = {A:'#d62828', B:'#f77f00', C:'#fcbf49'};
+const TOP_MET = {bultos:'Bultos', hl:'HL', neto:'Venta $'};
+const TOP = {on:false, met:'bultos', n:10};
+try { const t = JSON.parse(localStorage.getItem('rutas.top.v1') || '{}'); if (typeof t.on === 'boolean') TOP.on = t.on; if (TOP_MET[t.met]) TOP.met = t.met; } catch {}
+const saveTop = () => { try { localStorage.setItem('rutas.top.v1', JSON.stringify({on:TOP.on, met:TOP.met})); } catch {} };
+function topLocalidades(list) {
+  const g = new Map();
+  for (const c of list) {
+    const v = venta(c), x = Math.max(0, v?.[TOP.met] || 0);
+    if (c.an || !x) continue;
+    const k = c.suc + '|' + c.loc; if (!g.has(k)) g.set(k, {suc:c.suc, loc:c.loc, total:0, cs:[]});
+    const e = g.get(k); e.total += x; e.cs.push({c, x});
+  }
+  const rank = new Map(), grupos = [];
+  for (const e of g.values()) {
+    e.cs.sort((a, b) => b.x - a.x);
+    let acum = 0;
+    e.cs.forEach((r, i) => { const antes = acum / e.total; acum += r.x; r.pct = r.x / e.total; r.acum = acum / e.total; r.rank = i + 1;
+      r.clase = antes < .8 ? 'A' : antes < .95 ? 'B' : 'C'; });
+    e.top = e.cs.slice(0, TOP.n); e.topPct = e.top.reduce((t, r) => t + r.pct, 0); e.nA = e.cs.filter(r => r.clase === 'A').length;
+    e.top.forEach(r => rank.set(r.c.id, r)); grupos.push(e);
+  }
+  grupos.sort((a, b) => String(a.suc).localeCompare(b.suc) || b.total - a.total);
+  return {grupos, rank};
+}
+let topLayer = null;
 const venta = c => S.V && S.V.clientes[c.id];
 const estadoDe = c => venta(c)?.estado || 'sin_compras';
 const money = n => '$ ' + Math.round(n || 0).toLocaleString('es-AR');
@@ -109,7 +136,7 @@ async function api(path, opts={}) {
   return j;
 }
 
-const prioridades = RutasPrioridades.crear({el:$('p-pri'), api, sucursal:()=>S.suc,
+const prioridades = RutasPrioridades.crear({el:$('p-pri'), api, sucursal:()=>S.suc, periodo:()=>S.periodo, cambiarPeriodo, automatico:true, seleccion:()=>({ids:S.D?visible().map(c=>c.id):[],dias:compActivo()?S.cdias:S.day==='TODOS'?DAYS:[S.day]}),
   verCliente:async id=>{
     if (!byId.has(id)) { $('activeClients').value='si'; $('assignedDays').value='todos'; await load(); }
     verClienteRevision(id);
@@ -249,8 +276,57 @@ function drawPoints(list) {
     m.on('click', () => select(c.id));
     ptLayer.addLayer(m);
   });
+  drawTop(list);
   drawZonas(list);
   drawRef();
+}
+function drawTop(list) {
+  if (!topLayer) topLayer = L.layerGroup().addTo(map);
+  topLayer.clearLayers();
+  if (!TOP.on || !S.V) return;
+  const rank = topLocalidades(list).rank, sube = modoPin ? 6.5 * (PIN_ALTO + 1) : 0;
+  for (const c of list) {
+    const r = rank.get(c.id); if (!r || !isGeo(c)) continue;
+    const m = L.marker([c.lat, c.lng], {keyboard:false, zIndexOffset:900 - r.rank, icon:L.divIcon({className:'top-wrap', iconSize:[22,22],
+      iconAnchor:[-2, 24 + sube], html:`<span class="top-badge" style="--c:${PARETO_COL[r.clase]}">${r.rank}</span>`})});
+    m.bindTooltip(`<b>#${r.rank} de ${esc(c.loc)}</b> · Pareto ${r.clase}<br>${c.id} ${esc(c.n)}<br>${num(r.pct * 100, 1)}% de la localidad · acumulado ${num(r.acum * 100, 0)}%`);
+    m.on('click', () => select(c.id));
+    topLayer.addLayer(m);
+  }
+}
+function renderTop() {
+  const el = $('p-top'); if (!el) return;
+  if (!S.V) { el.innerHTML = '<h2>Top 10 por localidad</h2><p class="empty">No hay ventas importadas en el período.</p>'; return; }
+  const {grupos} = topLocalidades(visible());
+  const val = x => TOP.met === 'neto' ? money(x) : num(x, TOP.met === 'hl' ? 2 : 1);
+  let suc = null, html = '';
+  for (const e of grupos) {
+    if (e.suc !== suc) { suc = e.suc; html += `<h2 class="top-suc">${esc(suc)}</h2>`; }
+    html += `<details class="top-loc"><summary><i class="sw" style="background:${colorLoc(e.loc)}"></i><b>${esc(e.loc)}</b>
+      <span class="note">${e.cs.length} clientes · top ${e.top.length} = ${num(e.topPct * 100, 0)}% · ${e.nA} hacen el 80%</span>
+      <span class="top-bar">${e.top.map(r => `<i style="width:${r.pct * 100}%;background:${PARETO_COL[r.clase]}"></i>`).join('')}</span></summary>
+      <div class="tw"><table><thead><tr><th>#</th><th>Cliente</th><th>${TOP_MET[TOP.met]}</th><th>%</th><th>Acum.</th><th>Días</th></tr></thead><tbody>
+      ${e.top.map(r => `<tr data-id="${r.c.id}" tabindex="0" class="top-row"><td><span class="top-badge" style="--c:${PARETO_COL[r.clase]}">${r.rank}</span></td><td>${r.c.id} ${esc(r.c.n)}</td><td>${val(r.x)}</td><td>${num(r.pct * 100, 1)}%</td><td>${num(r.acum * 100, 0)}% <small>${r.clase}</small></td><td>${esc(r.c.d || '—')}</td></tr>`).join('')}
+      </tbody></table></div><button type="button" class="btn" data-zloc="${esc(e.loc)}">Ver en el mapa</button></details>`;
+  }
+  el.innerHTML = `<h2>Top 10 por localidad</h2>
+    <p class="status">Ventas del ${esc(S.V.desde)} al ${esc(S.V.hasta)} · clientes activos de la vista actual, agrupados por sucursal de entrega.</p>
+    <label class="top-chk"><input type="checkbox" data-topon ${TOP.on ? 'checked' : ''}> Marcar el top 10 en el mapa</label>
+    <div class="seg seg-sm" role="group" aria-label="Medida del ranking">${Object.entries(TOP_MET).map(([k, l]) => `<button type="button" data-tm="${k}" aria-pressed="${TOP.met === k}">${l}</button>`).join('')}</div>
+    <p class="top-ley">${Object.entries(PARETO_COL).map(([k, c]) => `<span><span class="top-badge" style="--c:${c}">${k}</span>${k === 'A' ? 'hasta 80% acumulado' : k === 'B' ? '80–95%' : 'último 5%'}</span>`).join('')}</p>
+    <p class="note">Pareto dentro de cada localidad. El número en el mapa es el puesto del cliente en su localidad; el color, su clase.</p>
+    ${html || '<p class="empty">Sin clientes con compras en la vista.</p>'}
+    <button type="button" class="btn" data-topcsv>Descargar CSV</button>`;
+  el.querySelector('[data-topon]').onchange = e => { TOP.on = e.target.checked; saveTop(); drawTop(visible()); };
+  el.querySelectorAll('[data-tm]').forEach(b => b.onclick = () => { TOP.met = b.dataset.tm; saveTop(); drawTop(visible()); renderTop(); });
+  el.querySelectorAll('[data-zloc]').forEach(b => b.onclick = () => { if (!TOP.on) { TOP.on = true; saveTop(); drawTop(visible()); el.querySelector('[data-topon]').checked = true; } zoomLoc(b.dataset.zloc); });
+  el.querySelectorAll('tr[data-id]').forEach(t => t.onclick = () => select(+t.dataset.id, true));
+  el.querySelector('[data-topcsv]').onclick = () => {
+    const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`, l = [['Sucursal','Localidad','Puesto','Cliente','Nombre',TOP_MET[TOP.met],'% localidad','% acumulado','Clase','Días'].map(q).join(';')];
+    for (const e of grupos) for (const r of e.top) l.push([e.suc, e.loc, r.rank, r.c.id, r.c.n, r.x.toFixed(2), (r.pct * 100).toFixed(1), (r.acum * 100).toFixed(1), r.clase, r.c.d].map(q).join(';'));
+    const url = URL.createObjectURL(new Blob(['\ufeff' + l.join('\r\n')], {type:'text/csv;charset=utf-8'}));
+    const a = document.createElement('a'); a.href = url; a.download = `top10_localidad_${S.suc}_${S.V.hasta}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 }
 
 // Envolvente convexa (monotone chain) de [lat,lng], ampliada `pad` grados (~400 m) para que los puntos queden adentro.
@@ -474,15 +550,14 @@ function renderLoc() {
   rows.forEach(r => { if (r.suc !== last) { html += `<tr class="suc"><td colspan="${4+days.length}">Sale de ${esc(r.suc)}</td></tr>`; last = r.suc; }
     html += `<tr data-loc="${esc(r.loc)}" tabindex="0"><td><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</td><td>${r.clientes}</td><td class="${r.sin_geo?'bad':''}">${r.sin_geo||'·'}</td><td class="${r.sin_dias?'bad':''}">${r.sin_dias||'·'}</td>${days.map(d=>`<td class="${r[d]?'':'z'}">${r[d]||'·'}</td>`).join('')}</tr>`; });
   $('p-loc').innerHTML = `
-   <div class="kpis">${kp.map(([c,n,l,f])=>`<button class="kpi ${c}" ${f?`data-f="${f}" aria-pressed="${S.flt===f}"`:'disabled style="cursor:default"'}><b>${n}</b><span>${l}</span></button>`).join('')}</div>
+   <div class="loc-health">${kp.filter(([,n,,f])=>f&&(n>0||S.flt===f)).map(([c,n,l,f])=>`<button class="btn ${c}" data-f="${f}" aria-pressed="${S.flt===f}"><b>${n}</b> ${l}</button>`).join('')||'<span>Sin alertas de ubicación o días en esta vista</span>'}</div>
    ${S.flt?`<p class="note">Filtro aplicado: <b>${FLT_LABEL[S.flt]||S.flt}</b> · <a href="#" id="clrF">quitar</a></p>`:''}
    ${compActivo()?tablaComparar():''}
-   <div><h2>${compActivo()?'Clientes por localidad · '+S.cdias.map(d=>DAYSHORT[d]).join(' + '):S.day==='TODOS'?'Clientes por localidad y día':'Localidades con entrega el '+DAYNAME[S.day].toLowerCase()}</h2></div>
-   ${rows.length?`<div class="tw"><table><thead><tr><th>Localidad</th><th>Clientes</th><th title="Sin geolocalizar">S/geo</th><th title="Sin días">S/día</th>${days.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table></div>
-   <p class="note">Tocá una localidad para acercar el mapa y resaltar su zona.</p>`:'<p class="empty">No hay clientes para los filtros elegidos.</p>'}`;
+   <div><h2>${compActivo()?'Clientes por localidad · '+S.cdias.map(d=>DAYSHORT[d]).join(' + '):S.day==='TODOS'?'Clientes por localidad y día':'Localidades ? '+DAYNAME[S.day]}</h2></div>
+   ${rows.length?`<div class="loc-cards">${rows.map(r=>`<button type="button" class="loc-card" data-loc="${esc(r.loc)}" title="Ver ${esc(r.loc)} en el mapa"><span class="loc-card-title"><span><i class="sw" style="background:${colorLoc(r.loc)}"></i>${esc(r.loc)}</span><b>${num(r.clientes)}</b></span><span class="loc-card-sub">${esc(r.suc)} <span>${r.sin_geo?`${r.sin_geo} sin ubicación`:'Con ubicación'}</span></span><span class="loc-days">${days.map(d=>`<span class="${r[d]?'':'empty-day'}"><span>${DAYSHORT[d]}</span><b>${r[d]||'—'}</b></span>`).join('')}</span></button>`).join('')}</div><p class="note">Seleccioná una localidad para acercar el mapa. Un cliente puede tener varios días.</p>`:'<p class="empty">No hay clientes para los filtros elegidos.</p>'}`;
   $('p-loc').querySelectorAll('[data-f]').forEach(b => b.onclick = () => { S.flt = S.flt===b.dataset.f ? null : b.dataset.f; render(); });
   const cf = $('clrF'); if (cf) cf.onclick = e => { e.preventDefault(); S.flt = null; render(); };
-  $('p-loc').querySelectorAll('tr[data-loc]').forEach(tr => { tr.onclick = () => zoomLoc(tr.dataset.loc);
+  $('p-loc').querySelectorAll('[data-loc]').forEach(tr => { tr.onclick = () => zoomLoc(tr.dataset.loc);
     tr.onkeydown = e => { if (e.key === 'Enter') zoomLoc(tr.dataset.loc); }; });
 }
 function tablaComparar() {
@@ -533,7 +608,7 @@ function renderExp(){
 function renderVen() {
   const el = $('p-ven');
   const selector = `<div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-vp="${d}" aria-pressed="${S.periodo === d}">${d} d</button>`).join('')}</div>`;
-  const bindPeriodo = () => el.querySelectorAll('[data-vp]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.vp; savePrefs(); load(); });
+  const bindPeriodo = () => el.querySelectorAll('[data-vp]').forEach(b => b.onclick = () => { cambiarPeriodo(+b.dataset.vp); });
   if (!S.V) { el.innerHTML = selector + '<h2>Ventas</h2><p class="empty">No hay ventas importadas en el período. Se cargan desde Importaciones de datos → Ventas detalle.</p>'; bindPeriodo(); return; }
   const act = scope().filter(c => !c.an), cnt = e => act.filter(c => e === 'sin_compras' ? !venta(c)?.compras : estadoDe(c) === e).length;
   const tot = k => act.reduce((t, c) => t + (venta(c)?.[k] || 0), 0);
@@ -558,7 +633,7 @@ function renderVen() {
 // ---------- recorridos por camión (cuadro tipo INFORME) y clientes por día y localidad ----------
 const DIASLARGO = {LU:'LUNES', MA:'MARTES', MI:'MIÉRCOLES', JU:'JUEVES', VI:'VIERNES', SA:'SÁBADO'};
 // Clientes activos por sucursal/búsqueda, sin filtrar por día: el cuadro siempre muestra la semana.
-const baseSemana = () => RutasVista.filtrar(S.D.clientes, {suc:S.suc, day:'TODOS', q:S.q}, c => !c.an);
+const baseSemana = () => visible().filter(c=>!c.an);
 function matrizLocalidades(base) {
   const g = new Map();
   for (const c of base) {
@@ -570,6 +645,7 @@ function matrizLocalidades(base) {
   return [...g.values()].sort((a, b) => a.suc.localeCompare(b.suc) || b.total - a.total || a.loc.localeCompare(b.loc));
 }
 function renderRec() {
+  const DAYS=compActivo()?S.cdias:S.day==='TODOS'?RutasEfectividad.DAYS:[S.day];
   const el = $('p-rec'), base = baseSemana(), carga = RutasVista.resumir(base, S.D.plan, S.suc).carga;
   matrizIdx = new Map(matrizLocalidades(base).map(r => [r.suc + '|' + r.loc, r]));
   const vehs = S.D.plan.vehiculos.filter(v => S.suc === 'TODAS' || v.deposito === S.suc);
@@ -626,18 +702,7 @@ let matrizIdx = new Map();
 // ---------- revisión de días: análisis a pedido, CSV e informe imprimible ----------
 const REV_MOTIVO = {visita:'Cargado = día de visita', fuera:'Factura fuera de su día', aislado:'Distinto a sus vecinos', sindias:'Sin días', frecuencia:'2 días y compra poco'};
 const REV = {res:null, dias:90, busy:false, motivo:'', loc:'', limite:150};
-async function generarRevision() {
-  if (REV.busy || !S.D) return;
-  REV.busy = true; renderRev();
-  try {
-    const ventas = await api(`/ventas/comportamiento?dias=${REV.dias}`);
-    if (!ventas.comprobantes) throw new Error('no hay ventas importadas en el período');
-    REV.res = RutasRevision.analizar(S.D.clientes, ventas, {suc:S.suc});
-    agregarVolumenAnalisis(REV.res, ventas, S.D.clientes.filter(c => !c.an && (S.suc === 'TODAS' || c.suc === S.suc)));
-    REV.motivo = ''; REV.loc = ''; REV.limite = 150;
-  } catch (e) { toast('No se pudo generar el análisis: ' + e.message, true); }
-  finally { REV.busy = false; renderRev(); }
-}
+async function generarRevision() { await load(); }
 const pct = x => x == null ? '—' : Math.round(x * 100) + '%';
 const revClientes = () => REV.res.clientes.filter(r => (!REV.motivo || r.motivos.includes(REV.motivo)) && (!REV.loc || r.loc === REV.loc));
 function revDiasCelda(f, d) {
@@ -649,7 +714,7 @@ function renderRev() {
   const el = $('p-rev'), R = REV.res;
   const otraSuc = R && R.suc !== S.suc;
   const head = `<div class="rec-head"><div><h2>Revisión de días de entrega</h2>
-      <p class="note">Compara días asignados con fechas de comprobantes y vecinos; no confirma entregas físicas. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
+      <p class="note">Usa los clientes de la selección del mapa y el período común. Compara días asignados con fechas de comprobantes y vecinos de esa selección; no confirma entregas físicas. ${esc(S.suc === 'TODAS' ? 'Todas las sucursales' : S.suc)}.</p></div>
     <div class="row rv-acc"><div class="seg seg-sm" role="group" aria-label="Período de ventas">${PERIODOS.map(d => `<button type="button" data-rd="${d}" aria-pressed="${REV.dias === d}" ${REV.busy ? 'disabled' : ''}>${d} d</button>`).join('')}</div>
       <button class="btn primary" id="revGen" type="button" ${REV.busy ? 'disabled' : ''}>${REV.busy ? 'Analizando…' : R ? 'Volver a generar' : 'Generar análisis'}</button>
       ${R ? '<button class="btn" id="revCsv" type="button">Descargar CSV</button><button class="btn" id="revInf" type="button">Informe para imprimir</button>' : ''}
@@ -686,7 +751,7 @@ function renderRev() {
         ${lista.length > REV.limite ? `<button class="btn" id="revMas" type="button">Mostrar ${Math.min(300, lista.length - REV.limite)} más (quedan ${lista.length - REV.limite})</button>` : ''}`
       : '<p class="empty">No hay clientes para este filtro.</p>'}`;
   }
-  el.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { REV.dias = +b.dataset.rd; REV.res = null; renderRev(); });
+  el.querySelectorAll('[data-rd]').forEach(b => b.onclick = () => { cambiarPeriodo(+b.dataset.rd); });
   $('revGen').onclick = generarRevision;
   $('revVolver').onclick = () => elegirTab('t-loc');
   if (!R) return;
@@ -762,6 +827,7 @@ function irARecorrido(dia, locs) {
   }, 80);
 }
 function descargarCsv(vehs, carga, filasM) {
+  const DAYS=compActivo()?S.cdias:S.day==='TODOS'?RutasEfectividad.DAYS:[S.day];
   const q = v => /[;"\n]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
   const lineas = [['DEPOSITO', 'VEHICULO', ...DAYS.map(d => DIASLARGO[d])].join(';')];
   for (const v of vehs) lineas.push([v.deposito, v.nombre, ...DAYS.map(d => {
@@ -788,24 +854,12 @@ const EFE = {res:null, dias:90, busy:false, filtro:'', loc:'', ven:'', limite:15
 const EFE_FILTRO = {cero:'Sin ninguna venta', bajo:'Menos de 25%'};
 const efeCls = x => x == null ? '' : x >= .6 ? 'ok' : x >= .4 ? 'warn' : 'bad';
 const efeBarra = x => x == null ? '—' : `<span class="ef-bar ${efeCls(x)}" style="--p:${Math.round(x * 100)}%"><b>${Math.round(x * 100)}%</b></span>`;
-async function generarEfectividad() {
-  if (EFE.busy || !S.D) return;
-  EFE.busy = true; renderEfe();
-  try {
-    const [f, ventas] = await Promise.all([api(`/ventas/fechas?dias=${EFE.dias}`), api(`/ventas/comportamiento?dias=${EFE.dias}`)]);
-    if (!f.desde) throw new Error('no hay ventas importadas');
-    EFE.res = RutasEfectividad.analizar(S.D.clientes, f, {suc:S.suc});
-    const ids = new Set(EFE.res.clientes.map(c => c.id));
-    agregarVolumenAnalisis(EFE.res, ventas, S.D.clientes.filter(c => ids.has(c.id)));
-    EFE.filtro = ''; EFE.loc = ''; EFE.ven = ''; EFE.limite = 150;
-  } catch (e) { toast('No se pudo calcular la efectividad: ' + e.message, true); }
-  finally { EFE.busy = false; renderEfe(); }
-}
+async function generarEfectividad() { await load(); }
 const efeClientes = () => EFE.res.clientes.filter(r => (!EFE.loc || r.loc === EFE.loc) && (!EFE.ven || r.ven === EFE.ven)
   && (EFE.filtro !== 'cero' || !r.efectivas) && (EFE.filtro !== 'bajo' || r.pct < .25));
 function vendedoresEfectividadHTML(R) {
   return `<section class="ef-vendedores"><h2>Vendedores: visita y entrega posterior</h2>
-    <p class="note">Cartera y agenda actuales del maestro. Clientes únicos por día en una semana habitual, no pedidos confirmados. Sábado → lunes; no contempla feriados. La efectividad mide ciclos completos con alguna venta, incluida BEES: no acredita una visita realizada ni atribuye la venta al vendedor.</p>
+    <p class="note">Clientes de la selección del mapa y agenda actual del maestro. Clientes únicos por día en una semana habitual, no pedidos confirmados. Sábado → lunes; no contempla feriados. La efectividad mide ciclos completos con alguna venta, incluida BEES: no acredita una visita realizada ni atribuye la venta al vendedor.</p>
     ${(R.vendedores || []).map(v => `<details><summary>${esc(v.suc)} · ${esc(v.ven)} · ${v.cartera} clientes · ${pct(v.pct)} efectividad</summary>
       <p class="note">${v.sinVisita} sin visita válida de lunes a sábado · ${v.clientes} clientes evaluados · ${num(v.efectivas)} de ${num(v.visitas)} ciclos con venta · ${pct(v.bees)} de los días con venta por BEES.</p>
       <div class="tw"><table><thead><tr><th>Visita → entrega</th><th>Clientes a visitar</th><th>Con entrega al día siguiente</th><th>Secuencia a revisar</th><th>Total a entregar de su cartera</th><th>Ciclos con venta / evaluados</th><th>Efectividad</th></tr></thead><tbody>
@@ -854,7 +908,7 @@ function renderEfe() {
         ${lista.length > EFE.limite ? `<button class="btn" id="efeMas" type="button">Mostrar ${Math.min(300, lista.length - EFE.limite)} más (quedan ${lista.length - EFE.limite})</button>` : ''}`
       : '<p class="empty">No hay clientes para este filtro.</p>'}`;
   }
-  el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { EFE.dias = +b.dataset.ed; EFE.res = null; renderEfe(); });
+  el.querySelectorAll('[data-ed]').forEach(b => b.onclick = () => { cambiarPeriodo(+b.dataset.ed); });
   $('efeGen').onclick = generarEfectividad;
   $('efeVolver').onclick = () => elegirTab('t-loc');
   if (!R) return;
@@ -990,12 +1044,13 @@ async function cargarVentas(c, el) {
       ${r.articulos.length ? `<h3>Más comprado</h3><ol class="arts">${r.articulos.slice(0, 6).map(a => `<li><span>${esc(a.articulo)}</span><b>${volumenTexto(a)}</b></li>`).join('')}</ol>` : ''}
       ${Object.keys(m.motivos || {}).length ? `<p class="note">Motivos de rechazo: ${Object.entries(m.motivos).map(([k, n]) => `${esc(k)} (${n})`).join(', ')}</p>` : ''}`;
   }
-  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { S.periodo = +b.dataset.p; savePrefs(); load(); });
+  el.querySelectorAll('[data-p]').forEach(b => b.onclick = () => { cambiarPeriodo(+b.dataset.p); });
 }
 
 // ---------- controles ----------
 function setDay(v, multi){
-  if (multi && v !== 'TODOS' && !S.comp) { S.comp = true; S.cdias = S.day !== 'TODOS' && S.day !== v ? [S.day] : []; }
+  if(v==='TODOS'){S.comp=false;S.cdias=[];}
+  if (multi && v !== 'TODOS' && !S.comp) { S.comp = true; S.cdias = S.day !== 'TODOS' ? [S.day] : []; }
   if (S.comp) {
     S.cdias = v === 'TODOS' ? [] : S.cdias.includes(v) ? S.cdias.filter(d => d !== v) : DAYS.filter(d => S.cdias.includes(d) || d === v);
     S.day = 'TODOS';
@@ -1012,9 +1067,72 @@ $('compBtn').onclick = () => setComparar(!S.comp);
 function seg(el, opts, key, label) {
   el.innerHTML = (label ? `<span class="seg-lbl" aria-hidden="true">${esc(label)}</span>` : '') + opts.map(([v,l,n,t]) => `<button type="button" data-v="${esc(v)}" aria-pressed="${S[key]===v}"${t?` title="${esc(t)}"`:''}><span>${esc(l)}</span>${n!=null?`<small>${n}</small>`:''}</button>`).join('');
   el.querySelectorAll('button').forEach(b => b.onclick = e => {
-    if (key === 'day') return setDay(b.dataset.v, e.ctrlKey || e.metaKey || e.shiftKey);
+    if (key === 'day') return setDay(b.dataset.v, true);
     S[key] = b.dataset.v; S.sel=null; renderCard(); savePrefs(); if(S.D){render(); if(key==='suc')centrarSeleccion()}
   });
+}
+function cambiarPeriodo(dias) {
+  S.periodo=dias; savePrefs(); load();
+}
+let analisisScope='', revisionCache=null, efectividadCache=null;
+function sincronizarAnalisis(clientes) {
+  const key=JSON.stringify([S.suc,S.day,S.cdias,S.periodo,clientes.map(c=>c.id)]);
+  if(key!==analisisScope){REV.loc='';REV.motivo='';EFE.loc='';EFE.ven='';EFE.filtro='';analisisScope=key;}
+  REV.dias=EFE.dias=S.periodo;
+  if(revisionCache?.key!==key||revisionCache?.ventas!==S.V||revisionCache?.datos!==S.D){
+    REV.res=null;revisionCache=null;
+  }
+  if(!$('p-rev').hidden && !revisionCache){
+    REV.res=S.V?.comprobantes?RutasRevision.analizar(clientes,S.V,{suc:S.suc}):null;
+    if(REV.res)agregarVolumenAnalisis(REV.res,S.V,clientes.filter(c=>!c.an));
+    revisionCache={key,ventas:S.V,datos:S.D};
+  }
+  if(efectividadCache?.key!==key||efectividadCache?.fechas!==fechasResumen||efectividadCache?.ventas!==S.V||efectividadCache?.datos!==S.D){
+    EFE.res=null;efectividadCache=null;
+  }
+  if(!$('p-efe').hidden && !efectividadCache){
+    EFE.res=fechasResumen?RutasEfectividad.analizar(clientes,fechasResumen,{suc:S.suc}):null;
+    if(EFE.res && S.V){const ids=new Set(EFE.res.clientes.map(c=>c.id));agregarVolumenAnalisis(EFE.res,S.V,clientes.filter(c=>ids.has(c.id)));}
+    efectividadCache={key,fechas:fechasResumen,ventas:S.V,datos:S.D};
+  }
+}
+function renderDaySummary(clientes) {
+  const dias=compActivo()?S.cdias:S.day==='TODOS'?DAYS:[S.day];
+  const r=RutasVista.indicadores(clientes,dias,S.V,resumenEfectividad);
+  const alertas=RutasVista.alertas(clientes,S.D.plan,dias);
+  const cards=[
+    [num(r.clientes),'Clientes',`${num(r.activos)} activos; incluye clientes sin coordenadas`],
+    [num(r.promedio,1),'Promedio / día','Clientes activos asignados a los días seleccionados / cantidad de días seleccionados. No es un promedio histórico.'],
+    [r.compradores===null?'—':num(r.compradores),'Con compra','Clientes activos de la selección con compras en el período'],
+    [r.efectividad===null?(resumenCargando?'…':'—'):num(r.efectividad*100,1)+'%','Efectividad de visita',`${r.efectivos} de ${r.ciclos} ciclos completos con venta de los clientes activos seleccionados; usa todos sus días de visita. Incluye BEES, no acredita visitas realizadas.`],
+    [r.carga===null?'—':'~'+num(r.carga,1),'Bultos estimados','Suma del promedio por compra de cada cliente activo seleccionado; no son pedidos confirmados.']
+  ];
+  const expanded=$('daySummary').querySelector('details')?.open;
+  const label=compActivo()?S.cdias.map(d=>DAYSHORT[d]).join(' + '):S.day==='TODOS'?'Semana completa':DAYNAME[S.day];
+  const fecha=s=>s.split('-').reverse().join('/');
+  const notes=[`${num(r.activos)} activos`, 'Promedio de la selección', S.V?'En el período':'Sin datos de ventas',r.ciclos?`${num(r.efectivos)} / ${num(r.ciclos)} ciclos`:resumenCargando?'Calculando…':'Sin ciclos completos','Por compra · orientativo'];
+  $('daySummary').innerHTML=`<div class="day-summary-heading"><span><b>${esc(label)}</b><span class="day-scope">${esc(S.suc==='TODAS'?'Todas las sucursales':S.suc)}</span></span><span class="day-period">${S.V?`${fecha(S.V.desde)} — ${fecha(S.V.hasta)}`:'Ventas no disponibles'}</span></div><div class="day-cards">`+
+    cards.map(([valor,label,help],i)=>`<div class="day-stat${i===0?' primary-stat':''}" title="${esc(help)}"><span>${label}</span><strong>${valor}</strong><small>${esc(notes[i])}</small></div>`).join('')+`</div>`+
+    `<details class="day-method" ${expanded?'open':''}><summary>Cómo se calculan estos indicadores</summary><div class="day-method-body"><p>${resumenEfectividad?`Efectividad: ${fecha(resumenEfectividad.desde)} al ${fecha(resumenEfectividad.hasta)}.`:resumenCargando?'Calculando efectividad…':'Efectividad no disponible: sin datos o ciclos completos.'}</p>${cards.map(([,label,help])=>`<p><b>${label}:</b> ${esc(help)}</p>`).join('')}</div></details>`;
+  $('daySummary').insertAdjacentHTML('beforeend',`<div class="day-sync"><label>Período <select id="summaryPeriod">${PERIODOS.map(d=>`<option value="${d}" ${d===S.periodo?'selected':''}>${d} días</option>`).join('')}</select></label><span role="status">${errorActualizacion?'Error al actualizar; se conservan los datos anteriores.':`Consulta: ${ultimaActualizacion?.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})||'...'} / automática cada minuto`}</span></div><div class="day-alerts"><span>${alertas.sinDias} sin días</span><span>${alertas.sinGeo} sin ubicación</span><span>${alertas.sinCamion} sin cobertura de camión</span></div>`);
+  const summary=$('daySummary'), footer=document.createElement('div');
+  footer.className='day-footer';
+  footer.append(summary.querySelector('.day-sync'),summary.querySelector('.day-alerts'),summary.querySelector('.day-method'));
+  summary.append(footer);
+  // Keep the period visible without repeating the active branch and day filters.
+  const heading=summary.querySelector('.day-summary-heading');
+  const dates=heading.querySelector('.day-period');
+  footer.insertBefore(dates,footer.querySelector('.day-method'));
+  heading.remove();
+  const scopeVehicles=S.D.plan.vehiculos.filter(v=>S.suc==='TODAS'||v.deposito===S.suc);
+  const alertBox=summary.querySelector('.day-alerts');
+  alertBox.innerHTML=[alertas.sinDias?`${alertas.sinDias} sin días`:'',alertas.sinGeo?`${alertas.sinGeo} sin ubicación`:'',
+    scopeVehicles.length?(alertas.sinCamion?`${alertas.sinCamion} sin cobertura`:''):'Sin recorridos cargados'].filter(Boolean).map(t=>`<span>${t}</span>`).join('');
+  const sync=summary.querySelector('.day-sync [role="status"]');
+  sync.title=sync.textContent;sync.textContent=errorActualizacion?'No actualizado':'Auto · 1 min';
+  summary.querySelector('.day-method summary').textContent='Ver detalle';
+  $('summaryPeriod').onchange=e=>cambiarPeriodo(+e.target.value);
+
 }
 function render() {
   const sucs = [...new Set(S.D.plan.depositos.map(d => d.nombre))];
@@ -1031,19 +1149,23 @@ function render() {
   $('daySeg').classList.toggle('comparando', S.comp);
   $('compBtn').setAttribute('aria-pressed', S.comp);
   $('verSeg').classList.toggle('apagado', compActivo());
-  const v = visible(); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
-  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderRec(); renderRev(); renderEfe(); prioridades.render(); renderCer(); renderLegend(v); renderTools();
+  const v = visible(); sincronizarAnalisis(v); renderDaySummary(v); viewData=RutasVista.resumir(v,S.D.plan,S.suc); drawPoints(v);
+  renderLoc(); renderDia(); renderPen(); renderExp(); renderVen(); renderTop(); renderRec(); renderRev(); renderEfe(); prioridades.render(); renderCer(); renderLegend(v); renderTools();
   if (S.sel) { const c = byId.get(S.sel); if (c && !card) renderCard(); }
   const geo = v.filter(isGeo).length, nloc = new Set(v.filter(c=>!c.an).map(c=>c.loc)).size;
   $('sub').textContent = `${compActivo()?'Comparando '+S.cdias.map(d=>DAYSHORT[d]).join(' + ')+' · ':S.day!=='TODOS'?DAYNAME[S.day]+' · ':''}${v.length} clientes en ${nloc} localidades · ${geo} en el mapa${v.length-geo?` · ${v.length-geo} sin coordenadas`:''}`;
 }
 function elegirTab(id) {
+  $('panelSection').value=id;
   document.querySelectorAll('.tab').forEach(x => x.setAttribute('aria-selected', x.id === id));
-  ['cer','loc','dia','pen','rec','pri','rev','efe','ven','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  ['cer','loc','dia','pen','rec','pri','rev','efe','ven','top','exp'].forEach(k => $('p-'+k).hidden = ('t-'+k) !== id);
+  if(S.D){sincronizarAnalisis(visible());if(id==='t-rev')renderRev();if(id==='t-efe')renderEfe();}
+  prioridades.render();
   const ancho = ['t-rec', 't-pri', 't-rev', 't-efe'].includes(id), antes = $('main').classList.contains('ancho');
   $('main').classList.toggle('ancho', ancho);
   if (antes && !ancho) setTimeout(() => map.invalidateSize({pan:false}), 60);
 }
+$('panelSection').onchange=e=>elegirTab(e.target.value);
 document.querySelectorAll('.tab').forEach(t => t.onclick = () => elegirTab(t.id));
 // ---------- punto de referencia: clientes cercanos a un cliente, una dirección o un punto del mapa ----------
 const diasChips = d => d ? DAYS.filter(x => d.includes(x)).map(x => `<i style="background:${DAY_COL[x]}">${x}</i>`).join('') : '<i class="sd">sin días</i>';
@@ -1229,28 +1351,42 @@ qIn.addEventListener('blur', () => setTimeout(cerrarDrop, 150));
 document.addEventListener('keydown', e => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target.closest?.('input,select,textarea')) { if (e.key === 'Escape') e.target.blur(); return; }
-  if (e.key === '/') { e.preventDefault(); $('q').focus(); return; }
+  if (e.key === '/') { e.preventDefault(); if(!S.panel)setPanel(true); $('q').focus(); return; }
   if (e.key === 'p' || e.key === 'P') { setPanel(!S.panel); return; }
   if (e.key === 'Escape' && S.sel) { cerrarCard(); return; }
   if (e.key === 'Escape' && S.ref) { quitarRef(); return; }
   const i = '0123456'.indexOf(e.key);
-  if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS');
+  if (i >= 0 && e.key.length === 1 && S.D) setDay(i ? DAYS[i-1] : 'TODOS', true);
 });
 
 // Tema claro / oscuro: los puntos toman colores del tema al dibujarse, así que se redibujan.
 new MutationObserver(() => { if (S.D) drawPoints(visible()); })
   .observe(document.documentElement, {attributes:true, attributeFilter:['data-theme']});
 
-let loadRequest=0;
-async function load() {
-  const request=++loadRequest;
-  loading.hidden=false;
+let resumenEfectividad=null, fechasResumen=null, resumenCargando=false, ultimaActualizacion=null, errorActualizacion=false;
+let loadRequest=0, loadBusy=false;
+async function load(silencioso=false) {
+  const request=++loadRequest; loadBusy=true;
+  if(!silencioso)loading.hidden=false;
   try {
     const params=new URLSearchParams({activos:$('activeClients').value,dias_asignados:$('assignedDays').value});
     const [data, ventas] = await Promise.all([api('/datos?'+params), api(`/ventas/comportamiento?dias=${S.periodo}`).catch(() => null)]);
     if(request!==loadRequest)return;
-    S.D=data; S.V=ventas && ventas.desde ? ventas : null;
-    prioridades.invalidar();
+    const datosCambiaron=JSON.stringify(S.D)!==JSON.stringify(data);
+    const nuevasVentas=ventas && ventas.desde ? ventas : null;
+    const ventasCambiaron=JSON.stringify(S.V)!==JSON.stringify(nuevasVentas);
+    if(datosCambiaron)S.D=data;
+    if(ventasCambiaron)S.V=nuevasVentas;
+    resumenEfectividad=null; fechasResumen=null; resumenCargando=true;
+    ultimaActualizacion=new Date(); errorActualizacion=false;
+    api(`/ventas/fechas?dias=${S.periodo}`).then(f=>{
+      if(request!==loadRequest)return;
+      if(f.desde && f.hasta){fechasResumen=f;resumenEfectividad=RutasEfectividad.analizar(data.clientes,f);}
+    }).catch(()=>{}).finally(()=>{
+      if(request!==loadRequest)return;
+      resumenCargando=false; render();
+    });
+    if(datosCambiaron||ventasCambiaron)prioridades.invalidar();
     VOL_Q = [];
     if (S.V) { const vs = Object.values(S.V.clientes).map(v => v.bultos_sem).filter(v => v > 0).sort((a,b) => a-b);
       VOL_Q = vs.length >= 5 ? [.2,.4,.6,.8].map(q => vs[Math.floor(q * (vs.length - 1))]) : []; }
@@ -1259,11 +1395,13 @@ async function load() {
     render(); renderCard();
     if(!mapPositioned){const points=visible().filter(c=>isGeo(c)&&!c.far);if(points.length){map.fitBounds(points.map(c=>[c.lat,c.lng]),{padding:[30,30],maxZoom:13});mapPositioned=true}}
     if(!S.D.clientes.length)$('sub').textContent='No hay clientes cargados. Actualizá el maestro e importá los días desde Importaciones de datos.';
-  } catch (e) { if(request===loadRequest){$('sub').textContent = 'No se pudieron cargar los datos: ' + e.message; toast('No se pudieron cargar los datos', true)} }
-  finally { if(request===loadRequest)loading.hidden=true; }
+  } catch (e) { if(request===loadRequest){errorActualizacion=true; if(S.D)renderDaySummary(visible()); $('sub').textContent = 'No se pudieron cargar los datos: ' + e.message; toast('No se pudieron cargar los datos', true)} }
+  finally { if(request===loadRequest){loading.hidden=true;loadBusy=false;} }
 }
 $('refreshView').onclick=()=>{document.querySelector('.more').open=false;load()};
 document.addEventListener('click', e => { const m = document.querySelector('.more'); if (m.open && !m.contains(e.target)) m.open = false; });
 for(const id of ['activeClients','assignedDays'])$(id).onchange=()=>{S.sel=null;S.flt=null;renderCard();load()};
+setInterval(()=>{if(!document.hidden && !loadBusy)load(true);},60000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden && !loadBusy && (!ultimaActualizacion || Date.now()-ultimaActualizacion.getTime()>60000))load();});
 load();
 })();

@@ -233,11 +233,25 @@ _RESUMEN_VENTA = ('compras', 'comprobantes', 'neto', 'ticket', 'bultos', 'hl', '
 
 
 @bp.get('/api/ventas/prioridades')
+@bp.post('/api/ventas/prioridades')
 @protegido
 def api_prioridades():
     from .prioridades import diagnostico
+    seleccion, dias_entrega = None, None
+    if request.method == 'POST':
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            raise ValueError('Selección inválida')
+        seleccion, dias_entrega = data.get('ids'), data.get('dias')
+        if (not isinstance(seleccion, list) or len(seleccion) > 20000
+                or any(type(i) is not int or i <= 0 for i in seleccion)
+                or not isinstance(dias_entrega, list) or not dias_entrega
+                or any(d not in ('LU','MA','MI','JU','VI','SA') for d in dias_entrega)
+                or len(dias_entrega) != len(set(dias_entrega))):
+            raise ValueError('Clientes o días de la selección inválidos')
     return jsonify(diagnostico(S.clientes_vista(incluir_anulados=True), S.plan_vista(),
-                              _dias_param(60), request.args.get('suc', 'TODAS')))
+                              _dias_param(60), request.args.get('suc', 'TODAS'),
+                              seleccion=seleccion, dias_entrega=dias_entrega))
 
 
 @bp.get("/api/ventas/comportamiento")

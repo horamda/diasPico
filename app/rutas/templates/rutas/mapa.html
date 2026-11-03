@@ -20,19 +20,14 @@
   <div class="hctl">
     <div class="seg" id="sucSeg" role="group" aria-label="Sucursal que entrega"></div>
     <div class="days-wrap">
-      <div class="seg seg-days" id="daySeg" role="group" aria-label="Día de entrega"></div>
+      <div class="seg seg-days" id="daySeg" role="group" aria-label="Días de entrega: tocá para agregar o quitar; Semana muestra todos"></div>
       <button type="button" class="btn btn-comp" id="compBtn" aria-pressed="false" title="Elegir varios días y ver si sus zonas se superponen en cada localidad (también Ctrl+clic en un día)">Comparar</button>
-    </div>
-    <div class="seg" id="verSeg" role="group" aria-label="Color de los puntos"></div>
-    <div class="buscar">
-      <input type="search" id="q" placeholder="Cliente o dirección   /" aria-label="Buscar cliente o dirección (calle altura, localidad)" autocomplete="off"
-             role="combobox" aria-expanded="false" aria-controls="qDrop" aria-autocomplete="list">
-      <div class="qdrop" id="qDrop" role="listbox" aria-label="Resultados de la búsqueda" hidden></div>
     </div>
     <button type="button" class="btn theme-toggle" id="themeToggle"></button>
     <details class="more">
       <summary class="btn" aria-label="Menú y filtros" title="Menú y filtros">☰</summary>
       <div class="more-body">
+        <div class="seg" id="verSeg" role="group" aria-label="Color de los puntos"></div>
         <nav class="menu-nav" aria-label="Secciones">
           <a href="{{ url_for('rutas.mapa') }}" aria-current="page">Mapa de clientes</a>
           <a href="{{ url_for('rutas.plan_page') }}">Camiones y localidades</a>
@@ -47,11 +42,21 @@
       </div>
     </details>
   </div>
+  <section id="daySummary" class="day-summary" aria-label="Indicadores de la selecci?n" aria-live="polite"></section>
 </header>
 <div class="main" id="main">
   <aside id="aside">
+    <div class="buscar">
+      <input type="search" id="q" placeholder="Cliente o dirección   /" aria-label="Buscar cliente o dirección (calle altura, localidad)" autocomplete="off"
+             role="combobox" aria-expanded="false" aria-controls="qDrop" aria-autocomplete="list">
+      <div class="qdrop" id="qDrop" role="listbox" aria-label="Resultados de la búsqueda" hidden></div>
+    </div>
+
     <div class="resizer" id="resizer" role="separator" aria-orientation="vertical" aria-label="Ancho del panel" aria-valuemin="300" tabindex="0"
          title="Arrastrá para cambiar el ancho del panel · doble clic: ancho original"></div>
+    <label class="panel-section" for="panelSection">Explorar
+      <select id="panelSection"><option value="t-loc">Localidades</option><option value="t-dia">Clientes</option><option value="t-pen">Pendientes</option><option value="t-rec">Recorridos</option><option value="t-pri">Prioridades</option><option value="t-rev">Revisión de días</option><option value="t-efe">Efectividad</option><option value="t-ven">Ventas</option><option value="t-top">Top 10 por localidad</option><option value="t-cer">Cerca del punto elegido</option><option value="t-exp">Ayuda</option></select>
+    </label>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" id="t-cer" aria-selected="false" title="Clientes cerca del punto buscado y sus días de entrega" hidden>Cerca</button>
       <button class="tab" role="tab" id="t-loc" aria-selected="true">Localidades</button>
@@ -62,6 +67,7 @@
       <button class="tab" role="tab" id="t-rev" aria-selected="false" title="Revisión de días de entrega: análisis e informe">Revisión</button>
       <button class="tab" role="tab" id="t-efe" aria-selected="false" title="Efectividad de visita: visitas del vendedor con venta">Efectividad</button>
       <button class="tab" role="tab" id="t-ven" aria-selected="false">Ventas</button>
+      <button class="tab" role="tab" id="t-top" aria-selected="false" title="Top 10 clientes por localidad (Pareto)">Top 10</button>
       <button class="tab" role="tab" id="t-exp" aria-selected="false" title="Ayuda">?</button>
     </div>
     <div class="pane" id="p-cer" hidden></div>
@@ -73,6 +79,7 @@
     <div class="pane" id="p-rev" hidden></div>
     <div class="pane" id="p-efe" hidden></div>
     <div class="pane" id="p-ven" hidden></div>
+    <div class="pane" id="p-top" hidden></div>
     <div class="pane" id="p-exp" hidden></div>
   </aside>
   <div id="map" aria-label="Mapa de clientes"></div>
