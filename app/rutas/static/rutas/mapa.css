@@ -670,8 +670,8 @@ aside>.buscar{flex:none;margin:10px 12px 6px;min-width:0}
 aside>.buscar input{width:100%;min-height:36px;font-size:13px}
 aside>.buscar .qdrop{left:0;right:auto;width:max(100%,280px);max-width:85vw}
 .panel-section{display:none}
-aside .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));overflow:visible;flex-shrink:0;padding:0 8px 8px;gap:3px}
-aside .tab{padding:6px 3px;min-width:0;font-size:12px;border:0;border-radius:4px;white-space:normal}
+aside .tabs{display:flex;flex-wrap:wrap;overflow:visible;flex-shrink:0;padding:4px 8px 6px;gap:2px 4px}
+aside .tab{flex:0 0 auto;padding:6px 9px;min-width:0;font-size:12px;border:0;border-radius:4px;white-space:nowrap}
 aside .tab[aria-selected="true"]{background:var(--chip);color:var(--accent);box-shadow:inset 0 -2px var(--accent)}
 aside .tab[hidden]{display:none}
 .loc-health:empty{display:none}
