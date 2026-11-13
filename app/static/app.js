@@ -7213,19 +7213,43 @@ function renderCeq(d) {
   const fmt = v => (v == null || v === 0) ? '-' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
   const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
   const lbl = m => `${MES[parseInt(m.slice(5), 10) - 1]}-${m.slice(2, 4)}`;
-  if (!d.sucursales.length) { cont.innerHTML = '<div style="font-size:12px">Sin datos para el período.</div>'; return; }
-  let h = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Sucursal</th>';
-  d.meses.forEach(m => { h += `<th style="text-align:right">${lbl(m)}</th>`; });
-  h += '<th style="text-align:right">Total</th></tr></thead><tbody>';
-  d.sucursales.forEach(s => {
-    h += `<tr><td>${s.label}</td>`;
-    d.meses.forEach(m => { h += `<td style="text-align:right">${fmt(s.meses[m])}</td>`; });
-    h += `<td style="text-align:right"><b>${fmt(s.total)}</b></td></tr>`;
-  });
-  h += '<tr style="font-weight:700"><td>Total</td>';
-  d.meses.forEach(m => { h += `<td style="text-align:right">${fmt(d.total.meses[m])}</td>`; });
-  h += `<td style="text-align:right">${fmt(d.total.total)}</td></tr></tbody></table></div>`;
+  if (!d.sucursales.length) { cont.innerHTML = '<div style="font-size:12px">Sin datos para el periodo.</div>'; return; }
+  const hoyKey = new Date().toISOString().slice(0, 7);
+  const varHtml = (v, prev) => {
+    if (!prev || !v) return '';
+    const p = (v / prev - 1) * 100;
+    return `<span class="d ${p >= 0 ? 'up' : 'dn'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toLocaleString('es-AR', { maximumFractionDigits: 1 })}%</span>`;
+  };
+  const maxCell = Math.max(1, ...d.sucursales.flatMap(s => d.meses.map(m => s.meses[m] || 0)));
+  const heat = v => v ? ` style="background:rgba(245,166,35,${(0.04 + 0.26 * v / maxCell).toFixed(3)})"` : '';
+  const row = (label, src, cls) => {
+    let h = `<tr${cls ? ` class="${cls}"` : ''}><td>${label}</td>`;
+    d.meses.forEach((m, i) => {
+      const v = src.meses[m] || 0;
+      h += `<td${cls ? '' : heat(v)}>${fmt(v)}${varHtml(v, i ? (src.meses[d.meses[i - 1]] || 0) : 0)}</td>`;
+    });
+    return h + `<td class="tot">${fmt(src.total)}</td></tr>`;
+  };
+  // KPIs: ultimo mes completo, promedio mensual, mejor mes
+  const mesesCompl = d.meses.filter(m => m !== hoyKey);
+  const ref = mesesCompl[mesesCompl.length - 1] || d.meses[d.meses.length - 1];
+  const refPrev = mesesCompl[mesesCompl.length - 2];
+  const tm = d.total.meses;
+  const prom = mesesCompl.length ? mesesCompl.reduce((a, m) => a + (tm[m] || 0), 0) / mesesCompl.length : 0;
+  const best = mesesCompl.reduce((b, m) => (tm[m] || 0) > (tm[b] || 0) ? m : b, mesesCompl[0] || ref);
+  let h = '<div class="ceq-kpis">' +
+    `<div class="ceq-kpi"><div class="l">Ultimo mes completo (${lbl(ref)})</div><div class="v">${fmt(tm[ref])}</div><div class="s">${refPrev ? (varHtml(tm[ref], tm[refPrev]) || '&nbsp;') : '&nbsp;'}</div></div>` +
+    `<div class="ceq-kpi"><div class="l">Promedio mensual</div><div class="v">${fmt(prom)}</div><div class="s">${mesesCompl.length} meses completos</div></div>` +
+    `<div class="ceq-kpi"><div class="l">Mejor mes</div><div class="v">${fmt(tm[best])}</div><div class="s">${lbl(best)}</div></div>` +
+    `<div class="ceq-kpi"><div class="l">Total del periodo</div><div class="v">${fmt(d.total.total)}</div><div class="s">${d.meses.length} meses</div></div>` +
+    '</div>';
+  h += '<div class="ceq-wrap"><table class="ceq-tbl"><thead><tr><th>Sucursal</th>';
+  d.meses.forEach(m => { h += `<th${m === hoyKey ? ' class="cur" title="Mes en curso"' : ''}>${lbl(m)}</th>`; });
+  h += '<th class="tot">Total</th></tr></thead><tbody>';
+  d.sucursales.forEach(s => { h += row(s.label, s); });
+  h += row('Total', d.total, 'sum') + '</tbody></table></div>';
   const sinConv = d.sucursales.reduce((a, s) => a + (s.bultos_sin_conversion || 0), 0);
   if (sinConv > 0) h += `<div style="font-size:11px;margin-top:8px;color:var(--amber,#b7791f)">${fmt(sinConv)} bultos de SKU sin "bultos por pallet" cargado no se pudieron convertir a Ceq.</div>`;
+  h += '<div style="font-size:11px;margin-top:8px;color:var(--muted)">El mes en curso (subrayado) esta incompleto y no entra en promedio ni mejor mes.</div>';
   cont.innerHTML = h;
 }
