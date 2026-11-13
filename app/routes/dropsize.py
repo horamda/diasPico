@@ -191,3 +191,27 @@ def cajas_equivalentes():
         return jsonify(_cached('ceq', lambda: dropsize_svc.get_cajas_equivalentes(meses, mes_hasta, sucursal)))
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/api/dropsize/cajas_equivalentes/export')
+def cajas_equivalentes_export():
+    try:
+        meses = request.args.get('meses', 12, type=int)
+        d = dropsize_svc.get_cajas_equivalentes(meses, request.args.get('mes') or None,
+                                                request.args.get('sucursal', 'TODAS'))
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Cajas equivalentes'
+        ws.append(['Sucursal', *d['meses'], 'Total'])
+        for s in d['sucursales']:
+            ws.append([s['label'], *[s['meses'].get(m, 0) for m in d['meses']], s['total']])
+        ws.append(['Total', *[d['total']['meses'].get(m, 0) for m in d['meses']], d['total']['total']])
+        bio = BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        return send_file(
+            bio, as_attachment=True, download_name='cajas_equivalentes.xlsx',
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

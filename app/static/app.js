@@ -7184,6 +7184,14 @@ function renderCalibres(data, medida) {
 
 
 // --- CAJAS EQUIVALENTES (Ceq) ---
+function exportCeqExcel() {
+  const qs = new URLSearchParams({
+    meses: document.getElementById('ceqMeses')?.value || 12,
+    mes: document.getElementById('ceqMes')?.value || '',
+  });
+  window.location.href = `${API}/api/dropsize/cajas_equivalentes/export?${qs.toString()}`;
+}
+
 async function loadCeq() {
   const cont = document.getElementById('ceqTabla');
   if (!cont) return;
