@@ -4930,7 +4930,7 @@ async function guardarVariablePlanificacion() {
 function switchTab(t, el) {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
   el.classList.add('active');
-  ['kpis', 'historico', 'venta-dia', 'venta-anual', 'comparativo', 'experiencia', 'dotacion', 'analisis', 'dropsize', 'planificacion', 'operaciones', 'simulador', 'calibres', 'upload', 'config', 'ayuda'].forEach(x => {
+  ['kpis', 'historico', 'venta-dia', 'venta-anual', 'comparativo', 'experiencia', 'dotacion', 'analisis', 'dropsize', 'ceq', 'planificacion', 'operaciones', 'simulador', 'calibres', 'upload', 'config', 'ayuda'].forEach(x => {
     const el2 = document.getElementById('tab-' + x);
     if (el2) el2.style.display = x === t ? '' : 'none';
   });
@@ -4949,6 +4949,11 @@ function switchTab(t, el) {
       setDropsizeDatesFromMes(false);
     }
     loadDropsize();
+  }
+  if (t === 'ceq') {
+    const m = document.getElementById('ceqMes');
+    if (m && !m.value) m.value = mesPad();
+    loadCeq();
   }
   if (t === 'upload')    { loadArticulosCount(); loadEventos(); loadFeriados(); }
   if (t === 'config')    { initAusentismoDefaults(); loadAusentismoMensual(); loadSucursalesConfig(); loadRechazos(); loadKpiObjetivos(); loadDropsizeObjetivos(); }
@@ -7175,4 +7180,44 @@ function renderCalibres(data, medida) {
   }
 
   cont.innerHTML = html;
+}
+
+
+// --- CAJAS EQUIVALENTES (Ceq) ---
+async function loadCeq() {
+  const cont = document.getElementById('ceqTabla');
+  if (!cont) return;
+  cont.innerHTML = '<div class="loading"><div class="spinner"></div></div>';
+  try {
+    const qs = new URLSearchParams({
+      meses: document.getElementById('ceqMeses')?.value || 12,
+      mes: document.getElementById('ceqMes')?.value || '',
+    });
+    const d = await api(`/api/dropsize/cajas_equivalentes?${qs.toString()}`, { timeout: 90000 });
+    renderCeq(d);
+  } catch (e) {
+    cont.innerHTML = `<div style="color:var(--red);font-size:12px">Error: ${e.message}</div>`;
+  }
+}
+
+function renderCeq(d) {
+  const cont = document.getElementById('ceqTabla');
+  const fmt = v => (v == null || v === 0) ? '-' : Number(v).toLocaleString('es-AR', { maximumFractionDigits: 0 });
+  const MES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const lbl = m => `${MES[parseInt(m.slice(5), 10) - 1]}-${m.slice(2, 4)}`;
+  if (!d.sucursales.length) { cont.innerHTML = '<div style="font-size:12px">Sin datos para el período.</div>'; return; }
+  let h = '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Sucursal</th>';
+  d.meses.forEach(m => { h += `<th style="text-align:right">${lbl(m)}</th>`; });
+  h += '<th style="text-align:right">Total</th></tr></thead><tbody>';
+  d.sucursales.forEach(s => {
+    h += `<tr><td>${s.label}</td>`;
+    d.meses.forEach(m => { h += `<td style="text-align:right">${fmt(s.meses[m])}</td>`; });
+    h += `<td style="text-align:right"><b>${fmt(s.total)}</b></td></tr>`;
+  });
+  h += '<tr style="font-weight:700"><td>Total</td>';
+  d.meses.forEach(m => { h += `<td style="text-align:right">${fmt(d.total.meses[m])}</td>`; });
+  h += `<td style="text-align:right">${fmt(d.total.total)}</td></tr></tbody></table></div>`;
+  const sinConv = d.sucursales.reduce((a, s) => a + (s.bultos_sin_conversion || 0), 0);
+  if (sinConv > 0) h += `<div style="font-size:11px;margin-top:8px;color:var(--amber,#b7791f)">${fmt(sinConv)} bultos de SKU sin "bultos por pallet" cargado no se pudieron convertir a Ceq.</div>`;
+  cont.innerHTML = h;
 }

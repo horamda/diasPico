@@ -180,3 +180,14 @@ def exportar():
         )
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/api/dropsize/cajas_equivalentes')
+def cajas_equivalentes():
+    try:
+        sucursal = request.args.get('sucursal', 'TODAS')
+        meses = request.args.get('meses', 12, type=int)
+        mes_hasta = request.args.get('mes') or None
+        return jsonify(_cached('ceq', lambda: dropsize_svc.get_cajas_equivalentes(meses, mes_hasta, sucursal)))
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

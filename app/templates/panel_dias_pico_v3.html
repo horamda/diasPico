@@ -508,6 +508,7 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
       <div class="tab" onclick="switchTab('dotacion',this)">Dotación</div>
       <div class="tab" onclick="switchTab('analisis',this)">Rechazos</div>
       <div class="tab" onclick="switchTab('dropsize',this)">Dropsize</div>
+      <div class="tab" onclick="switchTab('ceq',this)">Cajas equivalentes</div>
       <div class="tab" onclick="switchTab('planificacion',this)">Plan Mensual</div>
       <div class="tab" onclick="switchTab('operaciones',this)">Operaciones</div>
       <div class="tab" onclick="switchTab('simulador',this)">Simulador</div>
@@ -1058,6 +1059,35 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
   </div>
 
   <!-- TAB PLANIFICACION PICOS -->
+  <!-- TAB CAJAS EQUIVALENTES -->
+  <div id="tab-ceq" style="display:none">
+    <div class="box">
+      <div class="sec" style="margin-bottom:12px">Número de cajas equivalentes entregadas en el mes (Ceq)</div>
+      <div class="filter-grid">
+        <div class="filter-field">
+          <label>Hasta el mes</label>
+          <input type="month" id="ceqMes" onchange="loadCeq()">
+        </div>
+        <div class="filter-field">
+          <label>Cantidad de meses</label>
+          <select id="ceqMeses" onchange="loadCeq()">
+            <option value="6">6</option>
+            <option value="12" selected>12</option>
+            <option value="24">24</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end">
+          <button class="btn primary" onclick="loadCeq()">Aplicar</button>
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted,#888);margin-top:10px;line-height:1.5">
+        Ceq = (bultos entregados ÷ bultos por pallet del SKU) × 120. Entregado = bultos − rechazados.
+        Excluye remitos/comodatos y venta mostrador. Incluye personal propio y subcontratado.
+      </div>
+    </div>
+    <div class="box"><div id="ceqTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+  </div>
+
   <div id="tab-planificacion" style="display:none">
 
     <!-- Compact header -->

@@ -1046,3 +1046,67 @@ def recalcular_historico(sucursal: str = 'TODAS', fecha_desde: str | None = None
         """, p)
         affected = cur.rowcount
     return {'ok': True, 'fecha_desde': ini.isoformat(), 'fecha_hasta': fin.isoformat(), 'registros': affected}
+
+
+# ─── Cajas equivalentes (Ceq) ────────────────────────────────────────────────
+CAJAS_POR_PALLET = 120
+# Origen que identifica la venta mostrador (se excluye del KPI).
+ORIGENES_MOSTRADOR = ('caja',)
+
+
+def get_cajas_equivalentes(meses: int = 12, mes_hasta: str | None = None, sucursal: str = 'TODAS') -> dict:
+    """Cajas equivalentes entregadas por mes y sucursal.
+
+    Ceq = (bultos entregados / bultos por pallet del SKU) * 120.
+    Entregado = bultos - bultos rechazados. Excluye remitos/comodatos y venta
+    mostrador. Los SKU sin bultos_por_pallet no se pueden convertir y se
+    informan aparte (``bultos_sin_conversion``).
+    """
+    meses = max(1, min(int(meses or 12), 60))
+    hasta_ini, hasta_fin = _month_bounds(mes_hasta)
+    ini = _add_months(hasta_ini, -(meses - 1))
+    entregado = "GREATEST(COALESCE(v.bultos, 0) - COALESCE(v.bultos_rechazados, 0), 0)"
+    params = {**_base_params(sucursal, ini, hasta_fin), 'cpp': CAJAS_POR_PALLET,
+              'mostrador': list(ORIGENES_MOSTRADOR)}
+    with pg_cursor() as cur:
+        cur.execute(f"""
+            SELECT
+                TO_CHAR(DATE_TRUNC('month', v.fecha), 'YYYY-MM') AS mes,
+                COALESCE(NULLIF(TRIM(v.sucursal), ''), '1') AS sucursal,
+                COALESCE(SUM(CASE WHEN COALESCE(a.bultos_por_pallet, 0) > 0
+                    THEN {entregado} / a.bultos_por_pallet * %(cpp)s ELSE 0 END), 0) AS ceq,
+                COALESCE(SUM({entregado}), 0) AS bultos_entregados,
+                COALESCE(SUM(CASE WHEN COALESCE(a.bultos_por_pallet, 0) > 0
+                    THEN 0 ELSE {entregado} END), 0) AS bultos_sin_conversion
+            FROM ventas_detalle v
+            LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
+            WHERE {_source_where(sucursal)}
+              AND LOWER(TRIM(COALESCE(v.origen, ''))) <> ALL(%(mostrador)s)
+            GROUP BY 1, 2
+            ORDER BY 1, 2
+        """, params)
+        rows = cur.fetchall()
+    meses_list = []
+    cur_d = ini
+    while cur_d <= hasta_ini:
+        meses_list.append(cur_d.strftime('%Y-%m'))
+        cur_d = _add_months(cur_d, 1)
+    por_suc: dict[str, dict] = {}
+    for r in rows:
+        s = por_suc.setdefault(r['sucursal'], {
+            'sucursal': r['sucursal'],
+            'label': SUCURSAL_LABELS.get(r['sucursal'], r['sucursal']),
+            'meses': {}, 'total': 0.0, 'bultos_sin_conversion': 0.0,
+        })
+        ceq = _round(r['ceq'])
+        s['meses'][r['mes']] = ceq
+        s['total'] = _round(s['total'] + ceq)
+        s['bultos_sin_conversion'] = _round(s['bultos_sin_conversion'] + float(r['bultos_sin_conversion'] or 0))
+    sucursales = sorted(por_suc.values(), key=lambda x: x['sucursal'])
+    total_meses = {m: _round(sum(s['meses'].get(m, 0) for s in sucursales)) for m in meses_list}
+    return {
+        'fecha_desde': ini.isoformat(), 'fecha_hasta': hasta_fin.isoformat(),
+        'cajas_por_pallet': CAJAS_POR_PALLET,
+        'meses': meses_list, 'sucursales': sucursales,
+        'total': {'meses': total_meses, 'total': _round(sum(total_meses.values()))},
+    }
