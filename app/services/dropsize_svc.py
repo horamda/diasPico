@@ -1050,8 +1050,15 @@ def recalcular_historico(sucursal: str = 'TODAS', fecha_desde: str | None = None
 
 # ─── Cajas equivalentes (Ceq) ────────────────────────────────────────────────
 CAJAS_POR_PALLET = 120
-# Origen que identifica la venta mostrador (se excluye del KPI).
-ORIGENES_MOSTRADOR = ('caja',)
+# Venta mostrador (se excluye del KPI): supervisor MOSTRADOR* que no sea
+# facturacion remota (VENTA REMOTA / VENTA INTERNA, que si se incluye), o
+# transportes sin camion (CAJA* / BLOQUEADOS*).
+_V_REMOTA = "(v.descripcion_vendedor ILIKE '%%remota%%' OR v.descripcion_ruta ILIKE '%%interna%%')"
+V_ES_MOSTRADOR = (
+    f"((v.descripcion_supervisor ILIKE 'mostrador%%' AND NOT {_V_REMOTA}) "
+    "OR v.descripcion_transporte ILIKE 'caja%%' "
+    "OR v.descripcion_transporte ILIKE '%%bloquead%%')"
+)
 
 
 def get_cajas_equivalentes(meses: int = 12, mes_hasta: str | None = None, sucursal: str = 'TODAS') -> dict:
@@ -1067,8 +1074,7 @@ def get_cajas_equivalentes(meses: int = 12, mes_hasta: str | None = None, sucurs
     ini = _add_months(hasta_ini, -(meses - 1))
     # Bultos que salieron del deposito: no se descuentan rechazos.
     entregado = "COALESCE(v.bultos, 0)"
-    params = {**_base_params(sucursal, ini, hasta_fin), 'cpp': CAJAS_POR_PALLET,
-              'mostrador': list(ORIGENES_MOSTRADOR)}
+    params = {**_base_params(sucursal, ini, hasta_fin), 'cpp': CAJAS_POR_PALLET}
     with pg_cursor() as cur:
         cur.execute(f"""
             SELECT
@@ -1082,7 +1088,7 @@ def get_cajas_equivalentes(meses: int = 12, mes_hasta: str | None = None, sucurs
             FROM ventas_detalle v
             LEFT JOIN articulos a ON v.id_articulo = a.id_articulo
             WHERE {_source_where(sucursal)}
-              AND LOWER(TRIM(COALESCE(v.origen, ''))) <> ALL(%(mostrador)s)
+              AND NOT {V_ES_MOSTRADOR}
             GROUP BY 1, 2
             ORDER BY 1, 2
         """, params)

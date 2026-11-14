@@ -199,6 +199,12 @@ input[type=range]{flex:1;accent-color:var(--acc);}
 .ceq-kpi .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
 .ceq-kpi .v{font-family:var(--mono);font-size:22px;font-weight:600;margin-top:4px;font-variant-numeric:tabular-nums;}
 .ceq-kpi .s{font-size:11px;color:var(--muted);margin-top:2px;}
+.ceq-info{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px;}
+.ceq-card{background:var(--surf2);border:1px solid var(--brd);border-radius:var(--r-xs,6px);padding:14px 16px;font-size:12px;line-height:1.55;}
+.ceq-card h4{font-family:var(--mono);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--acc);margin:0 0 8px;}
+.ceq-card p{margin:0 0 8px;}.ceq-card ul{margin:0 0 8px;padding-left:18px;}
+.ceq-card code{font-family:var(--mono);font-size:11px;background:var(--surf3);padding:1px 5px;border-radius:3px;}
+.ceq-card .ex{color:var(--muted);}
 .ceq-wrap{overflow-x:auto;}
 .ceq-tbl{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;}
 .ceq-tbl th{font-family:var(--mono);font-size:10px;font-weight:500;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--brd);background:var(--surf2);}
@@ -1098,11 +1104,47 @@ input[type=file]{font-size:11px;color:var(--txt);background:var(--surf2);border:
         </div>
       </div>
       <div style="font-size:11px;color:var(--muted,#888);margin-top:10px;line-height:1.5">
-        Ceq = (bultos entregados ÷ bultos por pallet del SKU) × 120. Bultos = los que salieron del depósito (no se descuentan rechazos).
-        Excluye remitos/comodatos y venta mostrador. Incluye personal propio y subcontratado.
+        Ceq = (bultos ÷ bultos por pallet del SKU) × 120, sobre los bultos que salieron del depósito. Detalle de criterios al pie.
       </div>
     </div>
     <div class="box"><div id="ceqTabla"><div class="loading"><div class="spinner"></div></div></div></div>
+    <div class="box">
+      <div class="sec" style="margin-bottom:12px">Como se calcula (informativo)</div>
+      <div class="ceq-info">
+        <div class="ceq-card">
+          <h4>Definicion del KPI</h4>
+          <p>Cajas equivalentes entregadas en el mes del total de cajas cargadas al camion. Unidad: Ceq.
+          Pertenece al SKPI de Bodega y TLP (ocupacion de Bodega).</p>
+          <p><b>Incluye:</b> volumen entregado por personal propio y subcontratado; facturacion remota.<br>
+          <b>Excluye:</b> devoluciones y/o rechazos; venta mostrador.</p>
+        </div>
+        <div class="ceq-card">
+          <h4>Formula</h4>
+          <p><b>Paso 1:</b> Pallet equivalente = bultos ÷ bultos por pallet del SKU (<code>articulos.bultos_por_pallet</code>).</p>
+          <p><b>Paso 2:</b> Ceq = Pallet equivalente × 120.</p>
+          <p class="ex">Ejemplo: 90 bultos ÷ 50 bultos/pallet = 1,8 pallets &rarr; 1,8 × 120 = <b>216 Ceq</b>.</p>
+          <p>Se calcula por linea de venta (cada SKU con su propio factor) y se suma por mes y sucursal.</p>
+        </div>
+        <div class="ceq-card">
+          <h4>Bultos considerados</h4>
+          <p>Columna <code>bultos</code> de <code>ventas_detalle</code>: lo que salio del deposito.
+          <b>No se descuentan rechazos</b> (<code>bultos_rechazados</code> no se usa) y no se usan HL ni unidad paquete.</p>
+          <p>Documentos <b>incluidos</b>: facturas, preventa y cuenta y orden (RMCYO).
+          <b>Excluidos</b>: remitos (REMIT) y comodatos (COMOD). Solo articulos de tipo mercaderia.</p>
+          <p>SKU sin bultos por pallet cargado no se pueden convertir: se informan aparte.</p>
+        </div>
+        <div class="ceq-card">
+          <h4>Exclusion de venta mostrador</h4>
+          <p>Se excluye una linea si:</p>
+          <ul>
+            <li>el supervisor es <code>MOSTRADOR MDA</code> o <code>MOSTRADOR DOL</code> <b>y no es facturacion remota</b>; o</li>
+            <li>el transporte es <code>CAJA…</code> o <code>BLOQUEADOS…</code> (sin camion asignado).</li>
+          </ul>
+          <p><b>Se incluye</b> la facturacion remota (vendedor <code>VENTA REMOTA</code> / ruta <code>VENTA INTERNA</code>) aunque dependa de supervisor mostrador, porque sale en camiones reales.</p>
+          <p class="ex">La venta cargada a vendedor OFICINA con ruta EVENTUALES y camion real queda incluida (tiene camion). Impacto aprox. 3 % del Ceq; criterio a validar.</p>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div id="tab-planificacion" style="display:none">
