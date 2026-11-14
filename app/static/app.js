@@ -7215,6 +7215,7 @@ function renderCeq(d) {
   const lbl = m => `${MES[parseInt(m.slice(5), 10) - 1]}-${m.slice(2, 4)}`;
   if (!d.sucursales.length) { cont.innerHTML = '<div style="font-size:12px">Sin datos para el periodo.</div>'; return; }
   const hoyKey = new Date().toISOString().slice(0, 7);
+  d = { ...d, meses: d.meses.filter(m => m <= hoyKey) }; // sin meses futuros
   const varHtml = (v, prev) => {
     if (!prev || !v) return '';
     const p = (v / prev - 1) * 100;
