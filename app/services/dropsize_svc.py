@@ -1058,14 +1058,15 @@ def get_cajas_equivalentes(meses: int = 12, mes_hasta: str | None = None, sucurs
     """Cajas equivalentes entregadas por mes y sucursal.
 
     Ceq = (bultos entregados / bultos por pallet del SKU) * 120.
-    Entregado = bultos - bultos rechazados. Excluye remitos/comodatos y venta
-    mostrador. Los SKU sin bultos_por_pallet no se pueden convertir y se
+    Se toman los bultos que salieron del deposito (sin descontar rechazos).
+    Excluye remitos/comodatos y venta mostrador. Los SKU sin bultos_por_pallet no se pueden convertir y se
     informan aparte (``bultos_sin_conversion``).
     """
     meses = max(1, min(int(meses or 12), 60))
     hasta_ini, hasta_fin = _month_bounds(mes_hasta)
     ini = _add_months(hasta_ini, -(meses - 1))
-    entregado = "GREATEST(COALESCE(v.bultos, 0) - COALESCE(v.bultos_rechazados, 0), 0)"
+    # Bultos que salieron del deposito: no se descuentan rechazos.
+    entregado = "COALESCE(v.bultos, 0)"
     params = {**_base_params(sucursal, ini, hasta_fin), 'cpp': CAJAS_POR_PALLET,
               'mostrador': list(ORIGENES_MOSTRADOR)}
     with pg_cursor() as cur:
